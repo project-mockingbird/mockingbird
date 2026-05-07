@@ -1,0 +1,14 @@
+---
+ID: "cc000001-0000-0000-0000-000000000002"
+Parent: "cc000001-0000-0000-0000-000000000001"
+Template: "a1b2c3d4-e5f6-7890-abcd-000000000001"
+Path: /sitecore/content/Site/Home/About
+SharedFields: []
+Languages:
+- Language: en
+  Versions:
+  - Version: 1
+    Fields:
+    - ID: "75577384-3c97-45da-a847-81b00500e250"
+      Hint: Title
+      Value: About Us

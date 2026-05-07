@@ -1,0 +1,40 @@
+services:
+  mockingbird:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: projectmockingbird/mockingbird:1.0.0.0
+    container_name: ${COMPOSE_PROJECT_NAME}
+    ports:
+      # Bind to loopback only so a developer on a coffee-shop / hostile LAN
+      # doesn't accidentally expose mockingbird to the network. Drop the
+      # 127.0.0.1 prefix to publish to all host interfaces (e.g. when testing
+      # from another device on a trusted LAN).
+      - "127.0.0.1:${MOCKINGBIRD_PORT}:${MOCKINGBIRD_PORT}"
+    environment:
+      PORT: ${MOCKINGBIRD_PORT}
+      # Container HOST must be 0.0.0.0 so docker's port forwarder can reach
+      # the listening process from outside the container. The host-side
+      # binding above is what scopes external reach.
+      HOST: 0.0.0.0
+      # Sitecore path of your site's start item - all routes resolve relative to this.
+      SITE_ROOT_PATH: ${SITE_ROOT_PATH}
+      # Container-side paths. The engine reads sitecore.json here and
+      # resolves modules relative to its own location, matching `dotnet
+      # sitecore ser pull` semantics.
+      SCS_SITECORE_JSON: /scs/sitecore.json
+      SCS_CONTENT_SITECORE_JSON: /scs-content/sitecore.json
+      MOCKINGBIRD_CACHE_PATH: /data/cache
+      INDEX_CACHE_PATH: /data/cache/index.json.gz
+    volumes:
+      # Host SCS project root (the directory containing sitecore.json) - the
+      # same tree `dotnet sitecore ser pull` writes into. Modules listed in
+      # sitecore.json resolve relative to this dir.
+      - ${SCS_ROOT}:/scs
+      # Optional second SCS project root for content-item YAMLs (pages,
+      # datasources, media metadata) that aren't committed to the repo. Leave
+      # SCS_CONTENT_ROOT unset to skip.
+      - ${SCS_CONTENT_ROOT}:/scs-content
+      # Engine-internal parsed-item index cache - writable; safe to delete, rebuilds on next boot.
+      - ${MOCKINGBIRD_CACHE_PATH}:/data/cache
+    restart: unless-stopped

@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "source": "test-fixture",
+  "extractedAt": "2026-04-10T00:00:00Z",
+  "items": [
+    {
+      "id": "1930bbeb-7805-471a-a3be-4858ac7cf696",
+      "name": "Standard template",
+      "parent": "12345678-1234-1234-1234-123456789abc",
+      "template": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "path": "/sitecore/templates/System/Templates/Standard template",
+      "sharedFields": {
+        "12c33f3f-86c5-43a5-aeb4-5598cec45116": ""
+      }
+    },
+    {
+      "id": "e269fbb5-3750-427a-9149-7aa950b49301",
+      "name": "Template section",
+      "parent": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "template": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "path": "/sitecore/templates/System/Templates/Template section",
+      "sharedFields": {}
+    },
+    {
+      "id": "455a3e98-a627-4b40-8035-e683a0331ac7",
+      "name": "Template field",
+      "parent": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "template": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "path": "/sitecore/templates/System/Templates/Template field",
+      "sharedFields": {}
+    },
+    {
+      "id": "99f8905d-e352-41e0-aff4-8d3a5f66f3f0",
+      "name": "Controller rendering",
+      "parent": "32566f0e-7686-45e1-a12f-d7260011a0fe",
+      "template": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "path": "/sitecore/templates/System/Layout/Renderings/Controller rendering",
+      "sharedFields": {}
+    },
+    {
+      "id": "66ad4ca1-e325-4b76-a8fb-28f7a4a9e8b7",
+      "name": "Rendering Parameters",
+      "parent": "12345678-1234-1234-1234-123456789abc",
+      "template": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "path": "/sitecore/templates/System/Layout/Rendering Parameters",
+      "sharedFields": {
+        "12c33f3f-86c5-43a5-aeb4-5598cec45116": "{1930BBEB-7805-471A-A3BE-4858AC7CF696}"
+      }
+    },
+    {
+      "id": "aaaaaaaa-bbbb-cccc-dddd-111111111111",
+      "name": "Custom OOTB Template",
+      "parent": "12345678-1234-1234-1234-123456789abc",
+      "template": "ab86861a-6030-46c5-b394-e8f99e8b87db",
+      "path": "/sitecore/templates/System/Custom OOTB Template",
+      "sharedFields": {
+        "12c33f3f-86c5-43a5-aeb4-5598cec45116": "{1930BBEB-7805-471A-A3BE-4858AC7CF696}"
+      }
+    }
+  ]
+}

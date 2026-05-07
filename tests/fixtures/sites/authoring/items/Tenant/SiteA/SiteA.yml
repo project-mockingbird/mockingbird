@@ -1,0 +1,14 @@
+---
+ID: "aaaa1111-0000-0000-0000-000000000002"
+Parent: "aaaa1111-0000-0000-0000-000000000001"
+Template: "a2b9fdc3-f641-4966-94a5-b63944dc39de"
+Path: /sitecore/content/Tenant/SiteA
+SharedFields: []
+Languages:
+- Language: en
+  Versions:
+  - Version: 1
+    Fields:
+    - ID: "25bed78c-4957-4165-998a-ca1b52f67497"
+      Hint: __Created
+      Value: 20260430T120000Z

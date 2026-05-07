@@ -1,0 +1,76 @@
+// MIRROR of src/engine/name-validation.ts. Predicate-equivalent port of
+// Sitecore.Data.Items.ItemUtil.GetItemNameError (Sitecore.Kernel.decompiled.cs:379368).
+//
+// Server-side is the authoritative validator; this client-side copy gates
+// the OK button on the name dialog so users get instant feedback. Both must
+// stay in sync. If you change one, change the other.
+//
+// Why duplicate? src/web is bundled by Vite into the production bundle and
+// imports from src/engine would couple the web bundle to engine internals.
+// The validator is small and side-effect-free; mirroring is the honest
+// choice. A parity test in tests/web/lib/name-validation.test.ts re-runs
+// all server-side test cases against this copy to catch drift.
+
+export const NAME_LIMITS = {
+  maxLength: 100,
+  // Sitecore default: \/:?"<>|[]
+  invalidChars: ['\\', '/', ':', '?', '"', '<', '>', '|', '[', ']'] as const,
+  // Sitecore default: ^[\w\*\$][\w\s\-\$]*(\(\d{1,}\))?$  (ECMAScript)
+  // \w in JS = [A-Za-z0-9_] - matches .NET ECMAScript flag.
+  validationRegex: /^[\w\*\$][\w\s\-\$]*(\(\d{1,}\))?$/,
+} as const;
+
+export function getItemNameError(name: string): string | null {
+  if (name.length === 0) return 'An item name cannot be blank.';
+  if (name.length > NAME_LIMITS.maxLength) {
+    return `An item name length should be less or equal to ${NAME_LIMITS.maxLength}.`;
+  }
+  if (name[name.length - 1] === '.') return 'An item name cannot end in a period (.)';
+  if (name.trim().length !== name.length) return 'An item name cannot start or end with blanks.';
+
+  // Sitecore HTML-decodes before the invalid-chars check. Mirror that.
+  const decoded = htmlDecode(name);
+  for (const ch of NAME_LIMITS.invalidChars) {
+    if (decoded.includes(ch)) return `Item name "${name}" contains invalid characters.`;
+  }
+  if (!NAME_LIMITS.validationRegex.test(name)) {
+    return `Item name "${name}" must satisfy pattern: ${NAME_LIMITS.validationRegex.source}`;
+  }
+  return null;
+}
+
+// Minimal HTML entity decoder covering what Sitecore's HttpUtility.HtmlDecode
+// would produce inside an item name. Full HTML decoding isn't appropriate -
+// Sitecore's predicate is what matters.
+function htmlDecode(s: string): string {
+  return s
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)))
+    .replace(/&amp;/gi, '&'); // last - prevents double-decoding
+}
+
+/**
+ * Composite check used by `Engine.insertItem`. Runs `getItemNameError` first,
+ * then case-insensitive sibling-name comparison. Sitecore default is
+ * `AllowDuplicateItemNamesOnSameLevel = false` (Sitecore.Kernel.decompiled.cs:
+ * 379055 `AssertDuplicateItemName`).
+ *
+ * Caller passes the list of EXISTING sibling names. Engine resolves the list
+ * from the parent's children before calling.
+ */
+export function getNameVsSiblingsError(
+  name: string,
+  existingSiblingNames: readonly string[],
+): string | null {
+  const nameError = getItemNameError(name);
+  if (nameError) return nameError;
+  const lowered = name.toLowerCase();
+  const collision = existingSiblingNames.find((s) => s.toLowerCase() === lowered);
+  if (collision) {
+    return `An item with the same name already exists at this level: "${collision}".`;
+  }
+  return null;
+}

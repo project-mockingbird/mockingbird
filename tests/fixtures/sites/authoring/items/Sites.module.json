@@ -1,0 +1,12 @@
+{
+  "namespace": "Project.Sites",
+  "items": {
+    "includes": [
+      {
+        "name": "Tenant",
+        "path": "/sitecore/content/Tenant",
+        "allowedPushOperations": "CreateUpdateAndDelete"
+      }
+    ]
+  }
+}

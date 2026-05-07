@@ -1,0 +1,33 @@
+node_modules/
+dist/
+src/web/node_modules/
+src/web/out/
+src/web/.next/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+data/
+
+# Bind-mount roots - populated at runtime from an external SCS project tree
+# and must never be committed here.
+content/
+serialization/
+
+# Test fixtures may legitimately contain path segments named "content" or
+# "serialization" (e.g. extracted Sitecore package fixtures whose entries
+# mirror /sitecore/content/...). Override the ignores above for the fixtures
+# tree.
+!tests/fixtures/**
+
+# Local scratch space.
+/.scratch/
+
+# Local dev-loop docker-compose overlay.
+/docker-compose.dev.yml
+
+# C# provider build output (also covered by /data/ but listed explicitly).
+/data/spe/
+# C# build intermediates (per-project bin/ and obj/ under src/spe/provider-csharp).
+src/spe/provider-csharp/**/bin/
+src/spe/provider-csharp/**/obj/

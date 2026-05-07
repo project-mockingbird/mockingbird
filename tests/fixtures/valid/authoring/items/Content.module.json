@@ -1,0 +1,17 @@
+{
+  "namespace": "Project.MyProject",
+  "items": {
+    "includes": [
+      {
+        "name": "templates",
+        "path": "/sitecore/templates/Project/MyProject",
+        "allowedPushOperations": "CreateUpdateAndDelete"
+      },
+      {
+        "name": "renderings",
+        "path": "/sitecore/Layout/Renderings/Project/MyProject",
+        "allowedPushOperations": "CreateUpdateAndDelete"
+      }
+    ]
+  }
+}

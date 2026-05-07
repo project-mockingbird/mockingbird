@@ -1,0 +1,177 @@
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
+import { Toaster } from '@/components/ui/sonner';
+import { Header } from '@/components/layout/Header';
+import { StatusBar } from '@/components/layout/StatusBar';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { useFocusedTabState } from '@/state/useFocusedTabState';
+import { useWorkspaceUrlSync } from '@/state/useWorkspaceUrlSync';
+import { useWorkspaceKeyboardShortcuts } from '@/state/useWorkspaceKeyboardShortcuts';
+import { useBeforeUnloadDirtyGuard } from '@/state/useBeforeUnloadDirtyGuard';
+import { SettingsProvider, useSettings } from '@/settings/SettingsProvider';
+import { LaunchPage } from '@/components/LaunchPage';
+import { AdminLanding } from '@/components/admin/AdminLanding';
+import { StatusPage } from '@/components/admin/StatusPage';
+import { LogsPage } from '@/components/admin/LogsPage';
+import { useEngineStatus } from '@/hooks/useEngineStatus';
+import { WorkspaceShell } from '@/components/workspace/WorkspaceShell';
+import { CartPane, readPersistedCartPaneOpen } from '@/components/package/CartPane';
+import { CheckoutDialog } from '@/components/package/CheckoutDialog';
+import { toast } from 'sonner';
+
+// IsePage pulls Monaco (~3.5 MB) and xterm into its dependency tree. Loading
+// it lazily keeps the launch page + content tree responsive: the ISE chunk is
+// fetched only when the user navigates to /scripts.
+const IsePage = lazy(() => import('@/components/ise/IsePage').then(m => ({ default: m.IsePage })));
+
+function WebSocketConnection() {
+  useWebSocket();
+  return null;
+}
+
+function ContentTreePage() {
+  // Mounted only when pathname is on the tree route. This keeps URL <-> store
+  // sync inactive while the user is on LaunchPage, so a stored selection in
+  // localStorage doesn't auto-bounce them away from /.
+  useWorkspaceUrlSync();
+  useWorkspaceKeyboardShortcuts();
+  useBeforeUnloadDirtyGuard();
+  const { state, navigate } = useFocusedTabState();
+  const database = state.database;
+  const setDatabase = useCallback(
+    (db: string) => navigate({ database: db }),
+    [navigate],
+  );
+  const [validationOpen, setValidationOpen] = useState(false);
+  // Seed cart pane open/closed from localStorage so the pane survives reloads
+  // (matches the spec's "persists open/closed state" behavior).
+  const [cartPaneOpen, setCartPaneOpen] = useState(() => readPersistedCartPaneOpen(false));
+  // Checkout dialog open state lives at the page level: the cart pane fires
+  // onCheckout, we open the dialog. The dialog itself reads the cart from
+  // packageCartStore so we don't have to thread sources through.
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const { settings, setSetting } = useSettings();
+  const persistedSize = settings['layout.treePanelSize'];
+
+  const onTreePanelResize = useCallback(
+    (size: number) => {
+      const rounded = Math.round(size * 10) / 10;
+      if (rounded !== settings['layout.treePanelSize']) {
+        setSetting('layout.treePanelSize', rounded);
+      }
+    },
+    [setSetting, settings],
+  );
+
+  const { data: validation } = useQuery({
+    queryKey: ['validation'],
+    queryFn: async () =>
+      (await fetch('/api/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })).json(),
+    refetchInterval: 30_000,
+  });
+  const errorCount =
+    validation?.errors?.filter((e: { severity: string }) => e.severity === 'error').length ?? 0;
+
+  return (
+    <div className="flex h-screen flex-col">
+      <Header
+        validationErrorCount={errorCount}
+        onValidationClick={() => setValidationOpen(true)}
+        onCartToggle={() => setCartPaneOpen((o) => !o)}
+      />
+      <WorkspaceShell
+        validationOpen={validationOpen}
+        setValidationOpen={setValidationOpen}
+        persistedSize={persistedSize}
+        onTreePanelResize={onTreePanelResize}
+      />
+      <StatusBar database={database} onDatabaseChange={setDatabase} />
+      <CartPane
+        open={cartPaneOpen}
+        onOpenChange={setCartPaneOpen}
+        onCheckout={() => setCheckoutOpen(true)}
+      />
+      <CheckoutDialog
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        onSuccess={({ filename, itemCount, warnings }) => {
+          const itemSuffix = `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`;
+          const warnSuffix = warnings > 0
+            ? `, ${warnings} ${warnings === 1 ? 'warning' : 'warnings'}`
+            : '';
+          toast.success(`Downloaded ${filename} (${itemSuffix}${warnSuffix})`);
+        }}
+        onError={(message) => toast.error(`Build failed: ${message}`)}
+      />
+    </div>
+  );
+}
+
+// popstate-only: routing here is binary (/ vs not-/), and SPA-internal
+// pushState in useNavState always stays on /tree, so it never crosses
+// the routing boundary. If this hook is ever reused for finer-grained
+// pathname checks, also subscribe to navChannel 'navchange'.
+function useCurrentPathname(): string {
+  const [pathname, setPathname] = useState(() => window.location.pathname);
+  useEffect(() => {
+    const handler = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, []);
+  return pathname;
+}
+
+// Admin routes are gated by the server-side TACO=1 env flag, surfaced through
+// /api/status. When the flag is off, direct navigation falls back to the
+// LaunchPage so the URL doesn't reveal a hidden namespace. Server-side
+// readiness/state is the source of truth - this gate is UX only.
+function AdminGate({ children }: { children: React.ReactNode }) {
+  const { data, isLoading } = useEngineStatus();
+  if (isLoading) return null;
+  if (data?.taco !== true) return <LaunchPage />;
+  return <>{children}</>;
+}
+
+function Routes() {
+  const pathname = useCurrentPathname();
+  if (pathname === '/') return <LaunchPage />;
+  if (pathname === '/scripts') return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading ISE...</div>}>
+      <IsePage />
+    </Suspense>
+  );
+  if (pathname === '/admin') return <AdminGate><AdminLanding /></AdminGate>;
+  if (pathname === '/admin/status') return <AdminGate><StatusPage /></AdminGate>;
+  if (pathname === '/admin/logs') return <AdminGate><LogsPage /></AdminGate>;
+  // No TabContextProvider here: Pane (inside WorkspaceShell) wraps each
+  // pane's active Workspace in a fresh TabContextProvider tabId={activeTabId}.
+  // Page-level reads (e.g. StatusBar database) use useFocusedTabState to
+  // track the focused-active tab rather than depending on context.
+  return <ContentTreePage />;
+}
+
+export function App() {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { staleTime: 10_000, refetchOnWindowFocus: false } },
+      }),
+  );
+
+  return (
+    <ThemeProvider attribute="class" defaultTheme="dark">
+      <SettingsProvider>
+        <QueryClientProvider client={queryClient}>
+          <WebSocketConnection />
+          <Routes />
+          <Toaster />
+        </QueryClientProvider>
+      </SettingsProvider>
+    </ThemeProvider>
+  );
+}

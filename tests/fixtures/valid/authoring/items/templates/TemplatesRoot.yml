@@ -1,0 +1,13 @@
+---
+ID: "3c1715fe-6a13-4fcf-0000-000000000001"
+Parent: "00000000-0000-0000-0000-000000000000"
+Template: "0437fee2-44c9-46a6-abe9-28858d9fee8c"
+Path: /sitecore/templates
+Languages:
+- Language: en
+  Versions:
+  - Version: 1
+    Fields:
+    - ID: "25bed78c-4957-4165-998a-ca1b52f67497"
+      Hint: __Created
+      Value: 20260410T120000Z

@@ -1,0 +1,6 @@
+{
+  "$schema": "./.sitecore/schemas/RootConfigurationFile.schema.json",
+  "modules": [
+    "serialization/*.json"
+  ]
+}

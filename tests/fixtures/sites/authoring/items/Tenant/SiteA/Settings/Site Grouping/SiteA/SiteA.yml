@@ -1,0 +1,29 @@
+---
+ID: "aaaa1111-0000-0000-0000-000000000006"
+Parent: "aaaa1111-0000-0000-0000-000000000005"
+Template: "2bb25752-b3bc-4f13-b9cb-38b906d21a33"
+Path: /sitecore/content/Tenant/SiteA/Settings/Site Grouping/SiteA
+SharedFields:
+- ID: "cb4e9e2e-2b66-43dc-ad3f-9caf363d28d3"
+  Hint: SiteName
+  Value: SiteA
+- ID: "8e0dd914-9afb-4d45-bf8b-7ff5d6e5337e"
+  Hint: HostName
+  Value: site-a.test
+- ID: "1ee576af-ba8e-4312-9fbd-2ccf8395baa1"
+  Hint: StartItem
+  Value: "{AAAA1111-0000-0000-0000-000000000003}"
+- ID: "f19277fe-1b85-4b0a-8c26-5e74d766b3a3"
+  Hint: Language
+  Value: en
+- ID: "da06d09e-02b6-464a-80fc-9d8d7fc875e3"
+  Hint: Environment
+  Value: "*"
+Languages:
+- Language: en
+  Versions:
+  - Version: 1
+    Fields:
+    - ID: "25bed78c-4957-4165-998a-ca1b52f67497"
+      Hint: __Created
+      Value: 20260430T120000Z

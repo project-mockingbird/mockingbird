@@ -1,0 +1,14 @@
+{
+  "namespace": "Migration.Content",
+  "items": {
+    "path": "items",
+    "includes": [
+      {
+        "name": "home",
+        "path": "/sitecore/content/Site/Home",
+        "database": "master",
+        "scope": "ItemAndDescendants"
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+---
+ID: "a1b2c3d4-e5f6-7890-abcd-000000000005"
+Parent: "a1b2c3d4-e5f6-7890-abcd-000000000001"
+Template: "a1b2c3d4-e5f6-7890-abcd-000000000001"
+Path: /sitecore/templates/Project/MyProject/MyTemplate/__Standard Values
+SharedFields:
+- ID: "a1b2c3d4-e5f6-7890-abcd-000000000003"
+  Hint: Title
+  Value: Default Title
+Languages:
+- Language: en
+  Versions:
+  - Version: 1
+    Fields:
+    - ID: "25bed78c-4957-4165-998a-ca1b52f67497"
+      Hint: __Created
+      Value: 20260410T120000Z

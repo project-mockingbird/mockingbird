@@ -1,0 +1,66 @@
+{
+  "name": "mockingbird",
+  "version": "1.0.0.0",
+  "description": "Lightweight YAML-backed CM shim for SitecoreAI - serves a Layout Service / GraphQL endpoint to headless rendering hosts.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint:graphql-context": "node scripts/lint-graphql-context.mjs",
+    "build:provider": "node scripts/build-provider.mjs",
+    "pretest": "node scripts/dedupe-react.mjs && node scripts/lint-graphql-context.mjs && node scripts/build-provider.mjs",
+    "pretest:watch": "node scripts/dedupe-react.mjs && node scripts/lint-graphql-context.mjs",
+    "dedupe:react": "node scripts/dedupe-react.mjs",
+    "cli": "tsx src/cli/index.ts",
+    "api": "tsx --env-file-if-exists=.env src/api/index.ts",
+    "build:all": "npm run build && npm run build:web",
+    "build:web": "cd src/web && npm install && npm run build",
+    "dev:web": "cd src/web && npm run dev"
+  },
+  "bin": {
+    "mockingbird": "./dist/cli/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/project-mockingbird/mockingbird.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/project-mockingbird/mockingbird/issues"
+  },
+  "homepage": "https://github.com/project-mockingbird/mockingbird#readme",
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/static": "^9.1.0",
+    "@fastify/websocket": "^11.2.0",
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.3",
+    "fastify": "^5.8.4",
+    "fflate": "^0.8.2",
+    "glob": "^13.0.6",
+    "graphql": "^16.13.2",
+    "graphql-scalars": "^1.25.0",
+    "mercurius": "^16.9.0",
+    "pino": "^10.3.1",
+    "uuid": "^13.0.0",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.6.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "jsdom": "^29.1.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4",
+    "ws": "^8.20.0"
+  }
+}

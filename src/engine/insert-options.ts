@@ -1,0 +1,71 @@
+import type { Engine } from './index.js';
+import { FIELD_IDS, BRANCH_TEMPLATE_ID } from './constants.js';
+import { parseGuidList } from './guid.js';
+import { readFieldWithSvFallback } from './layout/item-fields.js';
+
+export type InsertOption = {
+  /** Canonical lowercased GUID, no braces. */
+  templateId: string;
+  /** Display name for the menu row. */
+  templateName: string;
+  /** Full Sitecore path - useful for tooltip / debugging. */
+  templatePath: string;
+  /** `branch` when the resolved item's `template` equals `BRANCH_TEMPLATE_ID`, else `template`. */
+  kind: 'template' | 'branch';
+};
+
+/**
+ * Resolve Insert Options for an item, in Sitecore-canonical order:
+ *   1. Item's own `__Masters` shared field (rare per-item override).
+ *   2. Item template's `__Standard Values.__Masters` (common case;
+ *      base-template SV chain handled by `readFieldWithSvFallback`).
+ *
+ * Each resolved Master GUID is looked up in the unified tree+registry.
+ * GUIDs that don't resolve are skipped silently. Field order preserved.
+ *
+ * Branch detection: the resolved item's `template` field equals
+ * `Sitecore.Data.TemplateIDs.BranchTemplate` (`BRANCH_TEMPLATE_ID`). This
+ * matches Sitecore's `BranchItem` mechanism (template-id, not path), so SXA
+ * Page Branches under `/sitecore/content/.../Presentation/Page Branches/*`
+ * are detected correctly alongside `/sitecore/templates/Branches/*`.
+ */
+export function getInsertOptions(engine: Engine, itemId: string): InsertOption[] {
+  const node = engine.getItemById(itemId);
+  const item = node?.item;
+
+  // Step 1: item-level `__Masters` (defensive; rare in practice).
+  let mastersValue = '';
+  if (item) {
+    const own = item.sharedFields.find(f => f.id === FIELD_IDS.masters);
+    if (own?.value) mastersValue = own.value;
+  }
+
+  // Step 2: template SV `__Masters` (common case). `readFieldWithSvFallback`
+  // walks the base-template SV chain transparently.
+  if (!mastersValue && item) {
+    const svValue = readFieldWithSvFallback(engine, item, FIELD_IDS.masters, 'en');
+    if (svValue) mastersValue = svValue;
+  }
+
+  if (!mastersValue) return [];
+
+  const guids = parseGuidList(mastersValue);
+  const results: InsertOption[] = [];
+  for (const guid of guids) {
+    const resolved = engine.getItemById(guid);
+    const reg = resolved ? undefined : engine.getRegistryItem(guid);
+    const path = resolved?.item.path ?? reg?.path;
+    const name = resolved
+      ? resolved.item.path.split('/').pop()
+      : reg?.name;
+    if (!path || !name) continue; // unresolvable - skip silently
+    const tplOfTpl = (resolved?.item.template ?? reg?.template ?? '').toLowerCase();
+    results.push({
+      templateId: guid,
+      templateName: name,
+      templatePath: path,
+      kind: tplOfTpl === BRANCH_TEMPLATE_ID ? 'branch' : 'template',
+    });
+  }
+  return results;
+}

@@ -1,0 +1,26 @@
+---
+ID: "aaaa1111-0000-0000-0000-000000000014"
+Parent: "aaaa1111-0000-0000-0000-000000000013"
+Template: "f4fb6125-f113-4373-8aa2-4648c2c1960e"
+Path: /sitecore/content/Tenant/SiteA/Settings/Redirects/MapA
+SharedFields:
+- ID: "5ecfffc9-d530-4512-b757-9e9830f07d5a"
+  Hint: UrlMapping
+  Value: "%2Fold=%2Fnew"
+- ID: "980dfa07-41d4-4c4e-ab28-de657afdb6bc"
+  Hint: RedirectType
+  Value: redirect301
+- ID: "f24d347e-98c2-4995-a14c-b15697ba86e5"
+  Hint: PreserveQueryString
+  Value: "0"
+- ID: "d3319168-3cff-431e-b3fb-d6a9c0d574a3"
+  Hint: PreserveLanguage
+  Value: "0"
+Languages:
+- Language: en
+  Versions:
+  - Version: 1
+    Fields:
+    - ID: "25bed78c-4957-4165-998a-ca1b52f67497"
+      Hint: __Created
+      Value: 20260430T120000Z

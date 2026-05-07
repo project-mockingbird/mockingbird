@@ -1,0 +1,35 @@
+.git
+node_modules
+dist
+src/web/node_modules
+src/web/out
+src/web/.next
+tests
+docs
+*.md
+# .env may carry developer-local site paths that shouldn't travel with
+# the build context (where the docker daemon and any image-scanning
+# tooling can see them). Source-of-truth defaults live in .env.example.
+.env
+.env.local
+.env.*.local
+# Runtime bind-mounted - served by volume, never baked into the image.
+# Deployments mount their own authoring copies at /app/data/...; this
+# repo's own trees are developer-side and inflate the build context to
+# >750 MB when not excluded.
+content
+serialization
+sitecore.json
+# Persistent index cache is written by the running container, not shipped
+# in the image. Keeping it in the context forces Docker to invalidate the
+# final image layer on every cache rebuild.
+data/cache
+# The uncompressed registry.json is an intermediate artifact of
+# extract-registry.ps1; only registry.json.gz is COPYed into the image.
+data/registry.json
+# Local dev scripts (debug probes, extraction helpers) - not part of the
+# runtime image.
+scripts
+# Legacy CLI package cache — kept from the previous .dockerignore.
+content/.sitecore
+
