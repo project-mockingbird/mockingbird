@@ -44,6 +44,8 @@ import { useMoveItem } from '@/hooks/useMoveItem';
 import { useRefreshItem } from '@/hooks/useRefreshItem';
 import { useRenameItem } from '@/hooks/useRenameItem';
 import { InsertItemDialog } from './InsertItemDialog';
+import { HeadlessSiteCollectionDialog } from './HeadlessSiteCollectionDialog';
+import { HeadlessSiteDialog } from './HeadlessSiteDialog';
 import { DuplicateItemDialog } from './DuplicateItemDialog';
 import { CopyMoveDestinationDialog } from './CopyMoveDestinationDialog';
 import { RenameItemDialog } from './RenameItemDialog';
@@ -242,6 +244,77 @@ function ContentTreeNode({
   const [insertServerError, setInsertServerError] = useState<string | null>(null);
   const insertOptionsQuery = useInsertOptions(node.id, insertSubOpen);
   const insertItem = useInsertItem();
+
+  // SXA Headless scaffolding dialog state. Surfaces only on /sitecore/content
+  // (Headless Site Collection) and on items whose template is JSSTenant
+  // {b91811f1-...} (Headless Site).
+  const [headlessTenantOpen, setHeadlessTenantOpen] = useState(false);
+  const [headlessTenantPending, setHeadlessTenantPending] = useState(false);
+  const [headlessTenantServerError, setHeadlessTenantServerError] = useState<string | null>(null);
+  const [headlessSiteOpen, setHeadlessSiteOpen] = useState(false);
+  const [headlessSitePending, setHeadlessSitePending] = useState(false);
+  const [headlessSiteServerError, setHeadlessSiteServerError] = useState<string | null>(null);
+  const isContentRoot = node.path === '/sitecore/content';
+  const isJssTenant = node.template?.toLowerCase() === 'b91811f1-fa8b-47f8-b131-bd2c6d5ec805';
+
+  const handleScaffoldTenant = async (input: { tenantName: string; definitionItemIds: string[] }) => {
+    setHeadlessTenantServerError(null);
+    setHeadlessTenantPending(true);
+    try {
+      const r = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'scaffold-headless-tenant',
+          tenantLocation: node.path,
+          tenantName: input.tenantName,
+          definitionItemIds: input.definitionItemIds,
+        }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `Server error ${r.status}`);
+      }
+      setHeadlessTenantOpen(false);
+      toast.success(`Tenant "${input.tenantName}" created`);
+    } catch (err) {
+      setHeadlessTenantServerError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setHeadlessTenantPending(false);
+    }
+  };
+
+  const handleScaffoldSite = async (input: { siteName: string; hostName: string; virtualFolder: string; language: string; definitionItemIds: string[]; graphQLEndpoint: string; deploymentSecret: string }) => {
+    setHeadlessSiteServerError(null);
+    setHeadlessSitePending(true);
+    try {
+      const r = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'scaffold-headless-site',
+          siteLocation: node.path,
+          siteName: input.siteName,
+          hostName: input.hostName,
+          virtualFolder: input.virtualFolder,
+          language: input.language,
+          definitionItemIds: input.definitionItemIds,
+          graphQLEndpoint: input.graphQLEndpoint,
+          deploymentSecret: input.deploymentSecret,
+        }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `Server error ${r.status}`);
+      }
+      setHeadlessSiteOpen(false);
+      toast.success(`Site "${input.siteName}" created`);
+    } catch (err) {
+      setHeadlessSiteServerError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setHeadlessSitePending(false);
+    }
+  };
 
   const handleInsert = async (name: string) => {
     if (!insertDialog) return;
@@ -592,7 +665,7 @@ function ContentTreeNode({
         <ContextMenuContent>
           {/* Insert - first item (Sitecore Content Editor parity). */}
           <ContextMenuSub onOpenChange={setInsertSubOpen}>
-            <ContextMenuSubTrigger disabled={isRegistry}>
+            <ContextMenuSubTrigger disabled={isRegistry && !isContentRoot && !isJssTenant}>
               Insert
             </ContextMenuSubTrigger>
             <ContextMenuSubContent>
@@ -607,6 +680,22 @@ function ContentTreeNode({
                   {opt.templateName}
                 </ContextMenuItem>
               ))}
+              {isContentRoot && (
+                <>
+                  {(insertOptionsQuery.data?.options.length ?? 0) > 0 && <ContextMenuSeparator />}
+                  <ContextMenuItem onSelect={() => setHeadlessTenantOpen(true)}>
+                    Headless Site Collection
+                  </ContextMenuItem>
+                </>
+              )}
+              {isJssTenant && (
+                <>
+                  {(insertOptionsQuery.data?.options.length ?? 0) > 0 && <ContextMenuSeparator />}
+                  <ContextMenuItem onSelect={() => setHeadlessSiteOpen(true)}>
+                    Headless Site
+                  </ContextMenuItem>
+                </>
+              )}
               {(insertOptionsQuery.data?.options.length ?? 0) > 0 && (
                 <ContextMenuSeparator />
               )}
@@ -750,6 +839,34 @@ function ContentTreeNode({
           }}
           isPending={insertItem.isPending}
           serverError={insertServerError}
+        />
+      )}
+
+      {headlessTenantOpen && (
+        <HeadlessSiteCollectionDialog
+          open={headlessTenantOpen}
+          parentPath={node.path}
+          onConfirm={handleScaffoldTenant}
+          onClose={() => {
+            setHeadlessTenantOpen(false);
+            setHeadlessTenantServerError(null);
+          }}
+          isPending={headlessTenantPending}
+          serverError={headlessTenantServerError}
+        />
+      )}
+
+      {headlessSiteOpen && (
+        <HeadlessSiteDialog
+          open={headlessSiteOpen}
+          parentPath={node.path}
+          onConfirm={handleScaffoldSite}
+          onClose={() => {
+            setHeadlessSiteOpen(false);
+            setHeadlessSiteServerError(null);
+          }}
+          isPending={headlessSitePending}
+          serverError={headlessSiteServerError}
         />
       )}
 
