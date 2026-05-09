@@ -34,6 +34,14 @@ export function useWebSocket() {
       if (data.type === 'validation:updated') {
         queryClient.invalidateQueries({ queryKey: ['validation'] });
       }
+      if (data.type === 'tree:refresh') {
+        // Multi-item subtree change (e.g. SXA scaffolding). Invalidate tree
+        // and children-by-parent caches so the SPA re-fetches in one round
+        // rather than chasing per-item events.
+        queryClient.invalidateQueries({ queryKey: ['tree'] });
+        queryClient.invalidateQueries({ queryKey: ['children'] });
+        queryClient.invalidateQueries({ queryKey: ['all-templates'] });
+      }
     };
 
     ws.onclose = () => { setTimeout(() => { if (wsRef.current === ws) wsRef.current = null; }, 3000); };
