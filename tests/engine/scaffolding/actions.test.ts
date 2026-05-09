@@ -31,7 +31,7 @@ describe('dispatchAction', () => {
     const action: ScaffoldingAction = {
       kind: 'EditTenantTemplate',
       editType: 'AddBaseTemplate',
-      targetTemplateId: 'tpl-a',
+      prototypeId: 'tpl-a',
       argumentIds: ['tpl-b'],
     };
     await dispatchAction(action, buildCtx(ports));
@@ -45,7 +45,7 @@ describe('dispatchAction', () => {
     const action: ScaffoldingAction = {
       kind: 'EditTenantTemplate',
       editType: 'AddInsertOptions',
-      targetTemplateId: 'tpl-a',
+      prototypeId: 'tpl-a',
       argumentIds: ['tpl-b'],
     };
     await dispatchAction(action, buildCtx(ports));
@@ -57,7 +57,7 @@ describe('dispatchAction', () => {
     const action: ScaffoldingAction = {
       kind: 'EditTenantTemplate',
       editType: 'AddTenantTemplatesToInsertOptions',
-      targetTemplateId: 'tpl-a',
+      prototypeId: 'tpl-a',
       argumentIds: ['tpl-b'],
     };
     await dispatchAction(action, buildCtx(ports));
@@ -93,7 +93,7 @@ describe('dispatchAction', () => {
     const action = {
       kind: 'EditTenantTemplate',
       editType: 'BogusEditType',
-      targetTemplateId: 'tpl-a',
+      prototypeId: 'tpl-a',
       argumentIds: ['tpl-b'],
     } as unknown as ScaffoldingAction;
     await expect(dispatchAction(action, buildCtx(ports))).rejects.toThrow(/Unknown EditTenantTemplate.editType/);

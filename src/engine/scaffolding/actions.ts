@@ -105,23 +105,56 @@ function readField(node: { item: { sharedFields: { id: string; value: string }[]
   return node.item.sharedFields.find(f => f.id.toLowerCase() === lower)?.value ?? '';
 }
 
+/**
+ * Resolve a prototype id to its template-type GUID. Mirrors the SPE cmdlet's
+ * `$baseTemplate.InnerItem.Template.InnerItem.ID`: the prototype is loaded,
+ * then ITS template field is the lookup key. Tree-first, registry fallback
+ * (prototypes live in the registry on a fresh install).
+ */
+function resolveLookupKey(engine: Engine, prototypeId: string): string | undefined {
+  if (!prototypeId) return undefined;
+  const node = engine.getItemById(prototypeId);
+  if (node) return node.item.template.toLowerCase();
+  const reg = engine.getRegistryItem(prototypeId);
+  if (reg) return reg.template.toLowerCase();
+  return undefined;
+}
+
+/**
+ * Find the tenant-local template whose __Base template chain includes
+ * `lookupKey`. Mirrors `Get-ProjectTemplateBasedOnBaseTemplate` (direct
+ * `__Base template` membership first, then a recursive InheritsFrom walk -
+ * collapsed here into a single inheritance walk via `templateInheritsFrom`).
+ * Returns the first match; SPE script likewise selects "first one" when
+ * multiple match.
+ */
+function findTenantTemplateByLookupKey(
+  engine: Engine,
+  tenantTemplates: string[],
+  lookupKey: string,
+): string | undefined {
+  return tenantTemplates.find(tplId => templateInheritsFrom(engine, tplId, lookupKey));
+}
+
 export async function defaultInvokeAddBaseTemplate(
   action: Extract<ScaffoldingAction, { kind: 'EditTenantTemplate' }>,
   ctx: ActionContext,
 ): Promise<void> {
-  if (!action.targetTemplateId) {
+  const lookupKey = resolveLookupKey(ctx.engine, action.prototypeId);
+  if (!lookupKey) {
     ctx.warnings.push(
-      'AddBaseTemplate skipped: target template not resolved from action (per-tenant template lookup not yet ported)',
+      `AddBaseTemplate skipped: prototype not in tree or registry: ${action.prototypeId}`,
     );
     return;
   }
-  const target = ctx.engine.getItemById(action.targetTemplateId);
-  if (!target) {
+  const targetId = findTenantTemplateByLookupKey(ctx.engine, ctx.tenantTemplates, lookupKey);
+  if (!targetId) {
     ctx.warnings.push(
-      `AddBaseTemplate skipped: target template not found in tenant tree: ${action.targetTemplateId}`,
+      `AddBaseTemplate skipped: no tenant-local template inherits from ${lookupKey} (prototype ${action.prototypeId})`,
     );
     return;
   }
+  const target = ctx.engine.getItemById(targetId)!;
   const current = readField(target, BASE_TEMPLATE_FIELD_ID);
   const next = appendIds(current, action.argumentIds);
   if (next === current) return;
@@ -135,19 +168,21 @@ export async function defaultInvokeAddInsertOptionsToTemplate(
   action: Extract<ScaffoldingAction, { kind: 'EditTenantTemplate' }>,
   ctx: ActionContext,
 ): Promise<void> {
-  if (!action.targetTemplateId) {
+  const lookupKey = resolveLookupKey(ctx.engine, action.prototypeId);
+  if (!lookupKey) {
     ctx.warnings.push(
-      'AddInsertOptions skipped: target template not resolved from action (per-tenant template lookup not yet ported)',
+      `AddInsertOptions skipped: prototype not in tree or registry: ${action.prototypeId}`,
     );
     return;
   }
-  const target = ctx.engine.getItemById(action.targetTemplateId);
-  if (!target) {
+  const targetId = findTenantTemplateByLookupKey(ctx.engine, ctx.tenantTemplates, lookupKey);
+  if (!targetId) {
     ctx.warnings.push(
-      `AddInsertOptions skipped: target template not found in tenant tree: ${action.targetTemplateId}`,
+      `AddInsertOptions skipped: no tenant-local template inherits from ${lookupKey} (prototype ${action.prototypeId})`,
     );
     return;
   }
+  const target = ctx.engine.getItemById(targetId)!;
   const standardValues = Array.from(target.children.values()).find(
     c => c.item.path.endsWith(`/${STANDARD_VALUES_NAME}`),
   );
@@ -170,24 +205,32 @@ export async function defaultInvokeAddInsertOptionAdvanced(
   action: Extract<ScaffoldingAction, { kind: 'EditTenantTemplate' }>,
   ctx: ActionContext,
 ): Promise<void> {
-  // Translate each base-template argument to its tenant-local equivalent.
-  // tenantTemplates is the ID list of templates under the tenant's
-  // templates root - find ones that inherit from each base argument.
+  // Mirror Invoke-AddInsertOptionAdvanced.ps1: target template is the
+  // tenant-local copy of the prototype's template-type; for each argument
+  // (a base-template id) find the tenant-local template inheriting from it
+  // and use ITS id as the insert option (not the base-template id directly).
+  const lookupKey = resolveLookupKey(ctx.engine, action.prototypeId);
+  if (!lookupKey) {
+    ctx.warnings.push(
+      `AddInsertOptionAdvanced skipped: prototype not in tree or registry: ${action.prototypeId}`,
+    );
+    return;
+  }
+  const targetId = findTenantTemplateByLookupKey(ctx.engine, ctx.tenantTemplates, lookupKey);
+  if (!targetId) {
+    ctx.warnings.push(
+      `AddInsertOptionAdvanced skipped: no tenant-local template inherits from ${lookupKey} (prototype ${action.prototypeId})`,
+    );
+    return;
+  }
   const translated: string[] = [];
   for (const baseId of action.argumentIds) {
-    const tenantLocal = ctx.tenantTemplates.find(tplId => {
-      const tpl = ctx.engine.getItemById(tplId);
-      if (!tpl) return false;
-      const baseField = readField(tpl, BASE_TEMPLATE_FIELD_ID);
-      return baseField
-        .split('|')
-        .some(b => b.toLowerCase() === baseId.toLowerCase());
-    });
+    const tenantLocal = findTenantTemplateByLookupKey(ctx.engine, ctx.tenantTemplates, baseId);
     if (tenantLocal) {
       translated.push(tenantLocal);
     } else {
       ctx.warnings.push(
-        `AddInsertOptionAdvanced: no tenant-local template inherits from ${baseId}; skipping`,
+        `AddInsertOptionAdvanced: no tenant-local template inherits from ${baseId}; skipping argument`,
       );
     }
   }

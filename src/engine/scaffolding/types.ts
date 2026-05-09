@@ -18,7 +18,14 @@ export type ScaffoldingAction =
         | 'AddBaseTemplate'
         | 'AddInsertOptions'
         | 'AddTenantTemplatesToInsertOptions';
-      targetTemplateId: string;
+      /**
+       * The action item's `Template` field value. Mirrors what the SPE
+       * cmdlets do: load this prototype item, take its template field as
+       * the LOOKUP KEY, then find the tenant-local template whose
+       * `__Base template` chain inherits from that key. The prototype
+       * itself is not the target - its template-type is the discriminator.
+       */
+      prototypeId: string;
       argumentIds: string[];
     }
   | {

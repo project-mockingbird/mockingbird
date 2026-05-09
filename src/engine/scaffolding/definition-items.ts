@@ -13,6 +13,7 @@
  */
 import type { Engine } from '../index.js';
 import type { DefinitionItem, ScaffoldingAction } from './types.js';
+import { normalizeGuid } from '../guid.js';
 
 // Setup-template GUIDs (lowercase, dashed) for definition-item discovery.
 const HEADLESS_TENANT_SETUP = 'f036b5e0-37fb-4537-9d36-ef84e5bd41b7';
@@ -54,6 +55,12 @@ const FIELD_ACTION_TEMPLATE = 'e62c28f0-9d3b-46e2-8bec-a5e120542499';  // AddIte
 const FIELD_ACTION_FIELDS = 'ad0e8de7-f6c1-49fa-b2c4-87e10fbdaa52';    // AddItem.Fields
 const FIELD_TENANT_EDIT_TYPE = '614f52cf-d54b-47d1-a242-d9a7d42860f4';
 const FIELD_TENANT_ARGUMENTS = 'e830af53-210b-4981-b6a8-f8939f587eb1';
+// Shared `Template` field on EditTenantTemplate / EditSiteItem actions.
+// The value is a prototype item id (e.g. /sitecore/masters/.../JSS Site/Settings),
+// NOT the target template. The dispatcher uses the prototype's template-type
+// as the lookup key against the tenant's templates folder, mirroring
+// Invoke-AddBaseTemplate.ps1's `$baseTemplate.InnerItem.Template.InnerItem.ID`.
+const FIELD_ACTION_TARGET = '67b6641e-309d-4c1e-8e97-63965c7e2c5f';
 const FIELD_SITE_EDIT_TYPE = '76691b61-8692-4d98-a4ff-115ba4208ab6';
 const FIELD_SITE_ARGUMENTS = '58aca5ca-742a-41bb-866f-cfa3764200c8';
 
@@ -231,8 +238,8 @@ function parseAction(
     return {
       kind: 'EditTenantTemplate',
       editType,
-      targetTemplateId: '',
-      argumentIds: (fields[FIELD_TENANT_ARGUMENTS] ?? '').split('|').filter(Boolean),
+      prototypeId: normalizeGuid(fields[FIELD_ACTION_TARGET] ?? ''),
+      argumentIds: (fields[FIELD_TENANT_ARGUMENTS] ?? '').split('|').map(normalizeGuid).filter(Boolean),
     };
   }
   if (ACTION_TEMPLATES_EDIT_SITE_ITEM.has(templateId)) {
