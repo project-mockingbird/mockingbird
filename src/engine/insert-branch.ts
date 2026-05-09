@@ -122,11 +122,17 @@ export async function insertBranch(
 
   // Identify which source items are top-level children of the branch (vs
   // deeper descendants) so we know which ones reparent onto `parentNode`.
+  // Branch may be tree-resident (existing path) or registry-resident
+  // (SXA Headless tenant/site branches at {2D3805B9-...}, {45CF9F42-...}).
   const branchNode = engine.getItemById(branchTemplate.id);
   const topLevelSourceIds = new Set<string>();
   if (branchNode) {
     for (const child of branchNode.children.values()) {
       topLevelSourceIds.add(child.item.id);
+    }
+  } else {
+    for (const regChild of engine.getRegistryChildren(branchTemplate.id)) {
+      topLevelSourceIds.add(regChild.id);
     }
   }
 
