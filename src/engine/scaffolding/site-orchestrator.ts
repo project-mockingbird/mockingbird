@@ -9,9 +9,7 @@
  *   - `$editingTheme` undefined-bug from the SPE script: do not pass
  *     through; theme actions are stubbed in v1 anyway.
  *   - ExecuteScript actions logged + skipped (decision #2).
- *   - Pre-sort via Get-SortedSetupItemsCollection: skipped in v1
- *     (curated definitions are independent; sorting becomes relevant
- *     when user-authored definitions with cross-references exist).
+ *   - Pre-sort via Get-SortedSetupItemsCollection: skipped in v1.
  */
 import type { Engine } from '../index.js';
 import { insertBranch } from '../insert-branch.js';
@@ -237,9 +235,7 @@ export async function scaffoldHeadlessSite(
     updateTemplate: true,
   };
   for (const def of selectedRaw) {
-    const actions = def.source === 'curated'
-      ? def.actions
-      : hydrateDefinitionActions(engine, def, warnings);
+    const actions = hydrateDefinitionActions(engine, def, warnings);
     for (const a of actions as ScaffoldingAction[]) {
       await dispatchAction(a, ctx);
     }

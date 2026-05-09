@@ -10,6 +10,18 @@ import type { Engine } from './index.js';
 import type { ItemNode, ScsItem } from './types.js';
 
 /**
+ * Minimum shape insertBranch needs from the destination parent.
+ * Tree-resident parents satisfy this via their ItemNode; registry-only
+ * parents (e.g. `/sitecore/content` when no items have been serialized
+ * under it yet) construct it via `engine.resolveFilePath` to pick the
+ * include scope without requiring a real on-disk parent YAML.
+ */
+export type InsertBranchParent = {
+  item: { id: string; path: string };
+  filePath: string;
+};
+
+/**
  * Pre-order DFS over a branch template's subtree. Returns each descendant
  * of `branchTemplateId` in the order Sitecore's `AddFromBranchTemplate`
  * (`Sitecore.Kernel.decompiled.cs:210776`) processes them: each top-level
@@ -111,7 +123,7 @@ export async function writeAtomic(entries: readonly AtomicWriteEntry[]): Promise
  */
 export async function insertBranch(
   engine: Engine,
-  parentNode: ItemNode,
+  parentNode: InsertBranchParent,
   branchTemplate: ScsItem,
   branchRootName: string,
 ): Promise<{ rootItemId: string; createdItems: ItemNode[] }> {

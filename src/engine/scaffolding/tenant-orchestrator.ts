@@ -1,23 +1,19 @@
 /**
  * scaffoldHeadlessTenant - TypeScript port of Add-JSSTenant.ps1.
  *
- * Mirrors the 20-step sequence documented in
- * docs/superpowers/specs/2026-05-08-sxa-headless-scaffolding-design.md
- * (section "Add-JSSTenant - the canonical sequence"). Notable substitutions
- * vs. the SPE script:
- *   - Sitecore standard `__Display name` / `__Long description` fields
- *     used in place of `Metadata+_Name` / `Metadata+_Description`
- *     (decision #4 in the spec - the upstream type expression doesn`t
- *     resolve in SXA 10.4 decompile and the assignment is defensive in
- *     PS via Fields.Contains() check).
- *   - ExecuteScript actions log a warning and proceed (decision #2).
- *   - Curated definition items are recognized by id prefix
- *     `curated-` and have actions inlined; their EditTenantTemplate
- *     `<tenant-page-template>` sentinel resolves to the tenant`s Page
- *     template at dispatch time.
+ * Mirrors the canonical Add-JSSTenant sequence: branch instantiation,
+ * cross-cutting folder creation under the six Project roots, media
+ * library setup, HeadlessSiteSetupRoot under Settings, structural
+ * field writes, then per-DefinitionItem action dispatch in three
+ * passes (EditTenantTemplate -> AddItem -> ExecuteScript).
+ *
+ * SXA Multisite Metadata fields (_Name, _Description) are written
+ * alongside the standard `__Display name` / `__Long description` so
+ * downstream JSS code paths (Get-SiteMediaItem, etc.) see what real
+ * Sitecore writes. ExecuteScript actions are logged and skipped.
  */
 import type { Engine } from '../index.js';
-import { insertBranch } from '../insert-branch.js';
+import { insertBranch, type InsertBranchParent } from '../insert-branch.js';
 import { insertItem } from '../insert-item.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { dispatchAction, defaultPorts, type ActionContext } from './actions.js';
@@ -31,7 +27,6 @@ import {
   type ScaffoldHeadlessTenantInput,
   type ScaffoldResult,
   type DefinitionItem,
-  type ScaffoldingAction,
 } from './types.js';
 
 // SXA Headless template/branch GUIDs (lowercase, dashed). See spec table.
@@ -46,19 +41,23 @@ const PROJECT_RENDERINGS = '1995806f-0a84-42b5-93b0-88f0e2ff872c';
 const PROJECT_SETTINGS = '0af56f64-b5d7-473f-9497-1dc19265e494';
 const PROJECT_BRANCHES = 'a1f6469d-16e1-4a5f-9e49-1aad869a5d11';
 
-// _BaseTenant + Tenant template field GUIDs (from Sitecore.XA.Foundation.Multisite Templates.cs).
+// _Base Tenant fields (Foundation/Experience Accelerator/Multisite/Base/_Base Tenant).
 const FIELD_TENANT_TEMPLATES = '9c596379-f8d4-45d1-a064-cdf1ede2e7c7';
 const FIELD_TENANT_MEDIA_LIBRARY = 'e90a4413-c111-4951-9b6a-00c4ce7fb289';
 const FIELD_TENANT_SHARED_MEDIA_LIBRARY = '800dc4ed-0846-45ba-b112-19902af240f6';
-// JSSTenant adds these folder-reference fields (extends _BaseTenant).
-const FIELD_PLACEHOLDER_SETTINGS_FOLDER = 'f55c08e7-ad14-4d8a-9d6f-89eb6f2c6d3b'; // approximate; verify in real registry
-const FIELD_RENDERINGS_FOLDER = '1d9c08c1-29bb-4f9d-9eb6-c6cce3ad53f5';            // approximate
-const FIELD_BRANCHES_FOLDER = 'b9a2bff3-6f7c-4632-9b25-5f96d36b9e8c';              // approximate
-const FIELD_SETTINGS_FOLDER = '00fa3aaf-fd2c-4f8e-9628-90fed3c4e6eb';              // approximate
+// _Base JSS Tenant folder fields (verified via inspect-tenant-folder-fields.mjs).
+const FIELD_PLACEHOLDER_SETTINGS_FOLDER = '102b58da-2a86-4953-b3cd-c9f91256b657';
+const FIELD_RENDERINGS_FOLDER = '853b245f-53e4-4ebe-bab5-299f9de314b6';
+const FIELD_BRANCHES_FOLDER = 'c5dbb136-3299-4835-a8ce-bca8b49ba3fa';
+const FIELD_SETTINGS_FOLDER = 'b6953f8b-56d3-4c90-a6db-885786711e4a';
 const FIELD_MODULES = '1230d2cb-4948-4d43-8a3b-b39978f6f1b3';
-// Sitecore standard fields (substituted per spec decision #4).
+// Sitecore standard fields.
 const FIELD_DISPLAY_NAME = 'b5e02ad9-d56f-4c41-a065-a133db87bdeb';
 const FIELD_DESCRIPTION = '9541e67d-ce8c-4225-803d-33f7f29f09ef';
+// SXA Multisite Metadata fields (written alongside the standard ones so
+// JSS code paths that read these specifically see what real Sitecore writes).
+const FIELD_META_NAME = '85a7501a-86d9-4243-9075-0b727c3a6db4';
+const FIELD_META_DESCRIPTION = '89cecf4f-e545-44f2-813d-272c08661d14';
 
 // Folder template paths from Add-JSSTenant.ps1 lines 94-97.
 const FOLDER_TEMPLATE_PATHS = {
@@ -75,35 +74,6 @@ function lookupTemplateIdByPath(engine: Engine, path: string): string | undefine
   if (tree) return tree.item.id;
   const reg = engine.getRegistryItemByPath(path);
   return reg?.id;
-}
-
-async function resolveDefinitionActions(
-  engine: Engine,
-  definition: DefinitionItem,
-  warnings: string[],
-  tenantPageTemplateId: string | undefined,
-): Promise<ScaffoldingAction[]> {
-  const actions = definition.source === 'curated'
-    ? definition.actions
-    : hydrateDefinitionActions(engine, definition, warnings);
-
-  // Resolve the curated `<tenant-page-template>` sentinel to the actual
-  // tenant Page template (if known). If unknown, drop the action with a
-  // warning - the v1 curated def`s only such action is the JSSPage
-  // base-template wiring, which only matters once the tenant has a Page
-  // template to receive it.
-  return actions.map(a => {
-    if (a.kind === 'EditTenantTemplate' && a.targetTemplateId === '<tenant-page-template>') {
-      if (!tenantPageTemplateId) {
-        warnings.push(
-          'Curated EditTenantTemplate skipped - no tenant Page template found yet (curated definitions assume the tenant has been bootstrapped)',
-        );
-        return null;
-      }
-      return { ...a, targetTemplateId: tenantPageTemplateId };
-    }
-    return a;
-  }).filter((a): a is ScaffoldingAction => a !== null);
 }
 
 export async function scaffoldHeadlessTenant(
@@ -127,9 +97,22 @@ export async function scaffoldHeadlessTenant(
   if (engine.getItemByPath(expectedPath)) {
     throw new ScaffoldError('name-collision', `Item already exists: ${expectedPath}`);
   }
-  const parent = engine.getItemByPath(input.tenantLocation);
-  if (!parent) {
-    throw new ScaffoldError('parent-not-found', `Parent not found: ${input.tenantLocation}`);
+  // Parent may be tree-resident (an existing serialized item) or
+  // registry-only (e.g. /sitecore/content on a fresh install where
+  // nothing has been authored under it yet). For the registry-only
+  // case, synthesize a filePath from the include scope so insertBranch
+  // can route the new YAMLs without needing a parent YAML on disk.
+  let parent: InsertBranchParent;
+  const treeParent = engine.getItemByPath(input.tenantLocation);
+  if (treeParent) {
+    parent = { item: { id: treeParent.item.id, path: treeParent.item.path }, filePath: treeParent.filePath };
+  } else {
+    const regParent = engine.getRegistryItemByPath(input.tenantLocation);
+    if (!regParent) {
+      throw new ScaffoldError('parent-not-found', `Parent not found: ${input.tenantLocation}`);
+    }
+    const syntheticFilePath = engine.resolveFilePath(regParent.path, regParent.name);
+    parent = { item: { id: regParent.id, path: regParent.path }, filePath: syntheticFilePath };
   }
 
   // Step 2: load definition items.
@@ -158,15 +141,15 @@ export async function scaffoldHeadlessTenant(
   if (!tenantNode) {
     throw new ScaffoldError('parent-not-found', `Tenant item missing after insert: ${tenantId}`);
   }
-  createdPaths.push(tenantNode.item.path);
-  for (const created of tenantInsertResult.createdItems) {
-    if (created.item.path !== tenantNode.item.path) createdPaths.push(created.item.path);
-  }
+  createdPaths.push(...tenantInsertResult.createdItems.map(c => c.item.path));
 
-  // Step 4: set tenant display name + description (spec decision #4: substituted standard fields).
+  // Step 4: set tenant display name + description on both the standard
+  // Sitecore fields AND the SXA Multisite Metadata fields.
   await applyFieldUpdates(engine, [
     { itemId: tenantId, fieldId: FIELD_DISPLAY_NAME, value: displayName },
     { itemId: tenantId, fieldId: FIELD_DESCRIPTION, value: description },
+    { itemId: tenantId, fieldId: FIELD_META_NAME, value: displayName },
+    { itemId: tenantId, fieldId: FIELD_META_DESCRIPTION, value: description },
   ]);
 
   // Step 5: create cross-cutting folders (Add-JSSTenant lines 94-97).
@@ -269,17 +252,7 @@ export async function scaffoldHeadlessTenant(
   if (folderItemIds.Settings) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_SETTINGS_FOLDER, value: folderItemIds.Settings });
   if (structuralUpdates.length > 0) await applyFieldUpdates(engine, structuralUpdates);
 
-  // Step 9: dispatch all selected actions.
-  // Find the tenant`s Page template (if any) to resolve curated sentinel references.
-  let tenantPageTemplateId: string | undefined;
-  if (templatesRootId) {
-    const templatesRoot = engine.getItemById(templatesRootId);
-    const pageTemplate = templatesRoot
-      ? Array.from(templatesRoot.children.values()).find(c => c.item.path.endsWith('/Page') || c.item.path.endsWith('/Base Page'))
-      : undefined;
-    tenantPageTemplateId = pageTemplate?.item.id;
-  }
-
+  // Step 9: dispatch all selected actions in three passes.
   const ctx: ActionContext = {
     ports: defaultPorts,
     engine,
@@ -295,7 +268,7 @@ export async function scaffoldHeadlessTenant(
 
   // Pass 1: EditTenantTemplate actions.
   for (const def of selectedRaw) {
-    const actions = await resolveDefinitionActions(engine, def, warnings, tenantPageTemplateId);
+    const actions = hydrateDefinitionActions(engine, def, warnings);
     for (const a of actions) {
       if (a.kind === 'EditTenantTemplate') await dispatchAction(a, ctx);
     }
@@ -303,7 +276,7 @@ export async function scaffoldHeadlessTenant(
   // Pass 2: AddItem actions.
   ctx.updateTemplate = true;
   for (const def of selectedRaw) {
-    const actions = await resolveDefinitionActions(engine, def, warnings, tenantPageTemplateId);
+    const actions = hydrateDefinitionActions(engine, def, warnings);
     for (const a of actions) {
       if (a.kind === 'AddItem') await dispatchAction(a, ctx);
     }
@@ -311,7 +284,7 @@ export async function scaffoldHeadlessTenant(
   ctx.updateTemplate = false;
   // Pass 3: ExecuteScript actions (skipped + warned).
   for (const def of selectedRaw) {
-    const actions = await resolveDefinitionActions(engine, def, warnings, tenantPageTemplateId);
+    const actions = hydrateDefinitionActions(engine, def, warnings);
     for (const a of actions) {
       if (a.kind === 'ExecuteScript') await dispatchAction(a, ctx);
     }

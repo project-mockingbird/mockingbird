@@ -28,7 +28,7 @@ describe('scaffoldHeadlessSite - input validation', () => {
           siteName: 'X',
           hostName: '*',
           virtualFolder: '/',
-          definitionItemIds: ['curated-empty-headless-site'],
+          definitionItemIds: ['00000000-0000-0000-0000-000000000000'],
         }),
       ).rejects.toThrow(/Parent not found/);
     } finally {

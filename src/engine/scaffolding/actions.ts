@@ -109,12 +109,18 @@ export async function defaultInvokeAddBaseTemplate(
   action: Extract<ScaffoldingAction, { kind: 'EditTenantTemplate' }>,
   ctx: ActionContext,
 ): Promise<void> {
+  if (!action.targetTemplateId) {
+    ctx.warnings.push(
+      'AddBaseTemplate skipped: target template not resolved from action (per-tenant template lookup not yet ported)',
+    );
+    return;
+  }
   const target = ctx.engine.getItemById(action.targetTemplateId);
   if (!target) {
-    throw new ScaffoldError(
-      'parent-not-found',
-      `Target template not found: ${action.targetTemplateId}`,
+    ctx.warnings.push(
+      `AddBaseTemplate skipped: target template not found in tenant tree: ${action.targetTemplateId}`,
     );
+    return;
   }
   const current = readField(target, BASE_TEMPLATE_FIELD_ID);
   const next = appendIds(current, action.argumentIds);
@@ -129,12 +135,18 @@ export async function defaultInvokeAddInsertOptionsToTemplate(
   action: Extract<ScaffoldingAction, { kind: 'EditTenantTemplate' }>,
   ctx: ActionContext,
 ): Promise<void> {
+  if (!action.targetTemplateId) {
+    ctx.warnings.push(
+      'AddInsertOptions skipped: target template not resolved from action (per-tenant template lookup not yet ported)',
+    );
+    return;
+  }
   const target = ctx.engine.getItemById(action.targetTemplateId);
   if (!target) {
-    throw new ScaffoldError(
-      'parent-not-found',
-      `Target template not found: ${action.targetTemplateId}`,
+    ctx.warnings.push(
+      `AddInsertOptions skipped: target template not found in tenant tree: ${action.targetTemplateId}`,
     );
+    return;
   }
   const standardValues = Array.from(target.children.values()).find(
     c => c.item.path.endsWith(`/${STANDARD_VALUES_NAME}`),

@@ -26,7 +26,7 @@ describe('scaffoldHeadlessTenant - input validation', () => {
         scaffoldHeadlessTenant(engine, {
           tenantLocation: '/sitecore/templates',
           tenantName: 'X',
-          definitionItemIds: ['curated-empty-headless-tenant'],
+          definitionItemIds: ['00000000-0000-0000-0000-000000000000'],
         }),
       ).rejects.toThrow(/under \/sitecore\/content/);
     } finally {
@@ -42,7 +42,7 @@ describe('scaffoldHeadlessTenant - input validation', () => {
         scaffoldHeadlessTenant(engine, {
           tenantLocation: '/sitecore/content',
           tenantName: 'X',
-          definitionItemIds: ['curated-empty-headless-tenant'],
+          definitionItemIds: ['00000000-0000-0000-0000-000000000000'],
         }),
       ).rejects.toThrow(/Parent not found/);
     } finally {
