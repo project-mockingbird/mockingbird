@@ -451,6 +451,10 @@ export class Engine {
     return this.registry?.getRootItems(database) ?? [];
   }
 
+  getRegistryItemsByTemplate(templateId: string): import('./types.js').RegistryItem[] {
+    return this.registry?.getItemsByTemplate(templateId) ?? [];
+  }
+
   getRegistryDatabases(): string[] {
     return this.registry?.getDatabases() ?? [];
   }
