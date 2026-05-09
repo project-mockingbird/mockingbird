@@ -7,7 +7,7 @@ import { getNameVsSiblingsError, getSiblingNames } from './name-validation.js';
 import { getTemplateSchema, type TemplateFieldSchema } from './template-schema.js';
 import { readFieldViaStandardValuesCascade } from './layout/item-fields.js';
 import { expandItemTokens } from './layout/item-tokens.js';
-import { insertBranch } from './insert-branch.js';
+import { insertBranch, type InsertBranchParent } from './insert-branch.js';
 
 /**
  * Sitecore's `MasterVariablesReplacer.ReplaceItem` recognizes seven default
@@ -57,54 +57,83 @@ export type InsertItemResult = {
  * non-token SV defaults are left to the read-time cascade.
  */
 export async function insertItem(engine: Engine, args: InsertItemArgs): Promise<InsertItemResult> {
-  // 1. Parent must exist
+  // 1. Parent must exist (tree only - registry-only parents go through
+  //    insertItemAtParent, which the orchestrators use for cross-cutting
+  //    folder roots like /sitecore/templates/Project).
   const parentNode = engine.getItemById(args.parentId);
   if (!parentNode) {
     throw new Error(`Parent item not found: ${args.parentId}`);
   }
+  return insertItemAtParent(
+    engine,
+    { item: { id: parentNode.item.id, path: parentNode.item.path }, filePath: parentNode.filePath },
+    { templateId: args.templateId, name: args.name },
+  );
+}
 
-  // 2. Template must exist (tree first, registry fallback for OOTB templates)
+export type InsertItemAtParentArgs = {
+  templateId: string;
+  name: string;
+};
+
+/**
+ * Lower-level insert-item primitive that takes a pre-resolved
+ * {@link InsertBranchParent}. Lets callers (notably the SXA scaffolding
+ * orchestrators) target registry-only roots like `/sitecore/templates/Project`
+ * without first materializing them into the serialized tree.
+ *
+ * Sibling-name collision check considers both the tree children of the
+ * resolved parent (when one exists) AND the OOTB registry children, so a
+ * tenant folder name that already exists at the registry level still trips
+ * the collision check rather than being silently shadowed.
+ *
+ * Branch templates require a tree-resolved parent ItemNode (the branch
+ * walker uses tree state for descendant ordering); registry-only parents
+ * trying to instantiate a branch template throw, matching the existing
+ * registry-only-branch limitation.
+ */
+export async function insertItemAtParent(
+  engine: Engine,
+  parent: InsertBranchParent,
+  args: InsertItemAtParentArgs,
+): Promise<InsertItemResult> {
+  // 1. Template must exist (tree first, registry fallback for OOTB templates)
   const tplNode = engine.getItemById(args.templateId);
   const tplFromTree = tplNode?.item;
   const tplFromRegistry = tplFromTree ? null : engine.getRegistryItem(args.templateId);
   if (!tplFromTree && !tplFromRegistry) {
     throw new Error(`Template not found: ${args.templateId}`);
   }
-  // Both shapes expose a normalized lowercase-dashed `id`.
   const templateId = tplFromTree?.id ?? tplFromRegistry!.id;
 
-  // 3. Validate name against existing siblings
-  const existingSiblings = getSiblingNames(parentNode);
+  // 2. Validate name against existing siblings (tree + registry combined).
+  const parentTreeNode = engine.getItemById(parent.item.id);
+  const treeSiblings = parentTreeNode ? getSiblingNames(parentTreeNode) : [];
+  const registrySiblings = engine
+    .getRegistryChildren(parent.item.id)
+    .map(c => c.path.split('/').pop() ?? '')
+    .filter(Boolean);
+  const existingSiblings = [...treeSiblings, ...registrySiblings];
   const err = getNameVsSiblingsError(args.name, existingSiblings);
   if (err) throw new Error(err);
 
-  // 4. Branch templates dispatch to the multi-item subtree-clone path.
-  // Detection mirrors `getInsertOptions`'s `kind: 'branch'` tag: any item
-  // whose `template` field equals `Sitecore.Data.TemplateIDs.BranchTemplate`
-  // (`BRANCH_TEMPLATE_ID`). This is the same mechanism Sitecore's
-  // `BranchItem` uses, so SXA Page Branches under
-  // `/sitecore/content/.../Presentation/Page Branches/*` are detected
-  // alongside the canonical `/sitecore/templates/Branches/*` location.
-  // Branch instantiation requires walking the branch's children, so the
-  // tree-resolved item is mandatory; registry-only branch templates aren't
-  // supported in v1.
+  // 3. Branch templates dispatch to the multi-item subtree-clone path.
   const tplOfTpl = (tplFromTree?.template ?? tplFromRegistry?.template ?? '').toLowerCase();
   const isBranch = tplOfTpl === BRANCH_TEMPLATE_ID;
   if (isBranch) {
     if (!tplFromTree) {
       throw new Error(`Branch template must be tree-resolved (registry-only branches not supported): ${args.templateId}`);
     }
-    return await insertBranch(engine, parentNode, tplFromTree, args.name);
+    return await insertBranch(engine, parent, tplFromTree, args.name);
   }
 
-  // Build skeleton item. `__Created` is stamped here (matching the peer
-  // create* methods); SV token-expansion fields are walked below.
+  // Build skeleton item.
   const newId = generateGuid();
   const newItem: ScsItem = {
     id: newId,
-    parent: parentNode.item.id,
+    parent: parent.item.id,
     template: templateId,
-    path: `${parentNode.item.path}/${args.name}`,
+    path: `${parent.item.path}/${args.name}`,
     sharedFields: [],
     languages: [
       {
@@ -122,32 +151,13 @@ export async function insertItem(engine: Engine, args: InsertItemArgs): Promise<
     ],
   };
 
-  // Port of `Sitecore.Data.Managers.MasterVariablesReplacer.ReplaceItem`
-  // (`Sitecore.Kernel.decompiled.cs:328348`). Sitecore iterates `item.Fields`
-  // (a unified own + SV-cascade view) on a freshly-created item and writes
-  // expanded values back for any field whose stored/cascaded value contains
-  // a `$`-prefixed token.
-  //
-  // mockingbird port: walk the template's full schema (own + base templates),
-  // read each field's RAW SV-cascade value (no expansion), and only when it
-  // contains a token, expand and stamp the result. Non-token SV defaults are
-  // left unwritten - the read-time cascade in `resolveFieldValue` serves
-  // them on every read. This keeps new YAMLs lean and matches Sitecore's
-  // observable serialized state (only token-expanded values become "stored").
   expandTokenBearingSvFields(engine, newItem, templateId);
 
-  // Compute the YAML location via the SCS-parity path pipeline. Picks the
-  // include scope by longest-prefix match against `parentNode.filePath` so
-  // multi-root setups (primary + content) route writes to the parent's
-  // root, then runs the SCS algorithm: leaf-prepend or alias substitution,
-  // tail hashing for paths exceeding `MaxRelativePathLength`, and
-  // filesystem-safe segment encoding. See `child-file-path.ts`.
   const filePath = await engine.writeItemFileAt(
     newItem,
-    engine.computeChildFilePath(parentNode.filePath, newItem.path),
+    engine.computeChildFilePath(parent.filePath, newItem.path),
   );
 
-  // Make the new item visible without restart
   const newNode = engine.getTree().addItem(newItem, filePath);
 
   return { rootItemId: newId, createdItems: [newNode] };

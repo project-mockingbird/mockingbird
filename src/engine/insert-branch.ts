@@ -22,6 +22,30 @@ export type InsertBranchParent = {
 };
 
 /**
+ * Resolve a Sitecore path to an InsertBranchParent for use as an insertion
+ * destination. Tree-first; falls back to the OOTB registry. For registry-only
+ * parents, synthesizes a filePath via `engine.resolveFilePath` so the SCS
+ * include-scope pipeline can route writes without needing a real parent YAML.
+ *
+ * Returns undefined when the path resolves nowhere - callers decide whether
+ * that's a hard error (tenant location validation) or a skip-with-warning
+ * (cross-cutting folder roots that may not exist in every install).
+ */
+export function resolveInsertParent(
+  engine: Engine,
+  path: string,
+): InsertBranchParent | undefined {
+  const tree = engine.getItemByPath(path);
+  if (tree) {
+    return { item: { id: tree.item.id, path: tree.item.path }, filePath: tree.filePath };
+  }
+  const reg = engine.getRegistryItemByPath(path);
+  if (!reg) return undefined;
+  const filePath = engine.resolveFilePath(reg.path, reg.name);
+  return { item: { id: reg.id, path: reg.path }, filePath };
+}
+
+/**
  * Pre-order DFS over a branch template's subtree. Returns each descendant
  * of `branchTemplateId` in the order Sitecore's `AddFromBranchTemplate`
  * (`Sitecore.Kernel.decompiled.cs:210776`) processes them: each top-level

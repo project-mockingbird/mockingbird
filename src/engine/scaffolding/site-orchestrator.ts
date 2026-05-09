@@ -12,7 +12,7 @@
  *   - Pre-sort via Get-SortedSetupItemsCollection: skipped in v1.
  */
 import type { Engine } from '../index.js';
-import { insertBranch } from '../insert-branch.js';
+import { insertBranch, resolveInsertParent } from '../insert-branch.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { dispatchAction, defaultPorts, type ActionContext } from './actions.js';
 import { synthesizeRegistryAsScs } from './synthesize.js';
@@ -103,8 +103,10 @@ export async function scaffoldHeadlessSite(
   const displayName = input.displayName ?? input.siteName;
   const description = input.description ?? '';
 
-  // Step 1: validate parent + name.
-  const parent = engine.getItemByPath(input.siteLocation);
+  // Step 1: validate parent + name. Tree-first; fall back to registry so
+  // a freshly-scaffolded tenant whose Sites folder hasn't been authored as
+  // YAML yet is still a valid site location.
+  const parent = resolveInsertParent(engine, input.siteLocation);
   if (!parent) {
     throw new ScaffoldError('parent-not-found', `Parent not found: ${input.siteLocation}`);
   }

@@ -13,8 +13,8 @@
  * Sitecore writes. ExecuteScript actions are logged and skipped.
  */
 import type { Engine } from '../index.js';
-import { insertBranch, type InsertBranchParent } from '../insert-branch.js';
-import { insertItem } from '../insert-item.js';
+import { insertBranch, resolveInsertParent, type InsertBranchParent } from '../insert-branch.js';
+import { insertItem, insertItemAtParent } from '../insert-item.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { dispatchAction, defaultPorts, type ActionContext } from './actions.js';
 import { synthesizeRegistryAsScs } from './synthesize.js';
@@ -99,20 +99,11 @@ export async function scaffoldHeadlessTenant(
   }
   // Parent may be tree-resident (an existing serialized item) or
   // registry-only (e.g. /sitecore/content on a fresh install where
-  // nothing has been authored under it yet). For the registry-only
-  // case, synthesize a filePath from the include scope so insertBranch
-  // can route the new YAMLs without needing a parent YAML on disk.
-  let parent: InsertBranchParent;
-  const treeParent = engine.getItemByPath(input.tenantLocation);
-  if (treeParent) {
-    parent = { item: { id: treeParent.item.id, path: treeParent.item.path }, filePath: treeParent.filePath };
-  } else {
-    const regParent = engine.getRegistryItemByPath(input.tenantLocation);
-    if (!regParent) {
-      throw new ScaffoldError('parent-not-found', `Parent not found: ${input.tenantLocation}`);
-    }
-    const syntheticFilePath = engine.resolveFilePath(regParent.path, regParent.name);
-    parent = { item: { id: regParent.id, path: regParent.path }, filePath: syntheticFilePath };
+  // nothing has been authored under it yet). resolveInsertParent
+  // handles both cases.
+  const parent: InsertBranchParent | undefined = resolveInsertParent(engine, input.tenantLocation);
+  if (!parent) {
+    throw new ScaffoldError('parent-not-found', `Parent not found: ${input.tenantLocation}`);
   }
 
   // Step 2: load definition items.
@@ -171,14 +162,13 @@ export async function scaffoldHeadlessTenant(
 
   const folderItemIds: Record<string, string | undefined> = {};
   for (const [key, rootPath] of Object.entries(projectRoots)) {
-    const root = engine.getItemByPath(rootPath) ?? null;
+    const root = resolveInsertParent(engine, rootPath);
     const tplId = folderTemplateIds[key];
     if (!root || !tplId) {
       warnings.push(`Cross-cutting folder skipped (${key}): missing root ${rootPath} or template`);
       continue;
     }
-    const created = await insertItem(engine, {
-      parentId: root.item.id,
+    const created = await insertItemAtParent(engine, root, {
       templateId: tplId,
       name: input.tenantName,
     });
@@ -188,11 +178,10 @@ export async function scaffoldHeadlessTenant(
   }
 
   // Templates root (under /sitecore/templates/Project).
-  const projectTemplatesRoot = engine.getItemByPath('/sitecore/templates/Project');
+  const projectTemplatesRoot = resolveInsertParent(engine, '/sitecore/templates/Project');
   let templatesRootId: string | undefined;
   if (projectTemplatesRoot && projectFolderTemplateId) {
-    const created = await insertItem(engine, {
-      parentId: projectTemplatesRoot.item.id,
+    const created = await insertItemAtParent(engine, projectTemplatesRoot, {
       templateId: projectFolderTemplateId,
       name: input.tenantName,
     });
@@ -203,13 +192,12 @@ export async function scaffoldHeadlessTenant(
   }
 
   // Media library folders (mirror Add-TenantMediaLibrary).
-  const projectMediaRoot = engine.getItemByPath('/sitecore/media library/Project');
+  const projectMediaRoot = resolveInsertParent(engine, '/sitecore/media library/Project');
   const mediaFolderTplId = lookupTemplateIdByPath(engine, MEDIA_FOLDER_TEMPLATE_PATH);
   let mediaLibraryId: string | undefined;
   let sharedMediaId: string | undefined;
   if (projectMediaRoot && mediaFolderTplId) {
-    const ml = await insertItem(engine, {
-      parentId: projectMediaRoot.item.id,
+    const ml = await insertItemAtParent(engine, projectMediaRoot, {
       templateId: mediaFolderTplId,
       name: input.tenantName,
     });
