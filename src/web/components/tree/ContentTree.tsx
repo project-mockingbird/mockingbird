@@ -845,7 +845,6 @@ function ContentTreeNode({
       {headlessTenantOpen && (
         <HeadlessSiteCollectionDialog
           open={headlessTenantOpen}
-          parentPath={node.path}
           onConfirm={handleScaffoldTenant}
           onClose={() => {
             setHeadlessTenantOpen(false);
@@ -859,7 +858,6 @@ function ContentTreeNode({
       {headlessSiteOpen && (
         <HeadlessSiteDialog
           open={headlessSiteOpen}
-          parentPath={node.path}
           onConfirm={handleScaffoldSite}
           onClose={() => {
             setHeadlessSiteOpen(false);

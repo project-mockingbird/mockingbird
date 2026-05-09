@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { DialogParentPath } from './DialogParentPath';
 
 const SITE_NAME_REGEX = /^[\w][\w\s\-]*(\(\d+\)){0,1}$/;
 
@@ -25,6 +24,7 @@ type DefinitionItem = {
   name: string;
   displayName?: string;
   description?: string;
+  isSystemModule: boolean;
   includeByDefault: boolean;
   source: string;
 };
@@ -41,7 +41,6 @@ export type HeadlessSiteSubmit = {
 
 interface HeadlessSiteDialogProps {
   open: boolean;
-  parentPath: string;
   onConfirm: (input: HeadlessSiteSubmit) => void;
   onClose: () => void;
   isPending?: boolean;
@@ -52,7 +51,6 @@ type Tab = 'general' | 'features';
 
 export function HeadlessSiteDialog({
   open,
-  parentPath,
   onConfirm,
   onClose,
   isPending = false,
@@ -87,7 +85,7 @@ export function HeadlessSiteDialog({
       setGraphQLEndpoint('');
       setDeploymentSecret('');
       const defaults = (definitionsQuery.data ?? [])
-        .filter(d => d.includeByDefault)
+        .filter(d => d.isSystemModule || d.includeByDefault)
         .map(d => d.id);
       setSelectedDefIds(new Set(defaults));
     }
@@ -124,7 +122,6 @@ export function HeadlessSiteDialog({
         <DialogHeader>
           <DialogTitle>Create Headless Site</DialogTitle>
         </DialogHeader>
-        <DialogParentPath parentPath={parentPath} />
 
         <div className="flex border-b mt-2">
           <button
@@ -184,9 +181,10 @@ export function HeadlessSiteDialog({
                 {definitionsQuery.data?.length === 0 && <p className="text-xs text-muted-foreground">No site definitions available</p>}
                 {definitionsQuery.data?.map(def => (
                   <label key={def.id} className="flex items-start gap-2 py-1 text-xs">
-                    <input type="checkbox" checked={selectedDefIds.has(def.id)} onChange={() => toggleDef(def.id)} disabled={isPending}/>
+                    <input type="checkbox" checked={selectedDefIds.has(def.id)} onChange={() => toggleDef(def.id)} disabled={isPending || def.isSystemModule}/>
                     <span>
                       <span className="font-medium">{def.displayName ?? def.name}</span>
+                      {def.isSystemModule && <span className="text-muted-foreground"> (always installed)</span>}
                       {def.description && <span className="text-muted-foreground block">{def.description}</span>}
                     </span>
                   </label>

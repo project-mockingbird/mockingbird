@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { DialogParentPath } from './DialogParentPath';
 
 const TENANT_NAME_REGEX = /^[\w][\w\s\-]*(\(\d+\)){0,1}$/;
 
@@ -30,9 +29,12 @@ type DefinitionItem = {
   source: string;
 };
 
+function defaultSelection(items: DefinitionItem[]): Set<string> {
+  return new Set(items.filter(d => d.isSystemModule || d.includeByDefault).map(d => d.id));
+}
+
 interface HeadlessSiteCollectionDialogProps {
   open: boolean;
-  parentPath: string;
   onConfirm: (input: { tenantName: string; definitionItemIds: string[] }) => void;
   onClose: () => void;
   isPending?: boolean;
@@ -41,7 +43,6 @@ interface HeadlessSiteCollectionDialogProps {
 
 export function HeadlessSiteCollectionDialog({
   open,
-  parentPath,
   onConfirm,
   onClose,
   isPending = false,
@@ -63,10 +64,7 @@ export function HeadlessSiteCollectionDialog({
   useEffect(() => {
     if (open) {
       setTenantName('');
-      const defaults = (definitionsQuery.data ?? [])
-        .filter(d => d.includeByDefault)
-        .map(d => d.id);
-      setSelectedDefIds(new Set(defaults));
+      setSelectedDefIds(defaultSelection(definitionsQuery.data ?? []));
     }
   }, [open, definitionsQuery.data]);
 
@@ -96,7 +94,6 @@ export function HeadlessSiteCollectionDialog({
         <DialogHeader>
           <DialogTitle>Create Headless Site Collection</DialogTitle>
         </DialogHeader>
-        <DialogParentPath parentPath={parentPath} />
         <label className="block text-xs font-medium mt-2">Tenant name</label>
         <input
           autoFocus
@@ -119,10 +116,11 @@ export function HeadlessSiteCollectionDialog({
                 type="checkbox"
                 checked={selectedDefIds.has(def.id)}
                 onChange={() => toggleDef(def.id)}
-                disabled={isPending}
+                disabled={isPending || def.isSystemModule}
               />
               <span>
                 <span className="font-medium">{def.displayName ?? def.name}</span>
+                {def.isSystemModule && <span className="text-muted-foreground"> (always installed)</span>}
                 {def.description && <span className="text-muted-foreground block">{def.description}</span>}
               </span>
             </label>
