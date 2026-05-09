@@ -1,11 +1,9 @@
 /**
  * Scaffolding types - shared by orchestrators, action dispatcher, and
- * definition-items discovery. The shapes mirror Sitecore's SPE script
- * model: actions are data-driven (template-keyed) and definitions are
- * discoverable from registry, user tree, or a curated baseline.
- *
- * See docs/superpowers/specs/2026-05-08-sxa-headless-scaffolding-design.md
- * for the source-grounded design rationale.
+ * definition-items discovery. Definitions are discovered from the
+ * OOTB registry by setup-template GUID (HeadlessTenantSetup /
+ * HeadlessSiteSetup), and overlaid with any user-authored ones in the
+ * serialized tree. Actions are data-driven (template-keyed).
  */
 
 export type FieldUpdate = {
@@ -45,7 +43,7 @@ export type DefinitionItem = {
   includeByDefault: boolean;
   includeIfInstalled: string[];
   hasChildren: boolean;
-  source: 'registry' | 'tree' | 'curated';
+  source: 'registry' | 'tree';
   actions: ScaffoldingAction[];
 };
 

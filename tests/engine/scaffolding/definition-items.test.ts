@@ -7,7 +7,6 @@ import {
   discoverTenantDefinitions,
   discoverSiteDefinitions,
 } from '../../../src/engine/scaffolding/definition-items.js';
-import { CURATED_TENANT_DEFINITIONS, CURATED_SITE_DEFINITIONS } from '../../../src/engine/scaffolding/curated-definitions.js';
 
 async function buildEmptyEngine(): Promise<{ engine: Engine; cleanup: () => void }> {
   const fixDir = mkdtempSync(join(tmpdir(), 'mb-defs-'));
@@ -23,23 +22,11 @@ async function buildEmptyEngine(): Promise<{ engine: Engine; cleanup: () => void
 }
 
 describe('discoverTenantDefinitions', () => {
-  it('returns curated definitions when registry + tree are empty', async () => {
+  it('returns empty list when registry + tree contain no setup-typed items', async () => {
     const { engine, cleanup } = await buildEmptyEngine();
     try {
       const list = await discoverTenantDefinitions(engine);
-      expect(list.length).toBe(CURATED_TENANT_DEFINITIONS.length);
-      expect(list.find(d => d.name === 'Empty Headless Tenant')).toBeDefined();
-      expect(list.every(d => d.source === 'curated')).toBe(true);
-    } finally {
-      cleanup();
-    }
-  });
-
-  it('filters out IsSystemModule (not visible in dialog)', async () => {
-    const { engine, cleanup } = await buildEmptyEngine();
-    try {
-      const list = await discoverTenantDefinitions(engine);
-      expect(list.every(d => !d.isSystemModule)).toBe(true);
+      expect(list).toEqual([]);
     } finally {
       cleanup();
     }
@@ -47,13 +34,11 @@ describe('discoverTenantDefinitions', () => {
 });
 
 describe('discoverSiteDefinitions', () => {
-  it('returns curated site definitions on a fresh install', async () => {
+  it('returns empty list when registry + tree contain no setup-typed items', async () => {
     const { engine, cleanup } = await buildEmptyEngine();
     try {
       const list = await discoverSiteDefinitions(engine);
-      expect(list.find(d => d.name === 'Empty Headless Site')).toBeDefined();
-      expect(list.every(d => d.source === 'curated')).toBe(true);
-      expect(list.length).toBe(CURATED_SITE_DEFINITIONS.length);
+      expect(list).toEqual([]);
     } finally {
       cleanup();
     }
