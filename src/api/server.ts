@@ -109,6 +109,9 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   const { registerItemRoutes } = await import('./routes/items.js');
   registerItemRoutes(app, engine);
 
+  const { registerScaffoldingRoutes } = await import('./routes/scaffolding.js');
+  registerScaffoldingRoutes(app, engine);
+
   const { registerLookupSourceRoutes } = await import('./routes/lookup-source.js');
   registerLookupSourceRoutes(app, engine);
 

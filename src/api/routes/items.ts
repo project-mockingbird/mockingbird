@@ -65,10 +65,96 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       templateId?: string;
       sourceId?: string;
       destinationParentId?: string;
+      // Scaffolding body shapes (type=scaffold-headless-tenant, scaffold-headless-site).
+      tenantLocation?: string;
+      tenantName?: string;
+      siteLocation?: string;
+      siteName?: string;
+      hostName?: string;
+      virtualFolder?: string;
+      definitionItemIds?: string[];
+      displayName?: string;
+      description?: string;
+      language?: string;
+      languages?: string[];
+      pos?: string;
+      graphQLEndpoint?: string;
+      deploymentSecret?: string;
     };
     if (!body.type) {
       return reply.status(400).send({ error: 'Missing required field: type', statusCode: 400 });
     }
+
+    // Scaffolding entry points dispatch to the orchestrators which carry
+    // their own input validation (ScaffoldError codes map to 4xx below).
+    if (body.type === 'scaffold-headless-tenant' || body.type === 'scaffold-headless-site') {
+      try {
+        const { ScaffoldError } = await import('../../engine/scaffolding/types.js');
+        const { notifyTreeRefresh } = await import('../notify.js');
+        if (body.type === 'scaffold-headless-tenant') {
+          if (!body.tenantLocation || !body.tenantName || !Array.isArray(body.definitionItemIds)) {
+            return reply.status(400).send({ error: 'tenantLocation, tenantName, and definitionItemIds[] required', statusCode: 400 });
+          }
+          const { scaffoldHeadlessTenant } = await import('../../engine/scaffolding/tenant-orchestrator.js');
+          const result = await scaffoldHeadlessTenant(engine, {
+            tenantLocation: body.tenantLocation,
+            tenantName: body.tenantName,
+            displayName: body.displayName,
+            description: body.description,
+            language: body.language,
+            definitionItemIds: body.definitionItemIds,
+          });
+          notifyTreeRefresh(engine, {
+            reason: 'scaffold',
+            rootItemPath: result.rootItemPath,
+            createdCount: result.createdCount,
+          });
+          return reply.status(201).send(result);
+        } else {
+          if (!body.siteLocation || !body.siteName || !body.hostName || !body.virtualFolder || !Array.isArray(body.definitionItemIds)) {
+            return reply.status(400).send({ error: 'siteLocation, siteName, hostName, virtualFolder, and definitionItemIds[] required', statusCode: 400 });
+          }
+          const { scaffoldHeadlessSite } = await import('../../engine/scaffolding/site-orchestrator.js');
+          const result = await scaffoldHeadlessSite(engine, {
+            siteLocation: body.siteLocation,
+            siteName: body.siteName,
+            hostName: body.hostName,
+            virtualFolder: body.virtualFolder,
+            displayName: body.displayName,
+            description: body.description,
+            language: body.language,
+            languages: body.languages,
+            pos: body.pos,
+            graphQLEndpoint: body.graphQLEndpoint,
+            deploymentSecret: body.deploymentSecret,
+            definitionItemIds: body.definitionItemIds,
+          });
+          notifyTreeRefresh(engine, {
+            reason: 'scaffold',
+            rootItemPath: result.rootItemPath,
+            createdCount: result.createdCount,
+          });
+          return reply.status(201).send(result);
+        }
+      } catch (err: unknown) {
+        const { ScaffoldError } = await import('../../engine/scaffolding/types.js');
+        if (err instanceof ScaffoldError) {
+          const codeToStatus: Record<string, number> = {
+            'parent-not-found': 404,
+            'parent-template-mismatch': 400,
+            'name-collision': 409,
+            'definition-item-not-found': 404,
+            'branch-prototype-not-found': 500,
+            'invalid-action': 400,
+            'unsupported-action': 501,
+          };
+          const status = codeToStatus[err.code] ?? 500;
+          return reply.status(status).send({ error: err.message, code: err.code, statusCode: status });
+        }
+        throw err;
+      }
+    }
+
     // copyTo/moveTo carry sourceId+destinationParentId; copyTo's name is
     // optional (engine derives "Copy of <source>" via getCopyOfName) and
     // moveTo doesn't use name at all.
