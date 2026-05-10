@@ -68,6 +68,20 @@ export type ScaffoldHeadlessTenantInput = {
   description?: string;
   language?: string;
   definitionItemIds: string[];
+  /**
+   * If true, do not write anything - return a preview that includes the
+   * proposed module-config file (if needed) plus the list of paths that
+   * would be created. Caller re-submits with `acceptModuleConfig: true`
+   * to actually scaffold.
+   */
+  dryRun?: boolean;
+  /**
+   * Authorize mockingbird to write the proposed `mb-<tenant>.json` module
+   * config to `serialization/` before scaffolding. Required when the
+   * scaffold target paths are not covered by any existing serialization
+   * include - otherwise the orchestrator throws `include-coverage-missing`.
+   */
+  acceptModuleConfig?: boolean;
 };
 
 export type ScaffoldHeadlessSiteInput = {
@@ -83,14 +97,48 @@ export type ScaffoldHeadlessSiteInput = {
   graphQLEndpoint?: string;
   deploymentSecret?: string;
   definitionItemIds: string[];
+  dryRun?: boolean;
+  acceptModuleConfig?: boolean;
+};
+
+/**
+ * Coverage gap surfaced by the scaffold dry-run: a Sitecore path that
+ * would be written to but has no covering include in any loaded module.
+ */
+export type CoverageGap = {
+  path: string;
+  /** Human-readable label of what the orchestrator wanted to create here. */
+  label: string;
+};
+
+export type ProposedModuleConfigPreview = {
+  /** Absolute file path the module config would be written to. */
+  filePath: string;
+  /** The JSON contents that would be written. */
+  contents: object;
+};
+
+export type ScaffoldDryRunResult = {
+  dryRun: true;
+  /** Paths the scaffold would create (preview only - nothing written). */
+  proposedPaths: string[];
+  /** Paths that have no covering serialization include. */
+  coverageGaps: CoverageGap[];
+  /** Module config the orchestrator would write if acceptModuleConfig=true. */
+  proposedModuleConfig?: ProposedModuleConfigPreview;
 };
 
 export type ScaffoldResult = {
+  /** Discriminator: false on the actual scaffold result so a union with
+   *  ScaffoldDryRunResult narrows correctly. */
+  dryRun?: false;
   rootItemPath: string;
   rootItemId: string;
   createdCount: number;
   createdPaths: string[];
   warnings: string[];
+  /** Module config file that was emitted as part of this scaffold (if any). */
+  emittedModuleConfigPath?: string;
 };
 
 export type ScaffoldErrorCode =
@@ -100,7 +148,8 @@ export type ScaffoldErrorCode =
   | 'definition-item-not-found'
   | 'branch-prototype-not-found'
   | 'invalid-action'
-  | 'unsupported-action';
+  | 'unsupported-action'
+  | 'include-coverage-missing';
 
 export class ScaffoldError extends Error {
   constructor(

@@ -80,6 +80,8 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       pos?: string;
       graphQLEndpoint?: string;
       deploymentSecret?: string;
+      dryRun?: boolean;
+      acceptModuleConfig?: boolean;
     };
     if (!body.type) {
       return reply.status(400).send({ error: 'Missing required field: type', statusCode: 400 });
@@ -103,7 +105,13 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
             description: body.description,
             language: body.language,
             definitionItemIds: body.definitionItemIds,
+            dryRun: body.dryRun === true,
+            acceptModuleConfig: body.acceptModuleConfig === true,
           });
+          // Dry-run preview: 200 with the proposal, no notify, no 201.
+          if (result.dryRun === true) {
+            return reply.status(200).send(result);
+          }
           notifyTreeRefresh(engine, {
             reason: 'scaffold',
             rootItemPath: result.rootItemPath,
@@ -128,7 +136,12 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
             graphQLEndpoint: body.graphQLEndpoint,
             deploymentSecret: body.deploymentSecret,
             definitionItemIds: body.definitionItemIds,
+            dryRun: body.dryRun === true,
+            acceptModuleConfig: body.acceptModuleConfig === true,
           });
+          if (result.dryRun === true) {
+            return reply.status(200).send(result);
+          }
           notifyTreeRefresh(engine, {
             reason: 'scaffold',
             rootItemPath: result.rootItemPath,
@@ -147,6 +160,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
             'branch-prototype-not-found': 500,
             'invalid-action': 400,
             'unsupported-action': 501,
+            'include-coverage-missing': 409,
           };
           const status = codeToStatus[err.code] ?? 500;
           return reply.status(status).send({ error: err.message, code: err.code, statusCode: status });

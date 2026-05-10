@@ -455,6 +455,51 @@ export class Engine {
     return this.registry?.getItemsByTemplate(templateId) ?? [];
   }
 
+  /**
+   * Find the serialization module include (if any) whose path covers the
+   * given Sitecore item path. "Covers" matches the same prefix-test that
+   * `resolveFilePath` uses: include.path === itemPath OR itemPath starts
+   * with include.path + '/'. Returns the FIRST match in module-load order
+   * (which mirrors `resolveFilePath`'s behavior on overlapping includes).
+   *
+   * Use this to detect coverage gaps BEFORE writing - silent fallback to
+   * `<rootDir>/<sitecore-path-segments>/<name>.yml` is a footgun for any
+   * caller, scaffold included.
+   */
+  findCoveringInclude(itemSitecorePath: string): { module: ModuleConfig; include: import('./types.js').ModuleInclude } | undefined {
+    const normalized = itemSitecorePath.toLowerCase();
+    for (const mod of this.modules) {
+      for (const include of mod.items.includes) {
+        const includePath = include.path.toLowerCase();
+        if (normalized === includePath || normalized.startsWith(includePath + '/')) {
+          return { module: mod, include };
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Re-run `discoverModules` to pick up newly-written `*.module.json` files
+   * (the scaffold orchestrators emit these for new tenants/sites). Replaces
+   * the in-memory module list; does NOT touch the parsed tree, registry,
+   * or cache. Subsequent `resolveFilePath` / `findCoveringInclude` calls
+   * see the new includes immediately.
+   */
+  async reloadModules(): Promise<void> {
+    this.modules = await discoverModules(this.options.rootDir).catch(() => []);
+  }
+
+  /** Read-only view of the engine's currently-loaded module list. */
+  getModules(): ReadonlyArray<ModuleConfig> {
+    return this.modules;
+  }
+
+  /** Workspace root directory (the dir holding `sitecore.json`). */
+  getRootDir(): string {
+    return this.options.rootDir;
+  }
+
   getRegistryDatabases(): string[] {
     return this.registry?.getDatabases() ?? [];
   }

@@ -45,6 +45,7 @@ import { useRefreshItem } from '@/hooks/useRefreshItem';
 import { useRenameItem } from '@/hooks/useRenameItem';
 import { InsertItemDialog } from './InsertItemDialog';
 import { HeadlessSiteCollectionDialog } from './HeadlessSiteCollectionDialog';
+import { ScaffoldConfirmDialog, type CoverageGap } from './ScaffoldConfirmDialog';
 import { HeadlessSiteDialog } from './HeadlessSiteDialog';
 import { DuplicateItemDialog } from './DuplicateItemDialog';
 import { CopyMoveDestinationDialog } from './CopyMoveDestinationDialog';
@@ -254,66 +255,157 @@ function ContentTreeNode({
   const [headlessSiteOpen, setHeadlessSiteOpen] = useState(false);
   const [headlessSitePending, setHeadlessSitePending] = useState(false);
   const [headlessSiteServerError, setHeadlessSiteServerError] = useState<string | null>(null);
+
+  // Two-phase scaffold confirmation: dryRun returns a proposed module-config
+  // file the user must approve before mockingbird touches their serialization
+  // tree. `pendingScaffold` holds the original POST body + the dry-run result
+  // until the user accepts (re-POST with acceptModuleConfig=true) or cancels.
+  type PendingScaffold = {
+    kind: 'tenant' | 'site';
+    body: Record<string, unknown>;
+    successLabel: string;
+    proposalFilePath: string;
+    proposalContents: object;
+    coverageGaps: CoverageGap[];
+  };
+  const [pendingScaffold, setPendingScaffold] = useState<PendingScaffold | null>(null);
+  const [pendingScaffoldAccepting, setPendingScaffoldAccepting] = useState(false);
+  const [pendingScaffoldServerError, setPendingScaffoldServerError] = useState<string | null>(null);
   const isContentRoot = node.path === '/sitecore/content';
   const isJssTenant = node.template?.toLowerCase() === 'b91811f1-fa8b-47f8-b131-bd2c6d5ec805';
 
-  const handleScaffoldTenant = async (input: { tenantName: string; definitionItemIds: string[] }) => {
-    setHeadlessTenantServerError(null);
-    setHeadlessTenantPending(true);
+  /**
+   * Two-phase scaffold submit. Phase 1: send the request with `dryRun:true`.
+   * If the server returns a `proposedModuleConfig`, stash it and open the
+   * confirmation dialog (Phase 2). Otherwise (no module file needed), proceed
+   * directly to the live POST. The Phase 2 accept handler (`acceptScaffold`)
+   * re-sends the same body with `acceptModuleConfig:true`.
+   */
+  const submitScaffoldDryRun = async (
+    kind: 'tenant' | 'site',
+    body: Record<string, unknown>,
+    successLabel: string,
+    setPending: (v: boolean) => void,
+    setServerError: (v: string | null) => void,
+    closeOriginalDialog: () => void,
+  ) => {
+    setServerError(null);
+    setPending(true);
     try {
-      const r = await fetch('/api/items', {
+      const dryR = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'scaffold-headless-tenant',
-          tenantLocation: node.path,
-          tenantName: input.tenantName,
-          definitionItemIds: input.definitionItemIds,
-        }),
+        body: JSON.stringify({ ...body, dryRun: true }),
       });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        throw new Error(body.error ?? `Server error ${r.status}`);
+      if (!dryR.ok) {
+        const errBody = await dryR.json().catch(() => ({}));
+        throw new Error(errBody.error ?? `Server error ${dryR.status}`);
       }
-      setHeadlessTenantOpen(false);
-      toast.success(`Tenant "${input.tenantName}" created`);
+      const dryJson = await dryR.json() as {
+        proposedModuleConfig?: { filePath: string; contents: object };
+        coverageGaps?: CoverageGap[];
+      };
+      if (dryJson.proposedModuleConfig) {
+        setPendingScaffold({
+          kind,
+          body,
+          successLabel,
+          proposalFilePath: dryJson.proposedModuleConfig.filePath,
+          proposalContents: dryJson.proposedModuleConfig.contents,
+          coverageGaps: dryJson.coverageGaps ?? [],
+        });
+        return;
+      }
+      // No proposal needed - live submit straight away.
+      const liveR = await fetch('/api/items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!liveR.ok) {
+        const errBody = await liveR.json().catch(() => ({}));
+        throw new Error(errBody.error ?? `Server error ${liveR.status}`);
+      }
+      closeOriginalDialog();
+      toast.success(successLabel);
     } catch (err) {
-      setHeadlessTenantServerError(err instanceof Error ? err.message : String(err));
+      setServerError(err instanceof Error ? err.message : String(err));
     } finally {
-      setHeadlessTenantPending(false);
+      setPending(false);
     }
   };
 
-  const handleScaffoldSite = async (input: { siteName: string; hostName: string; virtualFolder: string; language: string; definitionItemIds: string[]; graphQLEndpoint: string; deploymentSecret: string }) => {
-    setHeadlessSiteServerError(null);
-    setHeadlessSitePending(true);
+  const acceptScaffold = async () => {
+    if (!pendingScaffold) return;
+    setPendingScaffoldServerError(null);
+    setPendingScaffoldAccepting(true);
     try {
       const r = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'scaffold-headless-site',
-          siteLocation: node.path,
-          siteName: input.siteName,
-          hostName: input.hostName,
-          virtualFolder: input.virtualFolder,
-          language: input.language,
-          definitionItemIds: input.definitionItemIds,
-          graphQLEndpoint: input.graphQLEndpoint,
-          deploymentSecret: input.deploymentSecret,
-        }),
+        body: JSON.stringify({ ...pendingScaffold.body, acceptModuleConfig: true }),
       });
       if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        throw new Error(body.error ?? `Server error ${r.status}`);
+        const errBody = await r.json().catch(() => ({}));
+        throw new Error(errBody.error ?? `Server error ${r.status}`);
       }
-      setHeadlessSiteOpen(false);
-      toast.success(`Site "${input.siteName}" created`);
+      toast.success(pendingScaffold.successLabel);
+      // Close everything.
+      setPendingScaffold(null);
+      if (pendingScaffold.kind === 'tenant') {
+        setHeadlessTenantOpen(false);
+        setHeadlessTenantServerError(null);
+      } else {
+        setHeadlessSiteOpen(false);
+        setHeadlessSiteServerError(null);
+      }
     } catch (err) {
-      setHeadlessSiteServerError(err instanceof Error ? err.message : String(err));
+      setPendingScaffoldServerError(err instanceof Error ? err.message : String(err));
     } finally {
-      setHeadlessSitePending(false);
+      setPendingScaffoldAccepting(false);
     }
+  };
+
+  const cancelPendingScaffold = () => {
+    setPendingScaffold(null);
+    setPendingScaffoldServerError(null);
+  };
+
+  const handleScaffoldTenant = (input: { tenantName: string; definitionItemIds: string[] }) => {
+    return submitScaffoldDryRun(
+      'tenant',
+      {
+        type: 'scaffold-headless-tenant',
+        tenantLocation: node.path,
+        tenantName: input.tenantName,
+        definitionItemIds: input.definitionItemIds,
+      },
+      `Tenant "${input.tenantName}" created`,
+      setHeadlessTenantPending,
+      setHeadlessTenantServerError,
+      () => setHeadlessTenantOpen(false),
+    );
+  };
+
+  const handleScaffoldSite = (input: { siteName: string; hostName: string; virtualFolder: string; language: string; definitionItemIds: string[]; graphQLEndpoint: string; deploymentSecret: string }) => {
+    return submitScaffoldDryRun(
+      'site',
+      {
+        type: 'scaffold-headless-site',
+        siteLocation: node.path,
+        siteName: input.siteName,
+        hostName: input.hostName,
+        virtualFolder: input.virtualFolder,
+        language: input.language,
+        definitionItemIds: input.definitionItemIds,
+        graphQLEndpoint: input.graphQLEndpoint,
+        deploymentSecret: input.deploymentSecret,
+      },
+      `Site "${input.siteName}" created`,
+      setHeadlessSitePending,
+      setHeadlessSiteServerError,
+      () => setHeadlessSiteOpen(false),
+    );
   };
 
   const handleInsert = async (name: string) => {
@@ -865,6 +957,20 @@ function ContentTreeNode({
           }}
           isPending={headlessSitePending}
           serverError={headlessSiteServerError}
+        />
+      )}
+
+      {pendingScaffold && (
+        <ScaffoldConfirmDialog
+          open={pendingScaffold !== null}
+          kind={pendingScaffold.kind}
+          filePath={pendingScaffold.proposalFilePath}
+          contents={pendingScaffold.proposalContents}
+          coverageGaps={pendingScaffold.coverageGaps}
+          onAccept={acceptScaffold}
+          onCancel={cancelPendingScaffold}
+          isPending={pendingScaffoldAccepting}
+          serverError={pendingScaffoldServerError}
         />
       )}
 

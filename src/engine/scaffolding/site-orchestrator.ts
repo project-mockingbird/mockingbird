@@ -11,6 +11,8 @@
  *   - ExecuteScript actions logged + skipped (decision #2).
  *   - Pre-sort via Get-SortedSetupItemsCollection: skipped in v1.
  */
+import { mkdir, writeFile } from 'fs/promises';
+import { dirname } from 'path';
 import type { Engine } from '../index.js';
 import { insertBranch, resolveInsertParent } from '../insert-branch.js';
 import { applyFieldUpdates } from './field-updates.js';
@@ -20,10 +22,13 @@ import {
   discoverSiteDefinitions,
   hydrateDefinitionActions,
 } from './definition-items.js';
+import { buildSiteModuleConfig, serializeModuleConfig } from './module-config-builder.js';
 import {
   ScaffoldError,
   type ScaffoldHeadlessSiteInput,
   type ScaffoldResult,
+  type ScaffoldDryRunResult,
+  type CoverageGap,
   type DefinitionItem,
   type ScaffoldingAction,
 } from './types.js';
@@ -96,12 +101,61 @@ function findSiteDefinitionDescendant(engine: Engine, settingsItemId: string): s
 export async function scaffoldHeadlessSite(
   engine: Engine,
   input: ScaffoldHeadlessSiteInput,
-): Promise<ScaffoldResult> {
+): Promise<ScaffoldResult | ScaffoldDryRunResult> {
   const warnings: string[] = [];
   const createdPaths: string[] = [];
   const language = input.language ?? 'en';
   const displayName = input.displayName ?? input.siteName;
   const description = input.description ?? '';
+  const expectedPath = `${input.siteLocation}/${input.siteName}`;
+
+  // Step 0: per-site module file. Mockingbird always proposes one even
+  // when the tenant's `content` include already covers the site path -
+  // gives users per-site granularity for push/pull. dryRun returns the
+  // preview; acceptModuleConfig=true writes it. With no-accept and no
+  // coverage gap, the scaffold proceeds without the per-site file (the
+  // tenant include's ItemAndDescendants scope picks up the YAMLs).
+  const tenantName = input.siteLocation.split('/').filter(Boolean).pop() ?? '';
+  const targets = [{ path: expectedPath, label: 'Site root' }];
+  const coverageGaps: CoverageGap[] = targets
+    .filter(t => !engine.findCoveringInclude(t.path))
+    .map(t => ({ path: t.path, label: t.label }));
+  const proposed = buildSiteModuleConfig(engine.getRootDir(), tenantName, input.siteName);
+
+  if (input.dryRun) {
+    return {
+      dryRun: true,
+      proposedPaths: targets.map(t => t.path),
+      coverageGaps,
+      proposedModuleConfig: {
+        filePath: proposed.absoluteFilePath,
+        contents: proposed.contents,
+      },
+    };
+  }
+
+  let emittedModuleConfigPath: string | undefined;
+  if (coverageGaps.length > 0 && !input.acceptModuleConfig) {
+    throw new ScaffoldError(
+      'include-coverage-missing',
+      `Scaffold blocked: site path ${expectedPath} has no covering serialization include. ` +
+      `Set acceptModuleConfig=true to authorize writing ${proposed.absoluteFilePath}, ` +
+      `or add an include manually.`,
+    );
+  }
+  if (input.acceptModuleConfig) {
+    await mkdir(dirname(proposed.absoluteFilePath), { recursive: true });
+    await writeFile(proposed.absoluteFilePath, serializeModuleConfig(proposed), 'utf-8');
+    await engine.reloadModules();
+    emittedModuleConfigPath = proposed.absoluteFilePath;
+    const stillUncovered = targets.filter(t => !engine.findCoveringInclude(t.path));
+    if (stillUncovered.length > 0) {
+      throw new ScaffoldError(
+        'include-coverage-missing',
+        `Scaffold aborted: emitted ${proposed.absoluteFilePath} but ${stillUncovered.length} target paths still uncovered: ${stillUncovered.map(t => t.path).join(', ')}`,
+      );
+    }
+  }
 
   // Step 1: validate parent + name. Tree-first; fall back to registry so
   // a freshly-scaffolded tenant whose Sites folder hasn't been authored as
@@ -110,7 +164,6 @@ export async function scaffoldHeadlessSite(
   if (!parent) {
     throw new ScaffoldError('parent-not-found', `Parent not found: ${input.siteLocation}`);
   }
-  const expectedPath = `${input.siteLocation}/${input.siteName}`;
   if (engine.getItemByPath(expectedPath)) {
     throw new ScaffoldError('name-collision', `Item already exists: ${expectedPath}`);
   }
@@ -249,5 +302,6 @@ export async function scaffoldHeadlessSite(
     createdCount: createdPaths.length,
     createdPaths,
     warnings,
+    emittedModuleConfigPath,
   };
 }

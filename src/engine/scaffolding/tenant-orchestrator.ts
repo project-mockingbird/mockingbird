@@ -12,6 +12,8 @@
  * downstream JSS code paths (Get-SiteMediaItem, etc.) see what real
  * Sitecore writes. ExecuteScript actions are logged and skipped.
  */
+import { mkdir, writeFile } from 'fs/promises';
+import { dirname } from 'path';
 import type { Engine } from '../index.js';
 import { insertBranch, resolveInsertParent, type InsertBranchParent } from '../insert-branch.js';
 import { insertItem, insertItemAtParent } from '../insert-item.js';
@@ -22,10 +24,13 @@ import {
   discoverTenantDefinitions,
   hydrateDefinitionActions,
 } from './definition-items.js';
+import { buildTenantModuleConfig, serializeModuleConfig } from './module-config-builder.js';
 import {
   ScaffoldError,
   type ScaffoldHeadlessTenantInput,
   type ScaffoldResult,
+  type ScaffoldDryRunResult,
+  type CoverageGap,
   type DefinitionItem,
 } from './types.js';
 
@@ -76,10 +81,28 @@ function lookupTemplateIdByPath(engine: Engine, path: string): string | undefine
   return reg?.id;
 }
 
+/**
+ * Cross-cutting Sitecore paths a fresh tenant scaffold writes to.
+ * Used by the coverage-gap probe; ordering also drives the createdPaths
+ * report. Branches root is intentionally absent: the registry has no
+ * `/sitecore/templates/Branches/Project` root and the orchestrator
+ * skip-warns it (see the cross-cutting folder loop below).
+ */
+function tenantTargetPaths(tenantName: string): Array<{ path: string; label: string }> {
+  return [
+    { path: `/sitecore/content/${tenantName}`, label: 'Tenant root' },
+    { path: `/sitecore/templates/Project/${tenantName}`, label: 'Templates folder' },
+    { path: `/sitecore/layout/Renderings/Project/${tenantName}`, label: 'Renderings folder' },
+    { path: `/sitecore/layout/Placeholder Settings/Project/${tenantName}`, label: 'Placeholder Settings folder' },
+    { path: `/sitecore/system/Settings/Project/${tenantName}`, label: 'Settings folder' },
+    { path: `/sitecore/media library/Project/${tenantName}`, label: 'Media library folder' },
+  ];
+}
+
 export async function scaffoldHeadlessTenant(
   engine: Engine,
   input: ScaffoldHeadlessTenantInput,
-): Promise<ScaffoldResult> {
+): Promise<ScaffoldResult | ScaffoldDryRunResult> {
   const warnings: string[] = [];
   const createdPaths: string[] = [];
   const language = input.language ?? 'en';
@@ -100,10 +123,64 @@ export async function scaffoldHeadlessTenant(
   // Parent may be tree-resident (an existing serialized item) or
   // registry-only (e.g. /sitecore/content on a fresh install where
   // nothing has been authored under it yet). resolveInsertParent
-  // handles both cases.
+  // handles both cases. Validated BEFORE the coverage probe so a missing
+  // parent fails fast instead of returning a misleading dry-run preview.
   const parent: InsertBranchParent | undefined = resolveInsertParent(engine, input.tenantLocation);
   if (!parent) {
     throw new ScaffoldError('parent-not-found', `Parent not found: ${input.tenantLocation}`);
+  }
+
+  // Step 1a: include-coverage probe BEFORE any writes. Each cross-cutting
+  // root we'd write to needs to be covered by a serialization include;
+  // otherwise resolveFilePath silently ghost-writes under workspace root.
+  const targets = tenantTargetPaths(input.tenantName);
+  const coverageGaps: CoverageGap[] = targets
+    .filter(t => !engine.findCoveringInclude(t.path))
+    .map(t => ({ path: t.path, label: t.label }));
+
+  let emittedModuleConfigPath: string | undefined;
+  if (coverageGaps.length > 0) {
+    const proposed = buildTenantModuleConfig(engine.getRootDir(), input.tenantName);
+    if (input.dryRun) {
+      return {
+        dryRun: true,
+        proposedPaths: targets.map(t => t.path),
+        coverageGaps,
+        proposedModuleConfig: {
+          filePath: proposed.absoluteFilePath,
+          contents: proposed.contents,
+        },
+      };
+    }
+    if (!input.acceptModuleConfig) {
+      throw new ScaffoldError(
+        'include-coverage-missing',
+        `Scaffold blocked: ${coverageGaps.length} target paths have no covering serialization include. ` +
+        `Set acceptModuleConfig=true to authorize writing ${proposed.absoluteFilePath}, ` +
+        `or add includes manually. Missing: ${coverageGaps.map(g => g.path).join(', ')}`,
+      );
+    }
+    // Authorized: write the module config first, then reload modules so
+    // resolveFilePath sees the new includes BEFORE we start scaffolding.
+    await mkdir(dirname(proposed.absoluteFilePath), { recursive: true });
+    await writeFile(proposed.absoluteFilePath, serializeModuleConfig(proposed), 'utf-8');
+    await engine.reloadModules();
+    emittedModuleConfigPath = proposed.absoluteFilePath;
+    // Sanity check: verify gaps are now closed. If they're not, the
+    // module config we wrote is wrong - fail fast rather than ghost-write.
+    const stillUncovered = targets.filter(t => !engine.findCoveringInclude(t.path));
+    if (stillUncovered.length > 0) {
+      throw new ScaffoldError(
+        'include-coverage-missing',
+        `Scaffold aborted: emitted ${proposed.absoluteFilePath} but ${stillUncovered.length} target paths are still uncovered: ${stillUncovered.map(t => t.path).join(', ')}`,
+      );
+    }
+  } else if (input.dryRun) {
+    return {
+      dryRun: true,
+      proposedPaths: targets.map(t => t.path),
+      coverageGaps: [],
+    };
   }
 
   // Step 2: load definition items.
@@ -289,5 +366,6 @@ export async function scaffoldHeadlessTenant(
     createdCount: createdPaths.length,
     createdPaths,
     warnings,
+    emittedModuleConfigPath,
   };
 }
