@@ -30,7 +30,14 @@ export type ScaffoldingAction =
     }
   | {
       kind: 'AddItem';
-      locationTemplateId: string;
+      /**
+       * The action item's `Location` field value: a prototype item id under
+       * /sitecore/masters/... that names where the new item should be added.
+       * Same prototype-template-resolution pattern as EditTenantTemplate -
+       * resolve to prototype.template.id at dispatch time, then BFS the site
+       * subtree for a descendant whose template inherits from that key.
+       */
+      locationPrototypeId: string;
       templateId: string;
       name: string;
       fieldUpdates: FieldUpdate[];

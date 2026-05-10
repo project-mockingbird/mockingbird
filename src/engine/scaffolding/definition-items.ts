@@ -52,6 +52,7 @@ const ACTION_TEMPLATES_EXECUTE_SCRIPT = new Set([
 // Action field GUIDs - verified via scripts/inspect-action-guids.mjs.
 const FIELD_ACTION_NAME = '7868e6bc-525c-4fce-ab8a-77da3e09b171';      // AddItem.Name
 const FIELD_ACTION_TEMPLATE = 'e62c28f0-9d3b-46e2-8bec-a5e120542499';  // AddItem.Template
+const FIELD_ACTION_LOCATION = '52c91c75-6698-4701-a8a2-242ace59a8d6';  // AddItem.Location
 const FIELD_ACTION_FIELDS = 'ad0e8de7-f6c1-49fa-b2c4-87e10fbdaa52';    // AddItem.Fields
 const FIELD_TENANT_EDIT_TYPE = '614f52cf-d54b-47d1-a242-d9a7d42860f4';
 const FIELD_TENANT_ARGUMENTS = 'e830af53-210b-4981-b6a8-f8939f587eb1';
@@ -222,8 +223,8 @@ function parseAction(
   if (ACTION_TEMPLATES_ADD_ITEM.has(templateId)) {
     return {
       kind: 'AddItem',
-      locationTemplateId: '',
-      templateId: fields[FIELD_ACTION_TEMPLATE] ?? '',
+      locationPrototypeId: normalizeGuid(fields[FIELD_ACTION_LOCATION] ?? ''),
+      templateId: normalizeGuid(fields[FIELD_ACTION_TEMPLATE] ?? ''),
       name: fields[FIELD_ACTION_NAME] ?? '',
       fieldUpdates: parseFieldsQuerystring(fields[FIELD_ACTION_FIELDS] ?? ''),
     };

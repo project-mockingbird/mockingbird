@@ -245,9 +245,17 @@ export async function defaultInvokeAddItem(
   action: Extract<ScaffoldingAction, { kind: 'AddItem' }>,
   ctx: ActionContext,
 ): Promise<string | undefined> {
-  // Find the first descendant of the context item whose template
-  // inherits from action.locationTemplateId. This is the
-  // template-keyed inheritance lookup that Invoke-AddItem does in PS.
+  // The action's `Location` field is a prototype item id (e.g. /sitecore/
+  // masters/.../JSS Site/Home). Mirror Invoke-AddItem.ps1: load the
+  // prototype, take its template as the lookup key, then BFS the context
+  // subtree for a descendant whose template inherits from that key.
+  const locationLookupKey = resolveLookupKey(ctx.engine, action.locationPrototypeId);
+  if (!locationLookupKey) {
+    ctx.warnings.push(
+      `AddItem skipped: Location prototype not in tree or registry: ${action.locationPrototypeId}`,
+    );
+    return undefined;
+  }
   const ctxNode = ctx.engine.getItemById(ctx.contextItemId);
   if (!ctxNode) {
     throw new ScaffoldError(
@@ -262,7 +270,7 @@ export async function defaultInvokeAddItem(
     const next = queue.shift()!;
     const node = ctx.engine.getItemById(next.id);
     if (!node) continue;
-    if (templateInheritsFrom(ctx.engine, node.item.template, action.locationTemplateId)) {
+    if (templateInheritsFrom(ctx.engine, node.item.template, locationLookupKey)) {
       parentItemId = node.item.id;
       break;
     }
@@ -270,7 +278,7 @@ export async function defaultInvokeAddItem(
   }
   if (!parentItemId) {
     ctx.warnings.push(
-      `AddItem: no descendant of ${ctx.contextItemPath} inherits from Location template ${action.locationTemplateId}`,
+      `AddItem: no descendant of ${ctx.contextItemPath} inherits from ${locationLookupKey} (Location prototype ${action.locationPrototypeId})`,
     );
     return undefined;
   }
