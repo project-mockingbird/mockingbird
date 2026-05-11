@@ -859,6 +859,57 @@ export class Engine {
     return node;
   }
 
+  /**
+   * Change an item's template id. Updates the in-memory `item.template`,
+   * rewrites the YAML on disk with the new Template field, and suppresses
+   * the watcher echo. Item path, name, children, and field values are
+   * preserved as-is — this is purely a template-id swap.
+   *
+   * Mirrors Sitecore's `Item.ChangeTemplate(...)`, which (in real Sitecore)
+   * also remaps field values across template schemas. Mockingbird treats
+   * field collections as pass-through bags keyed by GUID, so no remap is
+   * needed — the YAML keeps every existing field exactly as it was. Any
+   * field whose definition does not exist on the new template stays in the
+   * file (Sitecore-faithful: real Sitecore also retains stale field values
+   * after a ChangeTemplate; they just aren't surfaced through the schema).
+   *
+   * Throws if:
+   *   - The item doesn't exist or is registry-only.
+   *   - The new template id is empty.
+   *   - The new template id is not resolvable (neither tree nor registry).
+   *
+   * No-op if the current template already matches.
+   */
+  async changeTemplate(idOrPath: string, newTemplateId: string): Promise<ItemNode> {
+    const node =
+      this.tree.getById(idOrPath) ?? this.tree.getByPath(idOrPath);
+    if (!node) throw new Error(`Item not found: ${idOrPath}`);
+
+    if (!newTemplateId) {
+      throw new Error('Invalid template id: ""');
+    }
+    const newTpl = newTemplateId.toLowerCase();
+    if (node.item.template === newTpl) return node;
+
+    // Resolve the new template id against tree-first then registry.
+    // Registry-only templates are valid targets — they're the OOTB
+    // Sitecore template corpus and don't need on-disk YAML.
+    const known =
+      this.tree.getById(newTpl) ?? this.getRegistryItem(newTpl);
+    if (!known) {
+      throw new Error(`Template not found: ${newTemplateId}`);
+    }
+
+    // Suppress watcher before the write so chokidar's echo doesn't
+    // re-parse the YAML and reapply the old Template via tree.addItem.
+    this.suppressWatcherFor(node.filePath);
+
+    node.item.template = newTpl;
+    await this.writeItemFileAt(node.item, node.filePath);
+
+    return node;
+  }
+
   async moveItem(idOrPath: string, newParentPath: string): Promise<ItemNode> {
     const node =
       this.tree.getById(idOrPath) ?? this.tree.getByPath(idOrPath);
