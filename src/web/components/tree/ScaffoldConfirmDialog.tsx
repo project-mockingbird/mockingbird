@@ -45,11 +45,11 @@ export function ScaffoldConfirmDialog({
   const required = coverageGaps.length > 0;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !isPending) onCancel(); }}>
-      <DialogContent>
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Confirm new {kind} module</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 mt-2 text-xs">
+        <div className="space-y-3 mt-2 text-xs max-h-[60vh] overflow-y-auto">
           <p>
             Mockingbird will create a new serialization module file{' '}
             {required
@@ -65,11 +65,11 @@ export function ScaffoldConfirmDialog({
               <div className="font-medium">
                 Currently uncovered Sitecore paths ({coverageGaps.length}):
               </div>
-              <ul className="mt-1 ml-3 list-disc">
+              <ul className="mt-1 ml-4 list-disc space-y-0.5">
                 {coverageGaps.map(g => (
                   <li key={g.path}>
                     <span className="font-medium">{g.label}:</span>{' '}
-                    <code className="text-muted-foreground">{g.path}</code>
+                    <code className="text-muted-foreground break-all">{g.path}</code>
                   </li>
                 ))}
               </ul>
@@ -77,7 +77,7 @@ export function ScaffoldConfirmDialog({
           )}
           <div>
             <div className="font-medium">Contents:</div>
-            <pre className="bg-muted p-2 rounded mt-1 max-h-64 overflow-auto text-[10px] leading-tight">
+            <pre className="bg-muted p-2 rounded mt-1 max-h-64 overflow-auto text-[11px] leading-snug">
               {JSON.stringify(contents, null, 2)}
             </pre>
           </div>
