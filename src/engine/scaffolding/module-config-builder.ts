@@ -5,11 +5,14 @@
  * arm) decides when to actually write the file based on dryRun / accept
  * flags.
  *
- * Naming convention (per user direction):
- *   - Tenant module file:  serialization/mb-<tenant>.json
- *   - Site module file:    serialization/mb-<tenant>-<site>.json
+ * Emit-path + filename-suffix come from the consumer's `sitecore.json`
+ * `modules` glob, so the file lands somewhere the consumer's existing
+ * loader will discover. Examples:
+ *   glob `serialization/*.module.json` -> `serialization/mb-<tenant>.module.json`
+ *   glob `authoring/items/**\/*.module.json` -> `authoring/items/mb-<tenant>.module.json`
+ *   glob `serialization/*.json` (mockingbird dev default) -> `serialization/mb-<tenant>.json`
  *
- * Disk layout:
+ * Disk layout (items.path inside the module):
  *   - Tenant items rooted at items/mockingbird/tenant-<tenant>/
  *   - Site items rooted at items/mockingbird/tenant-<tenant>/site-<site>/
  *
@@ -19,10 +22,47 @@
  * additional includes. The per-site module file is intentional redundancy
  * for cleaner per-site push/pull operations.
  */
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import type { ModuleConfig } from '../types.js';
 
-const SERIALIZATION_DIR = 'serialization';
+/**
+ * Derive (a) the static directory the emitted module file should live in
+ * and (b) the filename suffix the consumer's loader is looking for, by
+ * parsing the first `modules` glob in sitecore.json.
+ *
+ * Algorithm: walk path segments until the first one with a wildcard.
+ * Everything before that is the static directory. The last segment's
+ * substring after the final `*` is the filename suffix (e.g.
+ * `*.module.json` -> ".module.json", `*.json` -> ".json").
+ *
+ * Falls back to `serialization/<name>.module.json` if sitecore.json is
+ * unreadable or the first glob doesn't conform to the simple shape we
+ * understand.
+ */
+function deriveEmitTarget(rootDir: string, baseName: string): string {
+  let glob = 'serialization/*.module.json';
+  try {
+    const raw = readFileSync(resolve(rootDir, 'sitecore.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    const first = Array.isArray(config?.modules) ? config.modules[0] : undefined;
+    if (typeof first === 'string' && first.trim().length > 0) {
+      glob = first;
+    }
+  } catch {
+    // fall through to default
+  }
+
+  const parts = glob.replace(/\\/g, '/').split('/');
+  let firstWildcardIdx = parts.findIndex(p => p.includes('*'));
+  if (firstWildcardIdx === -1) firstWildcardIdx = parts.length;
+  const staticDir = parts.slice(0, firstWildcardIdx).join('/');
+  const fileSegment = parts[parts.length - 1] ?? '*.module.json';
+  const lastStarIdx = fileSegment.lastIndexOf('*');
+  const suffix = lastStarIdx >= 0 ? fileSegment.slice(lastStarIdx + 1) : '.module.json';
+  const filename = `${baseName}${suffix || '.module.json'}`;
+  return resolve(rootDir, staticDir, filename);
+}
 
 export type ProposedModuleConfig = {
   /** Absolute file path where the module JSON should be written. */
@@ -35,7 +75,7 @@ export function buildTenantModuleConfig(
   rootDir: string,
   tenantName: string,
 ): ProposedModuleConfig {
-  const absoluteFilePath = resolve(rootDir, SERIALIZATION_DIR, `mb-${tenantName}.json`);
+  const absoluteFilePath = deriveEmitTarget(rootDir, `mb-${tenantName}`);
   const itemsPath = `items/mockingbird/tenant-${tenantName}`;
   // 8 SingleItem includes covering every item the tenant scaffold creates.
   // Verified against a real Sitecore CM (2026-05-10, second pass): the
@@ -71,11 +111,7 @@ export function buildSiteModuleConfig(
   tenantName: string,
   siteName: string,
 ): ProposedModuleConfig {
-  const absoluteFilePath = resolve(
-    rootDir,
-    SERIALIZATION_DIR,
-    `mb-${tenantName}-${siteName}.json`,
-  );
+  const absoluteFilePath = deriveEmitTarget(rootDir, `mb-${tenantName}-${siteName}`);
   const itemsPath = `items/mockingbird/tenant-${tenantName}/site-${siteName}`;
   return {
     absoluteFilePath,
