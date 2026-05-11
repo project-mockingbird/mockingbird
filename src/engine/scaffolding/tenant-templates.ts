@@ -95,3 +95,30 @@ export async function createTenantTemplate(
 
   return { templateId, standardValuesId: svResult.rootItemId };
 }
+
+/**
+ * SPE: Add-TenantTemplate - composes Get-SourceTemplate + New-TenantTemplate.
+ * For each unique source template referenced by the selected definitions'
+ * EditTenantTemplate actions, create a per-tenant copy under `parent`.
+ * Returns the list of new tenant-template ids so the orchestrator can put
+ * them on the ActionContext for subsequent EditTenantTemplate dispatch.
+ */
+export async function applyTenantTemplates(
+  engine: Engine,
+  parent: InsertBranchParent,
+  definitions: DefinitionItem[],
+): Promise<{ tenantTemplateIds: string[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  const tenantTemplateIds: string[] = [];
+  const sourceIds = getSourceTemplateIds(engine, definitions);
+  for (const sourceId of sourceIds) {
+    try {
+      const { templateId } = await createTenantTemplate(engine, parent, sourceId);
+      tenantTemplateIds.push(templateId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      warnings.push(`applyTenantTemplates: skipped source ${sourceId} (${msg})`);
+    }
+  }
+  return { tenantTemplateIds, warnings };
+}

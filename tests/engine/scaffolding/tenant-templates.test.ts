@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Engine } from '../../../src/engine/index.js';
-import { getSourceTemplateIds, createTenantTemplate } from '../../../src/engine/scaffolding/tenant-templates.js';
+import { getSourceTemplateIds, createTenantTemplate, applyTenantTemplates } from '../../../src/engine/scaffolding/tenant-templates.js';
 import { resolveInsertParent } from '../../../src/engine/insert-branch.js';
 import { clearTemplateSchemaCache } from '../../../src/engine/template-schema.js';
 import type { DefinitionItem } from '../../../src/engine/scaffolding/types.js';
@@ -154,6 +154,122 @@ describe('createTenantTemplate', () => {
       const sv = engine.getItemById(result.standardValuesId)!;
       expect(sv.item.path).toBe('/sitecore/templates/Project/X/MyTpl/__Standard Values');
       expect(sv.item.template.toLowerCase()).toBe(result.templateId);
+    } finally {
+      rmSync(fixDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('applyTenantTemplates', () => {
+  beforeEach(() => { clearTemplateSchemaCache(); });
+  afterEach(() => { clearTemplateSchemaCache(); });
+
+  it('creates one tenant template per unique source across definitions, returns their ids', async () => {
+    const fixDir = mkdtempSync(join(tmpdir(), 'mb-tenant-apply-'));
+    writeFileSync(join(fixDir, 'sitecore.json'), JSON.stringify({ modules: ['*.module.json'] }));
+    writeFileSync(join(fixDir, 'tenant.module.json'), JSON.stringify({
+      namespace: 'tenant',
+      items: { includes: [{ name: 'templates', path: '/sitecore/templates/Project/Y' }] },
+    }));
+    writeFileSync(join(fixDir, 'src.module.json'), JSON.stringify({
+      namespace: 'src',
+      items: { includes: [{ name: 'src', path: '/sitecore/templates/sources' }] },
+    }));
+    const tplRootId = '33333333-3333-3333-3333-333333333333';
+    const srcAId = '44444444-4444-4444-4444-444444444444';
+    const srcBId = '55555555-5555-5555-5555-555555555555';
+    const protoAId = '66666666-6666-6666-6666-666666666666';
+    const protoBId = '77777777-7777-7777-7777-777777777777';
+    mkdirSync(join(fixDir, 'templates'), { recursive: true });
+    mkdirSync(join(fixDir, 'src'), { recursive: true });
+    writeFileSync(join(fixDir, 'templates', 'Y.yml'),
+      `---\nID: "${tplRootId}"\nParent: "00000000-0000-0000-0000-000000000000"\nTemplate: "0437fee2-44c9-46a6-abe9-28858d9fee8c"\nPath: /sitecore/templates/Project/Y\n`,
+    );
+    writeFileSync(join(fixDir, 'src', 'srcA.yml'),
+      `---\nID: "${srcAId}"\nParent: "00000000-0000-0000-0000-000000000000"\nTemplate: "ab86861a-6030-46c5-b394-e8f99e8b87db"\nPath: /sitecore/templates/sources/srcA\n`,
+    );
+    writeFileSync(join(fixDir, 'src', 'srcB.yml'),
+      `---\nID: "${srcBId}"\nParent: "00000000-0000-0000-0000-000000000000"\nTemplate: "ab86861a-6030-46c5-b394-e8f99e8b87db"\nPath: /sitecore/templates/sources/srcB\n`,
+    );
+    // Prototypes: items whose `template` IS the source template id - that's
+    // the "prototype.template.id" key getSourceTemplateIds derives.
+    mkdirSync(join(fixDir, 'src', 'protos'), { recursive: true });
+    writeFileSync(join(fixDir, 'src', 'protos', 'protoA.yml'),
+      `---\nID: "${protoAId}"\nParent: "${srcAId}"\nTemplate: "${srcAId}"\nPath: /sitecore/templates/sources/srcA/protoA\n`,
+    );
+    writeFileSync(join(fixDir, 'src', 'protos', 'protoB.yml'),
+      `---\nID: "${protoBId}"\nParent: "${srcBId}"\nTemplate: "${srcBId}"\nPath: /sitecore/templates/sources/srcB/protoB\n`,
+    );
+
+    const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
+    const TEMPLATE_SECTION_TEMPLATE_ID = 'e269fbb5-3750-427a-9149-7aa950b49301';
+    const TEMPLATE_FIELD_TEMPLATE_ID = '455a3e98-a627-4b40-8035-e683a0331ac7';
+    const BASE_TEMPLATE_FIELD_ID = '12c33f3f-86c5-43a5-aeb4-5598cec45116';
+    const DATA_SECTION_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
+    const registryPath = join(fixDir, 'fixture-registry.json');
+    writeFileSync(registryPath, JSON.stringify({
+      version: '3.0',
+      source: 'fixture',
+      extractedAt: '2024-01-01T00:00:00Z',
+      items: [
+        {
+          id: TEMPLATE_TEMPLATE_ID,
+          name: 'Template',
+          parent: '12345678-1234-1234-1234-123456789abc',
+          template: TEMPLATE_TEMPLATE_ID,
+          path: '/sitecore/templates/System/Templates/Template',
+          database: 'master',
+          sharedFields: {},
+        },
+        {
+          id: DATA_SECTION_ID,
+          name: 'Data',
+          parent: TEMPLATE_TEMPLATE_ID,
+          template: TEMPLATE_SECTION_TEMPLATE_ID,
+          path: '/sitecore/templates/System/Templates/Template/Data',
+          database: 'master',
+          sharedFields: {},
+        },
+        {
+          id: BASE_TEMPLATE_FIELD_ID,
+          name: '__Base template',
+          parent: DATA_SECTION_ID,
+          template: TEMPLATE_FIELD_TEMPLATE_ID,
+          path: '/sitecore/templates/System/Templates/Template/Data/__Base template',
+          database: 'master',
+          sharedFields: {
+            'be351a73-fcb0-4213-93fa-c302d8ab4f51': '1',
+            'ab162cc0-dc80-4abf-8871-998ee5d7ba32': 'TreelistEx',
+          },
+        },
+      ],
+    }));
+
+    const engine = new Engine({ rootDir: fixDir, registryPath });
+    await engine.init();
+    try {
+      const parent = resolveInsertParent(engine, '/sitecore/templates/Project/Y')!;
+      const defs: DefinitionItem[] = [
+        {
+          id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', path: '/d1', name: 'd1',
+          isSystemModule: false, includeByDefault: true, includeIfInstalled: [], hasChildren: false,
+          source: 'tree',
+          actions: [
+            { kind: 'EditTenantTemplate', editType: 'AddBaseTemplate', prototypeId: protoAId, argumentIds: [] },
+            { kind: 'EditTenantTemplate', editType: 'AddBaseTemplate', prototypeId: protoBId, argumentIds: [] },
+            // Duplicate prototypeId should not produce a duplicate tenant template.
+            { kind: 'EditTenantTemplate', editType: 'AddInsertOptions', prototypeId: protoAId, argumentIds: [] },
+          ],
+        },
+      ];
+      const created = await applyTenantTemplates(engine, parent, defs);
+      expect(created.tenantTemplateIds).toHaveLength(2);
+      // Verify both new templates exist as children of tpl root.
+      const rootNode = engine.getItemById(tplRootId)!;
+      const childIds = new Set(Array.from(rootNode.children.values()).map(c => c.item.id));
+      for (const id of created.tenantTemplateIds) {
+        expect(childIds.has(id)).toBe(true);
+      }
     } finally {
       rmSync(fixDir, { recursive: true, force: true });
     }
