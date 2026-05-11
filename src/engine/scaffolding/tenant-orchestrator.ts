@@ -42,10 +42,15 @@ const FIELD_TENANT_TEMPLATES = '9c596379-f8d4-45d1-a064-cdf1ede2e7c7';
 const FIELD_TENANT_MEDIA_LIBRARY = 'e90a4413-c111-4951-9b6a-00c4ce7fb289';
 const FIELD_TENANT_SHARED_MEDIA_LIBRARY = '800dc4ed-0846-45ba-b112-19902af240f6';
 // _Base JSS Tenant folder fields (verified via inspect-tenant-folder-fields.mjs).
-// SettingsFolder + BranchesFolder are intentionally absent: in real Sitecore
-// both fields point to per-site locations, set by site scaffolding.
+// All four are set on the tenant root when scaffolding: SettingsFolder +
+// BranchesFolder point to per-tenant subfolders here, and site scaffolding
+// later OVERWRITES those two field values to per-site paths under
+// /sitecore/content/<tenant>/<site>/. PlaceholderSettings + Renderings are
+// not overwritten - they stay per-tenant.
 const FIELD_PLACEHOLDER_SETTINGS_FOLDER = '102b58da-2a86-4953-b3cd-c9f91256b657';
 const FIELD_RENDERINGS_FOLDER = '853b245f-53e4-4ebe-bab5-299f9de314b6';
+const FIELD_BRANCHES_FOLDER = 'c5dbb136-3299-4835-a8ce-bca8b49ba3fa';
+const FIELD_SETTINGS_FOLDER = 'b6953f8b-56d3-4c90-a6db-885786711e4a';
 const FIELD_MODULES = '1230d2cb-4948-4d43-8a3b-b39978f6f1b3';
 // Sitecore standard fields.
 const FIELD_DISPLAY_NAME = 'b5e02ad9-d56f-4c41-a065-a133db87bdeb';
@@ -55,13 +60,13 @@ const FIELD_DESCRIPTION = '9541e67d-ce8c-4225-803d-33f7f29f09ef';
 const FIELD_META_NAME = '85a7501a-86d9-4243-9075-0b727c3a6db4';
 const FIELD_META_DESCRIPTION = '89cecf4f-e545-44f2-813d-272c08661d14';
 
-// Folder template paths from Add-JSSTenant.ps1 lines 94-97. Only the two
-// the orchestrator actually creates (PlaceholderSettings, Renderings); the
-// SPE script also references Branches and Settings folder templates, but
-// those are unused (see Step 5 comment).
+// Folder template paths from Add-JSSTenant.ps1 lines 94-97. All four
+// are used by the per-tenant cross-cutting folder creates in Step 5.
 const FOLDER_TEMPLATE_PATHS = {
   PlaceholderSettings: '/sitecore/templates/Foundation/JSS Experience Accelerator/Multisite/Folders/Placeholder Settings Folder',
   Renderings: '/sitecore/templates/Foundation/JSS Experience Accelerator/Multisite/Folders/Rendering Folder',
+  Branches: '/sitecore/templates/Foundation/JSS Experience Accelerator/Multisite/Folders/Branches Folder',
+  Settings: '/sitecore/templates/Foundation/JSS Experience Accelerator/Multisite/Folders/Settings Folder',
 };
 const PROJECT_FOLDER_TEMPLATE_PATH = '/sitecore/templates/Foundation/Experience Accelerator/Multisite/Project Folder';
 const MEDIA_FOLDER_TEMPLATE_PATH = '/sitecore/templates/System/Media/Media folder';
@@ -79,14 +84,21 @@ function lookupTemplateIdByPath(engine: Engine, path: string): string | undefine
  * SingleItem include per path so SCS push/pull semantics match what
  * the orchestrator actually creates.
  *
- * Verified against a real Sitecore CM (2026-05-10):
+ * Verified against a real Sitecore CM (2026-05-10, second pass):
  *   - Tenant root + Templates + PlaceholderSettings + Renderings + Media
  *     are populated under their Project roots.
- *   - Settings + Branches folder fields on the tenant point to PER-SITE
- *     locations (under /sitecore/content/<tenant>/<site>/...), so they
- *     are populated by site scaffolding, not tenant scaffolding.
+ *   - Per-tenant Branches + Settings subfolders are ALSO created under
+ *     /sitecore/templates/Branches/Project and /sitecore/system/Settings/Project.
+ *     The tenant.BranchesFolder + tenant.SettingsFolder fields are set to
+ *     those folders' IDs by tenant scaffolding. Site scaffolding LATER
+ *     overwrites those two field values to per-site paths under
+ *     /sitecore/content/<tenant>/<site>/, but the per-tenant subfolders
+ *     themselves are not removed.
  *   - SharedMediaLibrary is the "shared" subfolder under the tenant's
  *     media library.
+ *   - HeadlessSiteSetupRoot under /sitecore/system/Settings/Project/<tenant>/
+ *     is NOT created (the SPE script's call uses an undefined variable,
+ *     producing a trailing-space Name, which silently fails).
  */
 function tenantTargetPaths(tenantName: string): Array<{ path: string; label: string }> {
   return [
@@ -94,6 +106,8 @@ function tenantTargetPaths(tenantName: string): Array<{ path: string; label: str
     { path: `/sitecore/templates/Project/${tenantName}`, label: 'Templates folder' },
     { path: `/sitecore/layout/Renderings/Project/${tenantName}`, label: 'Renderings folder' },
     { path: `/sitecore/layout/Placeholder Settings/Project/${tenantName}`, label: 'Placeholder Settings folder' },
+    { path: `/sitecore/templates/Branches/Project/${tenantName}`, label: 'Branches folder' },
+    { path: `/sitecore/system/Settings/Project/${tenantName}`, label: 'Settings folder' },
     { path: `/sitecore/media library/Project/${tenantName}`, label: 'Media library folder' },
     { path: `/sitecore/media library/Project/${tenantName}/shared`, label: 'Shared media subfolder' },
   ];
@@ -221,24 +235,26 @@ export async function scaffoldHeadlessTenant(
   ]);
 
   // Step 5: create cross-cutting folders. Verified against a real Sitecore CM
-  // (2026-05-10): the tenant scaffold creates per-tenant subfolders ONLY under
-  // PlaceholderSettings, Renderings, and Media. The Add-JSSTenant SPE script
-  // appears to also create them under /sitecore/system/Settings/Project and
-  // /sitecore/templates/Branches/Project, but in real-Sitecore those calls
-  // either fail silently or get overwritten - the SettingsFolder field on the
-  // tenant points to a per-site /sitecore/content/<tenant>/<site>/Settings,
-  // and BranchesFolder points to a per-site /sitecore/content/<tenant>/<site>/Presentation/Page Branches.
-  // Both are populated by site scaffolding, not tenant scaffolding.
+  // (2026-05-10, second pass): the tenant scaffold creates per-tenant subfolders
+  // under all four cross-cutting Project roots - PlaceholderSettings, Renderings,
+  // Branches, Settings - plus the media library. The SPE script's Add-JSSTenantFolder
+  // helper computes path = $Parent.Paths.Path + $Tenant.Tail and creates a folder
+  // there with the named JSS Multisite folder template. The tenant.*Folder fields
+  // are then assigned the created folder IDs (see Step 8).
   const projectFolderTemplateId = lookupTemplateIdByPath(engine, PROJECT_FOLDER_TEMPLATE_PATH);
   const folderTemplateIds: Record<string, string | undefined> = {
     PlaceholderSettings: lookupTemplateIdByPath(engine, FOLDER_TEMPLATE_PATHS.PlaceholderSettings) ?? projectFolderTemplateId,
     Renderings: lookupTemplateIdByPath(engine, FOLDER_TEMPLATE_PATHS.Renderings) ?? projectFolderTemplateId,
+    Branches: lookupTemplateIdByPath(engine, FOLDER_TEMPLATE_PATHS.Branches) ?? projectFolderTemplateId,
+    Settings: lookupTemplateIdByPath(engine, FOLDER_TEMPLATE_PATHS.Settings) ?? projectFolderTemplateId,
   };
 
   const tenantTail = `/${input.tenantName}`;
   const projectRoots: Record<string, string> = {
     PlaceholderSettings: '/sitecore/layout/Placeholder Settings/Project',
     Renderings: '/sitecore/layout/Renderings/Project',
+    Branches: '/sitecore/templates/Branches/Project',
+    Settings: '/sitecore/system/Settings/Project',
   };
 
   const folderItemIds: Record<string, string | undefined> = {};
@@ -305,16 +321,16 @@ export async function scaffoldHeadlessTenant(
   // matching the broken intent, not the actual outcome.
 
   // Step 8: tenant structural fields. SettingsFolder + BranchesFolder are
-  // intentionally NOT set here: in real Sitecore both point to per-site
-  // locations under /sitecore/content/<tenant>/<site>/..., not to anything
-  // under the shared Project roots, so they're populated when a site is
-  // scaffolded - not now.
+  // assigned to the per-tenant folder IDs created in Step 5; site scaffolding
+  // overwrites them later to per-site paths under /sitecore/content/<tenant>/<site>/.
   const structuralUpdates = [];
   if (templatesRootId) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_TENANT_TEMPLATES, value: templatesRootId });
   if (mediaLibraryId) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_TENANT_MEDIA_LIBRARY, value: mediaLibraryId });
   if (sharedMediaId) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_TENANT_SHARED_MEDIA_LIBRARY, value: sharedMediaId });
   if (folderItemIds.PlaceholderSettings) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_PLACEHOLDER_SETTINGS_FOLDER, value: folderItemIds.PlaceholderSettings });
   if (folderItemIds.Renderings) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_RENDERINGS_FOLDER, value: folderItemIds.Renderings });
+  if (folderItemIds.Branches) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_BRANCHES_FOLDER, value: folderItemIds.Branches });
+  if (folderItemIds.Settings) structuralUpdates.push({ itemId: tenantId, fieldId: FIELD_SETTINGS_FOLDER, value: folderItemIds.Settings });
   if (structuralUpdates.length > 0) await applyFieldUpdates(engine, structuralUpdates);
 
   // Step 9: dispatch all selected actions in three passes.

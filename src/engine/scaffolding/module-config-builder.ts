@@ -37,13 +37,14 @@ export function buildTenantModuleConfig(
 ): ProposedModuleConfig {
   const absoluteFilePath = resolve(rootDir, SERIALIZATION_DIR, `mb-${tenantName}.json`);
   const itemsPath = `items/mockingbird/tenant-${tenantName}`;
-  // 6 SingleItem includes covering every item the tenant scaffold creates.
-  // Verified against a real Sitecore CM (2026-05-10): tenant scaffold ONLY
-  // creates the tenant root + per-tenant Templates / Renderings /
-  // PlaceholderSettings / Media folders + a "shared" subfolder under media.
-  // SettingsFolder + BranchesFolder are per-SITE in real Sitecore (under
-  // /sitecore/content/<tenant>/<site>/), so they're populated by site
-  // scaffolding and live in the per-site mb-<tenant>-<site>.json module.
+  // 8 SingleItem includes covering every item the tenant scaffold creates.
+  // Verified against a real Sitecore CM (2026-05-10, second pass): the
+  // tenant scaffold creates per-tenant subfolders under all four
+  // cross-cutting Project roots (Templates, Renderings, PlaceholderSettings,
+  // Branches, Settings) plus media library + shared subfolder. The
+  // BranchesFolder + SettingsFolder field values on the tenant root get
+  // overwritten to per-site paths by site scaffolding, but the per-tenant
+  // subfolders themselves persist - hence they live in the tenant module.
   return {
     absoluteFilePath,
     contents: {
@@ -55,6 +56,8 @@ export function buildTenantModuleConfig(
           { name: 'templates', path: `/sitecore/templates/Project/${tenantName}`, database: 'master', scope: 'SingleItem' },
           { name: 'renderings', path: `/sitecore/layout/Renderings/Project/${tenantName}`, database: 'master', scope: 'SingleItem' },
           { name: 'placeholders', path: `/sitecore/layout/Placeholder Settings/Project/${tenantName}`, database: 'master', scope: 'SingleItem' },
+          { name: 'branches', path: `/sitecore/templates/Branches/Project/${tenantName}`, database: 'master', scope: 'SingleItem' },
+          { name: 'settings', path: `/sitecore/system/Settings/Project/${tenantName}`, database: 'master', scope: 'SingleItem' },
           { name: 'media', path: `/sitecore/media library/Project/${tenantName}`, database: 'master', scope: 'SingleItem' },
           { name: 'media-shared', path: `/sitecore/media library/Project/${tenantName}/shared`, database: 'master', scope: 'SingleItem' },
         ],
