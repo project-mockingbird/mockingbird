@@ -174,7 +174,7 @@ export async function scaffoldHeadlessTenant(
 
   let emittedModuleConfigPath: string | undefined;
   if (coverageGaps.length > 0) {
-    const proposed = buildTenantModuleConfig(engine.getRootDir(), input.tenantName);
+    const proposed = buildTenantModuleConfig(engine, input.tenantName);
     if (input.dryRun) {
       return {
         dryRun: true,

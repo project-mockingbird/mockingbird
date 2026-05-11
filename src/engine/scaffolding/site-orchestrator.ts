@@ -125,7 +125,7 @@ export async function scaffoldHeadlessSite(
   const coverageGaps: CoverageGap[] = targets
     .filter(t => !engine.findCoveringInclude(t.path))
     .map(t => ({ path: t.path, label: t.label }));
-  const proposed = buildSiteModuleConfig(engine.getRootDir(), tenantName, input.siteName);
+  const proposed = buildSiteModuleConfig(engine, tenantName, input.siteName);
 
   if (input.dryRun) {
     return {

@@ -23,24 +23,52 @@
  * for cleaner per-site push/pull operations.
  */
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname, basename } from 'path';
+import type { Engine } from '../index.js';
 import type { ModuleConfig } from '../types.js';
 
 /**
- * Derive (a) the static directory the emitted module file should live in
- * and (b) the filename suffix the consumer's loader is looking for, by
- * parsing the first `modules` glob in sitecore.json.
+ * Derive the absolute path where the emitted module file should be
+ * written, so the consumer's `sitecore.json` loader will discover it
+ * on the next reload.
  *
- * Algorithm: walk path segments until the first one with a wildcard.
- * Everything before that is the static directory. The last segment's
- * substring after the final `*` is the filename suffix (e.g.
- * `*.module.json` -> ".module.json", `*.json` -> ".json").
+ * Source-of-truth order (most reliable first):
  *
- * Falls back to `serialization/<name>.module.json` if sitecore.json is
- * unreadable or the first glob doesn't conform to the simple shape we
- * understand.
+ *   1. Mirror an already-loaded module's filePath + extension. The
+ *      engine has already successfully read sitecore.json AND globbed
+ *      for matching files at init - if anything matched, mirroring its
+ *      directory + extension is more robust than re-parsing the glob
+ *      ourselves (handles weird globs, multi-glob configs, anything).
+ *
+ *   2. Re-read sitecore.json and parse the first `modules` glob:
+ *      walk segments to find the first wildcard, take everything
+ *      before as the directory, and substring-after-last-`*` as the
+ *      filename suffix.
+ *
+ *   3. Fall back to `serialization/<name>.module.json` if neither
+ *      source produces a usable hint.
+ *
+ * Examples:
+ *   glob `serialization/*.module.json`         -> serialization/mb-X.module.json
+ *   glob `authoring/items/**\/*.module.json`   -> authoring/items/mb-X.module.json
+ *   glob `serialization/*.json` (mb dev)       -> serialization/mb-X.json
  */
-function deriveEmitTarget(rootDir: string, baseName: string): string {
+function deriveEmitTarget(engine: Engine, baseName: string): string {
+  const rootDir = engine.getRootDir();
+
+  // 1. Mirror an existing loaded module's directory + extension.
+  for (const mod of engine.getModules()) {
+    if (typeof mod.filePath === 'string' && mod.filePath.length > 0) {
+      const dir = dirname(mod.filePath);
+      const filename = basename(mod.filePath);
+      const suffix = filename.toLowerCase().endsWith('.module.json')
+        ? '.module.json'
+        : '.json';
+      return resolve(dir, `${baseName}${suffix}`);
+    }
+  }
+
+  // 2. Parse the first glob from sitecore.json.
   let glob = 'serialization/*.module.json';
   try {
     const raw = readFileSync(resolve(rootDir, 'sitecore.json'), 'utf-8');
@@ -48,11 +76,21 @@ function deriveEmitTarget(rootDir: string, baseName: string): string {
     const first = Array.isArray(config?.modules) ? config.modules[0] : undefined;
     if (typeof first === 'string' && first.trim().length > 0) {
       glob = first;
+    } else {
+      console.warn(
+        `[scaffolding] sitecore.json at ${rootDir} has no usable modules glob; ` +
+        `falling back to default ${glob}`,
+      );
     }
-  } catch {
-    // fall through to default
+  } catch (err) {
+    console.warn(
+      `[scaffolding] Could not read sitecore.json at ${rootDir}: ` +
+      `${err instanceof Error ? err.message : String(err)}. ` +
+      `Falling back to default glob ${glob}`,
+    );
   }
 
+  // 3. Parse glob -> static directory + filename suffix.
   const parts = glob.replace(/\\/g, '/').split('/');
   let firstWildcardIdx = parts.findIndex(p => p.includes('*'));
   if (firstWildcardIdx === -1) firstWildcardIdx = parts.length;
@@ -72,10 +110,10 @@ export type ProposedModuleConfig = {
 };
 
 export function buildTenantModuleConfig(
-  rootDir: string,
+  engine: Engine,
   tenantName: string,
 ): ProposedModuleConfig {
-  const absoluteFilePath = deriveEmitTarget(rootDir, `mb-${tenantName}`);
+  const absoluteFilePath = deriveEmitTarget(engine, `mb-${tenantName}`);
   const itemsPath = `items/mockingbird/tenant-${tenantName}`;
   // 8 SingleItem includes covering every item the tenant scaffold creates.
   // Verified against a real Sitecore CM (2026-05-10, second pass): the
@@ -107,11 +145,11 @@ export function buildTenantModuleConfig(
 }
 
 export function buildSiteModuleConfig(
-  rootDir: string,
+  engine: Engine,
   tenantName: string,
   siteName: string,
 ): ProposedModuleConfig {
-  const absoluteFilePath = deriveEmitTarget(rootDir, `mb-${tenantName}-${siteName}`);
+  const absoluteFilePath = deriveEmitTarget(engine, `mb-${tenantName}-${siteName}`);
   const itemsPath = `items/mockingbird/tenant-${tenantName}/site-${siteName}`;
   return {
     absoluteFilePath,
