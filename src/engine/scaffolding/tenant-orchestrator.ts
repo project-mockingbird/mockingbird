@@ -398,6 +398,28 @@ export async function scaffoldHeadlessTenant(
       if (a.kind === 'EditTenantTemplate') await dispatchAction(a, ctx);
     }
   }
+
+  // Step 9.5: rename "Base Page" -> "Page" under the tenant templates root.
+  // Mirrors Add-JSSTenant.ps1's post-EditTenantTemplate rename ("so that
+  // it will match JSS application one"). Downstream JSS apps look for a
+  // template literally named "Page" under the tenant templates folder.
+  if (templatesRootId) {
+    const templatesRoot = engine.getItemById(templatesRootId);
+    const basePage = templatesRoot
+      ? Array.from(templatesRoot.children.values()).find(
+          c => (c.item.path.split('/').pop() ?? '') === 'Base Page',
+        )
+      : undefined;
+    if (basePage) {
+      try {
+        await engine.renameItem(basePage.item.id, 'Page');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warnings.push(`Base Page -> Page rename skipped: ${msg}`);
+      }
+    }
+  }
+
   // Pass 2: AddItem actions.
   ctx.updateTemplate = true;
   for (const def of selectedRaw) {

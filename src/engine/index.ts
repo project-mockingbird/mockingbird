@@ -1,4 +1,4 @@
-import { mkdir, writeFile, stat } from 'fs/promises';
+import { mkdir, writeFile, stat, rm } from 'fs/promises';
 import { resolve, dirname, sep } from 'path';
 import { scanDirectory, scanAdditionalRoot } from './scanner.js';
 import { ItemTree } from './tree.js';
@@ -775,6 +775,88 @@ export class Engine {
     const filePaths = collectFilePaths(node);
     this.tree.removeItem(node.item.id);
     return filePaths;
+  }
+
+  /**
+   * Rename an item (and update all descendants' paths). Same parent,
+   * new last-segment. Writes each affected item's YAML at its new
+   * computed file path and removes the old files. Watcher events for
+   * both old and new paths are suppressed.
+   *
+   * Throws if the target doesn't exist, is at the root (no parent),
+   * the new name is invalid, or a sibling already uses the new name.
+   */
+  async renameItem(idOrPath: string, newName: string): Promise<ItemNode> {
+    const node =
+      this.tree.getById(idOrPath) ?? this.tree.getByPath(idOrPath);
+    if (!node) throw new Error(`Item not found: ${idOrPath}`);
+
+    if (!newName || newName.includes('/')) {
+      throw new Error(`Invalid name: "${newName}"`);
+    }
+    const oldName = node.item.path.split('/').pop()!;
+    if (newName === oldName) return node;
+
+    const parentId = node.item.parent;
+    if (!parentId) throw new Error(`Cannot rename root item: ${idOrPath}`);
+    const parentNode = this.tree.getById(parentId);
+    if (!parentNode) throw new Error(`Parent not in tree: ${parentId}`);
+
+    // Sibling collision check (tree + registry children of the parent).
+    const lowerNew = newName.toLowerCase();
+    for (const c of parentNode.children.values()) {
+      if (c.item.id === node.item.id) continue;
+      const last = c.item.path.split('/').pop() ?? '';
+      if (last.toLowerCase() === lowerNew) {
+        throw new Error(`Name collision: "${newName}" already exists under ${parentNode.item.path}`);
+      }
+    }
+    for (const c of this.getRegistryChildren(parentId)) {
+      const last = c.path.split('/').pop() ?? '';
+      if (last.toLowerCase() === lowerNew) {
+        throw new Error(`Name collision: "${newName}" already exists under ${parentNode.item.path}`);
+      }
+    }
+
+    const newPath = `${parentNode.item.path}/${newName}`;
+
+    // Capture old file paths BEFORE relink (paths change in-memory after).
+    const oldFilePaths = collectFilePaths(node);
+
+    // Relink updates in-memory paths for the node + all descendants.
+    // Same parent, new path.
+    this.tree.relinkItem(node.item.id, parentId, newPath);
+
+    // Pre-order walk to compute new file paths using each parent's NEW
+    // file path. The root rename target's parent (parentNode) is unchanged,
+    // so its existing filePath is the right anchor.
+    const updates: { node: ItemNode; newFilePath: string }[] = [];
+    const walk = (n: ItemNode, parentFilePath: string): void => {
+      const newFp = this.computeChildFilePath(parentFilePath, n.item.path);
+      updates.push({ node: n, newFilePath: newFp });
+      for (const child of n.children.values()) walk(child, newFp);
+    };
+    walk(node, parentNode.filePath);
+
+    // Suppress watcher for both old and new paths so chokidar's echo of
+    // the rename + write doesn't re-process the same items.
+    for (const fp of oldFilePaths) this.suppressWatcherFor(fp);
+    for (const u of updates) this.suppressWatcherFor(u.newFilePath);
+
+    // Write new files in pre-order (parent before children).
+    for (const u of updates) {
+      const written = await this.writeItemFileAt(u.node.item, u.newFilePath);
+      u.node.filePath = written;
+    }
+
+    // Delete old files that aren't reused as new paths.
+    const newFilePathSet = new Set(updates.map(u => u.newFilePath));
+    for (const fp of oldFilePaths) {
+      if (newFilePathSet.has(fp)) continue;
+      await rm(fp, { force: true }).catch(() => {});
+    }
+
+    return node;
   }
 
   async moveItem(idOrPath: string, newParentPath: string): Promise<ItemNode> {
