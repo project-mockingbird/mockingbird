@@ -177,4 +177,13 @@ export class Registry {
     }
     return results;
   }
+
+  getItemsByTemplate(templateId: string): RegistryItem[] {
+    const target = normalizeGuid(templateId);
+    const results: RegistryItem[] = [];
+    for (const item of this.byId.values()) {
+      if (item.template === target) results.push(item);
+    }
+    return results;
+  }
 }

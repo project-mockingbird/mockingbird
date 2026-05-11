@@ -10,6 +10,73 @@ import type { Engine } from './index.js';
 import type { ItemNode, ScsItem } from './types.js';
 
 /**
+ * Minimum shape insertBranch needs from the destination parent.
+ * Tree-resident parents satisfy this via their ItemNode; registry-only
+ * parents (e.g. `/sitecore/content` when no items have been serialized
+ * under it yet) construct it via `engine.resolveFilePath` to pick the
+ * include scope without requiring a real on-disk parent YAML.
+ */
+export type InsertBranchParent = {
+  item: { id: string; path: string };
+  filePath: string;
+};
+
+/**
+ * Resolve a Sitecore path to an InsertBranchParent for use as an insertion
+ * destination. Tree-first; falls back to the OOTB registry. For registry-only
+ * parents, synthesizes a filePath via `engine.resolveFilePath` so the SCS
+ * include-scope pipeline can route writes without needing a real parent YAML.
+ *
+ * Returns undefined when the path resolves nowhere - callers decide whether
+ * that's a hard error (tenant location validation) or a skip-with-warning
+ * (cross-cutting folder roots that may not exist in every install).
+ *
+ * NOTE: mockingbird's path index is db-blind, so when two distinct items
+ * exist at the same path in different databases (e.g. `/sitecore/templates/Project`
+ * has a master Template Folder `825b30b4...` AND a core plain Folder
+ * `fdcc1875...`), this function returns whichever one wins the path index.
+ * Callers that need a specific database's item (almost everything in SXA
+ * scaffolding wants master) should use `resolveInsertParentById` instead.
+ */
+export function resolveInsertParent(
+  engine: Engine,
+  path: string,
+): InsertBranchParent | undefined {
+  const tree = engine.getItemByPath(path);
+  if (tree) {
+    return { item: { id: tree.item.id, path: tree.item.path }, filePath: tree.filePath };
+  }
+  const reg = engine.getRegistryItemByPath(path);
+  if (!reg) return undefined;
+  const filePath = engine.resolveFilePath(reg.path, reg.name);
+  return { item: { id: reg.id, path: reg.path }, filePath };
+}
+
+/**
+ * Resolve a canonical Sitecore id to an InsertBranchParent, bypassing the
+ * path index entirely. Tree-first, registry-second. The id is master-specific
+ * by convention (SXA scaffolding always targets master, mirroring the SPE
+ * script's `Get-ItemByIdSafe "{<canonical-id>}"` pattern).
+ *
+ * Use this for any insertion target where mockingbird's db-blind path index
+ * could resolve to the wrong database's twin - notably the Project roots
+ * referenced by Add-JSSTenant.ps1.
+ */
+export function resolveInsertParentById(
+  engine: Engine,
+  id: string,
+): InsertBranchParent | undefined {
+  const tree = engine.getItemById(id);
+  if (tree) {
+    return { item: { id: tree.item.id, path: tree.item.path }, filePath: tree.filePath };
+  }
+  const reg = engine.getRegistryItem(id);
+  if (!reg) return undefined;
+  const filePath = engine.resolveFilePath(reg.path, reg.name);
+  return { item: { id: reg.id, path: reg.path }, filePath };
+}
+
+/**
  * Pre-order DFS over a branch template's subtree. Returns each descendant
  * of `branchTemplateId` in the order Sitecore's `AddFromBranchTemplate`
  * (`Sitecore.Kernel.decompiled.cs:210776`) processes them: each top-level
@@ -111,7 +178,7 @@ export async function writeAtomic(entries: readonly AtomicWriteEntry[]): Promise
  */
 export async function insertBranch(
   engine: Engine,
-  parentNode: ItemNode,
+  parentNode: InsertBranchParent,
   branchTemplate: ScsItem,
   branchRootName: string,
 ): Promise<{ rootItemId: string; createdItems: ItemNode[] }> {
@@ -122,11 +189,17 @@ export async function insertBranch(
 
   // Identify which source items are top-level children of the branch (vs
   // deeper descendants) so we know which ones reparent onto `parentNode`.
+  // Branch may be tree-resident (existing path) or registry-resident
+  // (SXA Headless tenant/site branches at {2D3805B9-...}, {45CF9F42-...}).
   const branchNode = engine.getItemById(branchTemplate.id);
   const topLevelSourceIds = new Set<string>();
   if (branchNode) {
     for (const child of branchNode.children.values()) {
       topLevelSourceIds.add(child.item.id);
+    }
+  } else {
+    for (const regChild of engine.getRegistryChildren(branchTemplate.id)) {
+      topLevelSourceIds.add(regChild.id);
     }
   }
 

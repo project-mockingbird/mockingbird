@@ -58,6 +58,20 @@ export function registerWebSocket(app: FastifyInstance, _engine: Engine): void {
   });
 }
 
+export function broadcastTreeRefresh(event: { reason: string; rootItemPath: string; createdCount: number }): void {
+  const message = JSON.stringify({
+    type: 'tree:refresh',
+    reason: event.reason,
+    rootItemPath: event.rootItemPath,
+    createdCount: event.createdCount,
+  });
+  for (const client of clients) {
+    if (client.readyState === 1) {
+      client.send(message);
+    }
+  }
+}
+
 export function broadcastItemChange(event: ItemChangeEvent): void {
   // 'moved' carries an extra fromPath so subscribers can refresh both the
   // old and new parent's children lists in one round-trip. Other event

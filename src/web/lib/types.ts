@@ -96,13 +96,25 @@ export interface UpdateItemRequest {
 }
 
 export interface WebSocketEvent {
-  type: 'item:added' | 'item:changed' | 'item:removed' | 'item:moved' | 'validation:updated';
+  type:
+    | 'item:added'
+    | 'item:changed'
+    | 'item:removed'
+    | 'item:moved'
+    | 'validation:updated'
+    | 'tree:refresh';
   id?: string;
   path?: string;
   /** Previous path - present only for `item:moved` events. */
   fromPath?: string;
   valid?: boolean;
   errorCount?: number;
+  /** Multi-item subtree change root - present only for `tree:refresh`. */
+  rootItemPath?: string;
+  /** Items created in the subtree - present only for `tree:refresh`. */
+  createdCount?: number;
+  /** Why the refresh fired (e.g. 'scaffold') - present only for `tree:refresh`. */
+  reason?: string;
 }
 
 export interface TemplateFieldSchema {

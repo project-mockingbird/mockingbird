@@ -339,14 +339,47 @@ export function fallbackChildFilePath(parentFilePath: string, childName: string)
 }
 
 /**
+ * Find the include whose Sitecore item-path is the longest covering prefix
+ * of `childItemSitecorePath`. Used as the primary lookup in
+ * {@link resolveChildFilePath} so a registry-only parent (whose ghost
+ * filePath wouldn't match any include's physical root) still routes its
+ * children into the correct module when the children themselves are
+ * covered by an include.
+ */
+function findTreeSpecForChildPath(
+  childItemSitecorePath: string,
+  modules: ReadonlyArray<ModuleConfig>,
+  defaultMaxRelativePathLength: number,
+): TreeSpecContext | null {
+  const lowerChild = childItemSitecorePath.toLowerCase();
+  let best: { ctx: TreeSpecContext; depth: number } | null = null;
+  for (const mod of modules) {
+    for (const include of mod.items.includes) {
+      const includePathLower = include.path.toLowerCase();
+      if (lowerChild === includePathLower || lowerChild.startsWith(includePathLower + '/')) {
+        const ctx = buildTreeSpecContext(mod, include, defaultMaxRelativePathLength);
+        if (!best || include.path.length > best.depth) {
+          best = { ctx, depth: include.path.length };
+        }
+      }
+    }
+  }
+  return best?.ctx ?? null;
+}
+
+/**
  * Convenience entry point: compute a new child YAML's location.
  *
- *   1. Find the include `parentFilePath` lives under
- *      ({@link findTreeSpecForParent}).
- *   2. If found, run the SCS path-computation pipeline on the child's
- *      full Sitecore path ({@link computePhysicalPath}).
- *   3. Fall back to {@link fallbackChildFilePath} when no include
- *      matches.
+ *   1. Try matching the CHILD's Sitecore path against include paths
+ *      ({@link findTreeSpecForChildPath}). Wins when the child is itself
+ *      covered by an include - critical for scaffolds where the parent
+ *      may be a registry-only Project root with no include coverage but
+ *      the new tenant subfolder DOES have its own include.
+ *   2. Fall back to matching by `parentFilePath` ({@link findTreeSpecForParent}).
+ *      Handles the common in-place-edit case where the parent's physical
+ *      file lives inside an include scope.
+ *   3. Last resort: {@link fallbackChildFilePath}, sibling-style placement
+ *      next to the parent's file.
  */
 export function resolveChildFilePath(
   parentFilePath: string,
@@ -354,6 +387,10 @@ export function resolveChildFilePath(
   modules: ReadonlyArray<ModuleConfig>,
   defaultMaxRelativePathLength: number = DEFAULT_MAX_RELATIVE_PATH_LENGTH,
 ): string {
+  const childCtx = findTreeSpecForChildPath(childItemSitecorePath, modules, defaultMaxRelativePathLength);
+  if (childCtx) {
+    return computePhysicalPath(childItemSitecorePath, childCtx);
+  }
   const ctx = findTreeSpecForParent(parentFilePath, modules, defaultMaxRelativePathLength);
   if (ctx) {
     return computePhysicalPath(childItemSitecorePath, ctx);

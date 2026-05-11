@@ -1,4 +1,4 @@
-import { mkdir, writeFile, stat } from 'fs/promises';
+import { mkdir, writeFile, stat, rm } from 'fs/promises';
 import { resolve, dirname, sep } from 'path';
 import { scanDirectory, scanAdditionalRoot } from './scanner.js';
 import { ItemTree } from './tree.js';
@@ -451,6 +451,55 @@ export class Engine {
     return this.registry?.getRootItems(database) ?? [];
   }
 
+  getRegistryItemsByTemplate(templateId: string): import('./types.js').RegistryItem[] {
+    return this.registry?.getItemsByTemplate(templateId) ?? [];
+  }
+
+  /**
+   * Find the serialization module include (if any) whose path covers the
+   * given Sitecore item path. "Covers" matches the same prefix-test that
+   * `resolveFilePath` uses: include.path === itemPath OR itemPath starts
+   * with include.path + '/'. Returns the FIRST match in module-load order
+   * (which mirrors `resolveFilePath`'s behavior on overlapping includes).
+   *
+   * Use this to detect coverage gaps BEFORE writing - silent fallback to
+   * `<rootDir>/<sitecore-path-segments>/<name>.yml` is a footgun for any
+   * caller, scaffold included.
+   */
+  findCoveringInclude(itemSitecorePath: string): { module: ModuleConfig; include: import('./types.js').ModuleInclude } | undefined {
+    const normalized = itemSitecorePath.toLowerCase();
+    for (const mod of this.modules) {
+      for (const include of mod.items.includes) {
+        const includePath = include.path.toLowerCase();
+        if (normalized === includePath || normalized.startsWith(includePath + '/')) {
+          return { module: mod, include };
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Re-run `discoverModules` to pick up newly-written `*.module.json` files
+   * (the scaffold orchestrators emit these for new tenants/sites). Replaces
+   * the in-memory module list; does NOT touch the parsed tree, registry,
+   * or cache. Subsequent `resolveFilePath` / `findCoveringInclude` calls
+   * see the new includes immediately.
+   */
+  async reloadModules(): Promise<void> {
+    this.modules = await discoverModules(this.options.rootDir).catch(() => []);
+  }
+
+  /** Read-only view of the engine's currently-loaded module list. */
+  getModules(): ReadonlyArray<ModuleConfig> {
+    return this.modules;
+  }
+
+  /** Workspace root directory (the dir holding `sitecore.json`). */
+  getRootDir(): string {
+    return this.options.rootDir;
+  }
+
   getRegistryDatabases(): string[] {
     return this.registry?.getDatabases() ?? [];
   }
@@ -726,6 +775,139 @@ export class Engine {
     const filePaths = collectFilePaths(node);
     this.tree.removeItem(node.item.id);
     return filePaths;
+  }
+
+  /**
+   * Rename an item (and update all descendants' paths). Same parent,
+   * new last-segment. Writes each affected item's YAML at its new
+   * computed file path and removes the old files. Watcher events for
+   * both old and new paths are suppressed.
+   *
+   * Throws if the target doesn't exist, is at the root (no parent),
+   * the new name is invalid, or a sibling already uses the new name.
+   */
+  async renameItem(idOrPath: string, newName: string): Promise<ItemNode> {
+    const node =
+      this.tree.getById(idOrPath) ?? this.tree.getByPath(idOrPath);
+    if (!node) throw new Error(`Item not found: ${idOrPath}`);
+
+    if (!newName || newName.includes('/')) {
+      throw new Error(`Invalid name: "${newName}"`);
+    }
+    const oldName = node.item.path.split('/').pop()!;
+    if (newName === oldName) return node;
+
+    const parentId = node.item.parent;
+    if (!parentId) throw new Error(`Cannot rename root item: ${idOrPath}`);
+    const parentNode = this.tree.getById(parentId);
+    if (!parentNode) throw new Error(`Parent not in tree: ${parentId}`);
+
+    // Sibling collision check (tree + registry children of the parent).
+    const lowerNew = newName.toLowerCase();
+    for (const c of parentNode.children.values()) {
+      if (c.item.id === node.item.id) continue;
+      const last = c.item.path.split('/').pop() ?? '';
+      if (last.toLowerCase() === lowerNew) {
+        throw new Error(`Name collision: "${newName}" already exists under ${parentNode.item.path}`);
+      }
+    }
+    for (const c of this.getRegistryChildren(parentId)) {
+      const last = c.path.split('/').pop() ?? '';
+      if (last.toLowerCase() === lowerNew) {
+        throw new Error(`Name collision: "${newName}" already exists under ${parentNode.item.path}`);
+      }
+    }
+
+    const newPath = `${parentNode.item.path}/${newName}`;
+
+    // Capture old file paths BEFORE relink (paths change in-memory after).
+    const oldFilePaths = collectFilePaths(node);
+
+    // Relink updates in-memory paths for the node + all descendants.
+    // Same parent, new path.
+    this.tree.relinkItem(node.item.id, parentId, newPath);
+
+    // Pre-order walk to compute new file paths using each parent's NEW
+    // file path. The root rename target's parent (parentNode) is unchanged,
+    // so its existing filePath is the right anchor.
+    const updates: { node: ItemNode; newFilePath: string }[] = [];
+    const walk = (n: ItemNode, parentFilePath: string): void => {
+      const newFp = this.computeChildFilePath(parentFilePath, n.item.path);
+      updates.push({ node: n, newFilePath: newFp });
+      for (const child of n.children.values()) walk(child, newFp);
+    };
+    walk(node, parentNode.filePath);
+
+    // Suppress watcher for both old and new paths so chokidar's echo of
+    // the rename + write doesn't re-process the same items.
+    for (const fp of oldFilePaths) this.suppressWatcherFor(fp);
+    for (const u of updates) this.suppressWatcherFor(u.newFilePath);
+
+    // Write new files in pre-order (parent before children).
+    for (const u of updates) {
+      const written = await this.writeItemFileAt(u.node.item, u.newFilePath);
+      u.node.filePath = written;
+    }
+
+    // Delete old files that aren't reused as new paths.
+    const newFilePathSet = new Set(updates.map(u => u.newFilePath));
+    for (const fp of oldFilePaths) {
+      if (newFilePathSet.has(fp)) continue;
+      await rm(fp, { force: true }).catch(() => {});
+    }
+
+    return node;
+  }
+
+  /**
+   * Change an item's template id. Updates the in-memory `item.template`,
+   * rewrites the YAML on disk with the new Template field, and suppresses
+   * the watcher echo. Item path, name, children, and field values are
+   * preserved as-is — this is purely a template-id swap.
+   *
+   * Mirrors Sitecore's `Item.ChangeTemplate(...)`, which (in real Sitecore)
+   * also remaps field values across template schemas. Mockingbird treats
+   * field collections as pass-through bags keyed by GUID, so no remap is
+   * needed — the YAML keeps every existing field exactly as it was. Any
+   * field whose definition does not exist on the new template stays in the
+   * file (Sitecore-faithful: real Sitecore also retains stale field values
+   * after a ChangeTemplate; they just aren't surfaced through the schema).
+   *
+   * Throws if:
+   *   - The item doesn't exist or is registry-only.
+   *   - The new template id is empty.
+   *   - The new template id is not resolvable (neither tree nor registry).
+   *
+   * No-op if the current template already matches.
+   */
+  async changeTemplate(idOrPath: string, newTemplateId: string): Promise<ItemNode> {
+    const node =
+      this.tree.getById(idOrPath) ?? this.tree.getByPath(idOrPath);
+    if (!node) throw new Error(`Item not found: ${idOrPath}`);
+
+    if (!newTemplateId) {
+      throw new Error('Invalid template id: ""');
+    }
+    const newTpl = newTemplateId.toLowerCase();
+    if (node.item.template === newTpl) return node;
+
+    // Resolve the new template id against tree-first then registry.
+    // Registry-only templates are valid targets — they're the OOTB
+    // Sitecore template corpus and don't need on-disk YAML.
+    const known =
+      this.tree.getById(newTpl) ?? this.getRegistryItem(newTpl);
+    if (!known) {
+      throw new Error(`Template not found: ${newTemplateId}`);
+    }
+
+    // Suppress watcher before the write so chokidar's echo doesn't
+    // re-parse the YAML and reapply the old Template via tree.addItem.
+    this.suppressWatcherFor(node.filePath);
+
+    node.item.template = newTpl;
+    await this.writeItemFileAt(node.item, node.filePath);
+
+    return node;
   }
 
   async moveItem(idOrPath: string, newParentPath: string): Promise<ItemNode> {

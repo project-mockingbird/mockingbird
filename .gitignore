@@ -23,6 +23,18 @@ serialization/
 # Local scratch space.
 /.scratch/
 
+# Claude Code / superpowers local config.
+/.claude/
+/.superpowers/
+
+# Brainstorming spec docs and implementation plans are local-only working artifacts.
+/docs/superpowers/specs/
+/docs/superpowers/plans/
+
+# Personal task backlog.
+/backlog.md
+/backlog-archive.md
+
 # Local dev-loop docker-compose overlay.
 /docker-compose.dev.yml
 

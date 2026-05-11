@@ -1,0 +1,145 @@
+/**
+ * Per-tenant Template ITEM creation - the missing piece between tenant-folder
+ * scaffolding and EditTenantTemplate action dispatch. Mirrors the SPE
+ * sequence: Add-TenantTemplate -> Get-SourceTemplate -> New-TenantTemplate.
+ *
+ * Without this step, /sitecore/templates/Project/<tenant>/ stays empty and
+ * every EditTenantTemplate action warn-and-skips ("no tenant-local template
+ * inherits from X"). With it, each EditTenantTemplate action finds a real
+ * target whose __Base template inherits from the source prototype.
+ */
+import type { Engine } from '../index.js';
+import type { DefinitionItem } from './types.js';
+import { insertItemAtParent } from '../insert-item.js';
+import type { InsertBranchParent } from '../insert-branch.js';
+import { applyFieldUpdates } from './field-updates.js';
+import { BASE_TEMPLATE_FIELD_ID, STANDARD_VALUES_NAME, resolveLookupKey } from './scaffold-lookup.js';
+import { hydrateDefinitionActions } from './definition-items.js';
+import { formatGuidBraced } from '../guid.js';
+
+// Sitecore "Template" template - every per-tenant template item uses this
+// as its template-of-template, mirroring the SPE script's New-Item
+// -ItemType "System/Templates/Template".
+const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
+
+/**
+ * SPE: Get-SourceTemplate - walks each definition's EditTenantTemplate
+ * actions, looks up each action's prototype, returns the deduped set of
+ * prototype.template.id values. These are the templates that need a
+ * per-tenant copy.
+ */
+export function getSourceTemplateIds(
+  engine: Engine,
+  definitions: DefinitionItem[],
+): string[] {
+  const ids = new Set<string>();
+  for (const def of definitions) {
+    for (const action of def.actions) {
+      if (action.kind !== 'EditTenantTemplate') continue;
+      const sourceTplId = resolveLookupKey(engine, action.prototypeId);
+      if (sourceTplId) ids.add(sourceTplId);
+    }
+  }
+  return Array.from(ids);
+}
+
+/**
+ * SPE: New-TenantTemplate - creates a Template item under the tenant
+ * templates root whose __Base template is the source template id, plus a
+ * __Standard Values child. Returns the new template id + SV id so callers
+ * can wire downstream actions to either.
+ *
+ * Name comes from the source template item's path leaf (e.g. source at
+ * `/sitecore/templates/Foundation/X/Base Page` -> new template named
+ * "Base Page"). Caller may pass an explicit `name` to override (the v1
+ * port doesn't, but it keeps the API symmetric).
+ */
+export async function createTenantTemplate(
+  engine: Engine,
+  parent: InsertBranchParent,
+  sourceTemplateId: string,
+  name?: string,
+): Promise<{ templateId: string; standardValuesId: string }> {
+  // Resolve source template to read its name + verify it exists.
+  const sourceNode = engine.getItemById(sourceTemplateId);
+  const sourceReg = sourceNode ? undefined : engine.getRegistryItem(sourceTemplateId);
+  const sourcePath = sourceNode?.item.path ?? sourceReg?.path;
+  if (!sourcePath) {
+    throw new Error(`Source template not found: ${sourceTemplateId}`);
+  }
+  const resolvedName = name ?? sourcePath.split('/').pop()!;
+
+  // 1. Create the Template item under parent.
+  const tplResult = await insertItemAtParent(engine, parent, {
+    templateId: TEMPLATE_TEMPLATE_ID,
+    name: resolvedName,
+  });
+  const templateId = tplResult.rootItemId;
+
+  // 2. Set __Base template to point at the source. Real Sitecore stores
+  // TreelistEx values as `{GUID}|{GUID}|...` with braces - and that is what
+  // parseGuidList (used by templateInheritsFrom + every other base-template
+  // walker) expects. Writing a bare GUID here would silently break the
+  // inheritance chain for any code that walks it (notably setTenantTemplate
+  // on the site scaffold side).
+  await applyFieldUpdates(engine, [
+    { itemId: templateId, fieldId: BASE_TEMPLATE_FIELD_ID, value: formatGuidBraced(sourceTemplateId) },
+  ]);
+
+  // 3. Create __Standard Values child whose template = the new template id
+  //    (so its fields cascade as SV defaults). Sitecore's CreateStandardValues
+  //    does the same: instantiate an item OF the template, named "__Standard Values".
+  // Safe: insertItemAtParent above synchronously added the item to the tree.
+  const newTplNode = engine.getItemById(templateId)!;
+  const svParent: InsertBranchParent = {
+    item: { id: newTplNode.item.id, path: newTplNode.item.path },
+    filePath: newTplNode.filePath,
+  };
+  const svResult = await insertItemAtParent(engine, svParent, {
+    templateId,
+    name: STANDARD_VALUES_NAME,
+  });
+
+  return { templateId, standardValuesId: svResult.rootItemId };
+}
+
+/**
+ * SPE: Add-TenantTemplate - composes Get-SourceTemplate + New-TenantTemplate.
+ * For each unique source template referenced by the selected definitions'
+ * EditTenantTemplate actions, create a per-tenant copy under `parent`.
+ * Returns the list of new tenant-template ids so the orchestrator can put
+ * them on the ActionContext for subsequent EditTenantTemplate dispatch.
+ */
+export async function applyTenantTemplates(
+  engine: Engine,
+  parent: InsertBranchParent,
+  definitions: DefinitionItem[],
+): Promise<{ tenantTemplateIds: string[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  const tenantTemplateIds: string[] = [];
+  // Definitions returned by discoverTenantDefinitions have empty .actions arrays;
+  // hydrateDefinitionActions builds them from the engine's tree on demand.
+  // We hydrate here so the helper composes cleanly with the orchestrator
+  // (which itself re-hydrates per dispatch pass downstream).
+  const hydratedDefinitions: DefinitionItem[] = definitions.map(def => ({
+    ...def,
+    actions: def.actions.length > 0
+      ? def.actions
+      : hydrateDefinitionActions(engine, def, warnings),
+  }));
+  const sourceIds = getSourceTemplateIds(engine, hydratedDefinitions);
+  for (const sourceId of sourceIds) {
+    try {
+      const { templateId } = await createTenantTemplate(engine, parent, sourceId);
+      tenantTemplateIds.push(templateId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const sourcePath =
+        engine.getItemById(sourceId)?.item.path ??
+        engine.getRegistryItem(sourceId)?.path ??
+        sourceId;
+      warnings.push(`applyTenantTemplates: skipped "${sourcePath}" (${msg})`);
+    }
+  }
+  return { tenantTemplateIds, warnings };
+}
