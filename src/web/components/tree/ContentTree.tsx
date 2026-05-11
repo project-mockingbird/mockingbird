@@ -273,6 +273,14 @@ function ContentTreeNode({
   const [pendingScaffoldServerError, setPendingScaffoldServerError] = useState<string | null>(null);
   const isContentRoot = node.path === '/sitecore/content';
   const isJssTenant = node.template?.toLowerCase() === 'b91811f1-fa8b-47f8-b131-bd2c6d5ec805';
+  // JSS Site Folder template id - present in the Headless Tenant template's
+  // SV __Masters in OOTB Sitecore. Mockingbird replaces the raw template-
+  // create with the "Headless Site" scaffolding wizard, so this template
+  // option is filtered out for JSS tenants to avoid two competing flows.
+  const JSS_SITE_FOLDER_TPL = 'ce91fbd6-4d89-42c9-b5bc-2a670439e1ff';
+  const visibleInsertOptions = isJssTenant
+    ? (insertOptionsQuery.data?.options ?? []).filter(o => o.templateId.toLowerCase() !== JSS_SITE_FOLDER_TPL)
+    : (insertOptionsQuery.data?.options ?? []);
 
   /**
    * Two-phase scaffold submit. Phase 1: send the request with `dryRun:true`.
@@ -764,7 +772,7 @@ function ContentTreeNode({
               {insertOptionsQuery.isLoading && (
                 <ContextMenuItem disabled>Loading...</ContextMenuItem>
               )}
-              {insertOptionsQuery.data?.options.map((opt) => (
+              {visibleInsertOptions.map((opt) => (
                 <ContextMenuItem
                   key={opt.templateId}
                   onSelect={() => setInsertDialog(opt)}
@@ -774,7 +782,7 @@ function ContentTreeNode({
               ))}
               {isContentRoot && (
                 <>
-                  {(insertOptionsQuery.data?.options.length ?? 0) > 0 && <ContextMenuSeparator />}
+                  {visibleInsertOptions.length > 0 && <ContextMenuSeparator />}
                   <ContextMenuItem onSelect={() => setHeadlessTenantOpen(true)}>
                     Headless Site Collection
                   </ContextMenuItem>
@@ -782,13 +790,13 @@ function ContentTreeNode({
               )}
               {isJssTenant && (
                 <>
-                  {(insertOptionsQuery.data?.options.length ?? 0) > 0 && <ContextMenuSeparator />}
+                  {visibleInsertOptions.length > 0 && <ContextMenuSeparator />}
                   <ContextMenuItem onSelect={() => setHeadlessSiteOpen(true)}>
                     Headless Site
                   </ContextMenuItem>
                 </>
               )}
-              {(insertOptionsQuery.data?.options.length ?? 0) > 0 && (
+              {visibleInsertOptions.length > 0 && (
                 <ContextMenuSeparator />
               )}
               <ContextMenuItem
