@@ -283,6 +283,26 @@ function getMergedChildren(parentId: string, engine: Engine, maxDepth: number, c
   const parentPath = parentItem?.path.toLowerCase() ?? '';
   const parentIsSitecore = parentPath === '/sitecore';
   const parentIsContent = parentPath === '/sitecore/content';
+
+  // Inject the standard master-tree roots under /sitecore if the registry's
+  // visibility filter excluded them. Real Sitecore's master DB always has
+  // /sitecore/content, /sitecore/templates, etc. as system-defined roots,
+  // but mockingbird's OOTB registry only tags them `core`. The registry's
+  // `getChildren(parentId, 'master')` filters to items in the master
+  // visibility set (which excludes anything without master-tagged
+  // descendants), so /sitecore/content disappears on an empty repo before
+  // any post-filter could see it. This injection ensures the standard
+  // structural roots always render in master view.
+  if (database === 'master' && parentIsSitecore) {
+    const seenChildIds = new Set(registryChildren.map(c => c.id.toLowerCase()));
+    for (const path of ALWAYS_VISIBLE_MASTER_ROOTS) {
+      if (path === '/sitecore') continue;
+      const item = engine.getRegistryItemByPath(path);
+      if (item && !seenChildIds.has(item.id.toLowerCase())) {
+        registryChildren.push(item);
+      }
+    }
+  }
   const seenNames = new Set<string>();
   for (const item of registryChildren) {
     if (seenIds.has(item.id)) continue;
