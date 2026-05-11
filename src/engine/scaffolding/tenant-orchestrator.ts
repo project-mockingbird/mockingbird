@@ -17,6 +17,7 @@ import { dirname } from 'path';
 import type { Engine } from '../index.js';
 import { insertBranch, resolveInsertParent, resolveInsertParentById, type InsertBranchParent } from '../insert-branch.js';
 import { insertItem, insertItemAtParent } from '../insert-item.js';
+import { applyTenantTemplates } from './tenant-templates.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { dispatchAction, defaultPorts, type ActionContext } from './actions.js';
 import { synthesizeRegistryAsScs } from './synthesize.js';
@@ -310,6 +311,22 @@ export async function scaffoldHeadlessTenant(
     warnings.push('Templates root skipped: master /sitecore/templates/Project missing or Project Folder template missing');
   }
 
+  // Step 6.5: create per-tenant Template ITEMS under the tenant templates
+  // root. Without this step, /sitecore/templates/Project/<tenant>/ stays
+  // empty and every EditTenantTemplate action warn-and-skips. Mirrors SPE's
+  // Add-TenantTemplate (Get-SourceTemplate + New-TenantTemplate fanout).
+  let preCreatedTenantTemplateIds: string[] = [];
+  if (templatesRootId) {
+    const tenantTemplatesRoot = resolveInsertParentById(engine, templatesRootId);
+    if (tenantTemplatesRoot) {
+      const result = await applyTenantTemplates(engine, tenantTemplatesRoot, selectedRaw);
+      preCreatedTenantTemplateIds = result.tenantTemplateIds;
+      warnings.push(...result.warnings);
+    } else {
+      warnings.push('applyTenantTemplates skipped: tenant templates root could not be re-resolved as InsertBranchParent');
+    }
+  }
+
   // Media library folders (mirror Add-TenantMediaLibrary, master db).
   const projectMediaRoot = resolveInsertParentById(engine, PROJECT_ROOT_IDS.Media);
   const mediaFolderTplId = lookupTemplateIdByPath(engine, MEDIA_FOLDER_TEMPLATE_PATH);
@@ -361,9 +378,14 @@ export async function scaffoldHeadlessTenant(
     engine,
     contextItemId: tenantId,
     contextItemPath: tenantNode.item.path,
-    tenantTemplates: templatesRootId
-      ? Array.from(engine.getItemById(templatesRootId)?.children.values() ?? []).map(c => c.item.id)
-      : [],
+    tenantTemplates: (() => {
+      const fromTree = templatesRootId
+        ? Array.from(engine.getItemById(templatesRootId)?.children.values() ?? []).map(c => c.item.id)
+        : [];
+      const seen = new Set(fromTree.map(s => s.toLowerCase()));
+      for (const id of preCreatedTenantTemplateIds) if (!seen.has(id.toLowerCase())) fromTree.push(id);
+      return fromTree;
+    })(),
     language,
     warnings,
     updateTemplate: false,
