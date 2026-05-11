@@ -10,14 +10,12 @@
 import type { Engine } from '../index.js';
 import type { ScaffoldingAction } from './types.js';
 import { ScaffoldError } from './types.js';
+import { BASE_TEMPLATE_FIELD_ID, STANDARD_VALUES_NAME, resolveLookupKey } from './scaffold-lookup.js';
 
 /** Sitecore's BranchTemplate template ID. */
 const BRANCH_TEMPLATE_ID = '35E75C72-4985-4E09-88C3-0EAC6CD1E64F'.toLowerCase();
-/** __Base template field on a Sitecore Template item. */
-const BASE_TEMPLATE_FIELD_ID = '12C33F3F-86C5-43A5-AEB4-5598CEC45116';
 /** __Masters field on Standard Values. */
 const MASTERS_FIELD_ID = 'B0BF8442-6F77-4F46-A99D-E15F00A3E1F7';
-const STANDARD_VALUES_NAME = '__Standard Values';
 
 export type ActionContext = {
   ports: ActionPorts;
@@ -103,21 +101,6 @@ function appendIds(existing: string, toAdd: string[]): string {
 function readField(node: { item: { sharedFields: { id: string; value: string }[] } }, fieldId: string): string {
   const lower = fieldId.toLowerCase();
   return node.item.sharedFields.find(f => f.id.toLowerCase() === lower)?.value ?? '';
-}
-
-/**
- * Resolve a prototype id to its template-type GUID. Mirrors the SPE cmdlet's
- * `$baseTemplate.InnerItem.Template.InnerItem.ID`: the prototype is loaded,
- * then ITS template field is the lookup key. Tree-first, registry fallback
- * (prototypes live in the registry on a fresh install).
- */
-function resolveLookupKey(engine: Engine, prototypeId: string): string | undefined {
-  if (!prototypeId) return undefined;
-  const node = engine.getItemById(prototypeId);
-  if (node) return node.item.template.toLowerCase();
-  const reg = engine.getRegistryItem(prototypeId);
-  if (reg) return reg.template.toLowerCase();
-  return undefined;
 }
 
 /**
