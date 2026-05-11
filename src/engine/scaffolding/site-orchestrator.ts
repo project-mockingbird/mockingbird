@@ -18,6 +18,7 @@ import { insertBranch, resolveInsertParent } from '../insert-branch.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { dispatchAction, defaultPorts, type ActionContext } from './actions.js';
 import { synthesizeRegistryAsScs } from './synthesize.js';
+import { setTenantTemplate } from './set-tenant-template.js';
 import {
   discoverSiteDefinitions,
   hydrateDefinitionActions,
@@ -65,6 +66,10 @@ const F_DISPLAY_NAME = 'b5e02ad9-d56f-4c41-a065-a133db87bdeb';
 const F_DESCRIPTION = '9541e67d-ce8c-4225-803d-33f7f29f09ef';
 // Modules field on _Modules base template.
 const F_MODULES = '1230d2cb-4948-4d43-8a3b-b39978f6f1b3';
+// _Base Tenant.Templates field id — points at /sitecore/templates/Project/<tenant>/
+// where per-tenant template ITEMS live (created by tenant scaffolding's
+// applyTenantTemplates step).
+const F_TENANT_TEMPLATES = '9c596379-f8d4-45d1-a064-cdf1ede2e7c7';
 
 const DEFAULT_LAYOUT_ITEM = '96e5f4ba-a2cf-4a4c-a4e7-64da88226362';
 
@@ -208,6 +213,34 @@ export async function scaffoldHeadlessSite(
     if (created.item.path !== siteNode.item.path) createdPaths.push(created.item.path);
   }
 
+  // Step 4.5: re-template site descendants against per-tenant templates.
+  // SPE: Set-TenantTemplate $site $tenantTemplates. The branch instantiation
+  // above produces items templated against OOTB cross-tenant prototypes
+  // (e.g. Foundation/JSS Page). This pass swaps each subtree item's template
+  // to the matching per-tenant template - the one tenant scaffolding created
+  // under /sitecore/templates/Project/<tenant>/. Without this step, downstream
+  // JSS apps don't find the per-tenant Page template under site children.
+  const tenantTemplatesRootRaw = tenantFields[F_TENANT_TEMPLATES] ?? '';
+  const tenantTemplatesRootId = tenantTemplatesRootRaw.replace(/[{}]/g, '').toLowerCase();
+  const tenantTemplateIds: string[] = [];
+  if (tenantTemplatesRootId) {
+    const tenantTemplatesRoot = engine.getItemById(tenantTemplatesRootId);
+    if (tenantTemplatesRoot) {
+      for (const child of tenantTemplatesRoot.children.values()) {
+        tenantTemplateIds.push(child.item.id);
+      }
+    } else {
+      warnings.push(`Set-TenantTemplate skipped: tenant.Templates root not in tree (${tenantTemplatesRootId})`);
+    }
+  } else {
+    warnings.push('Set-TenantTemplate skipped: tenant.Templates field is empty');
+  }
+
+  if (tenantTemplateIds.length > 0) {
+    const result = await setTenantTemplate(engine, siteId, tenantTemplateIds);
+    warnings.push(...result.warnings);
+  }
+
   // Step 5: configure JSSSettings child.
   const settingsChild = Array.from(siteNode.children.values()).find(
     c => c.item.path.endsWith('/Settings'),
@@ -284,7 +317,7 @@ export async function scaffoldHeadlessSite(
     engine,
     contextItemId: siteId,
     contextItemPath: siteNode.item.path,
-    tenantTemplates: [],
+    tenantTemplates: tenantTemplateIds,
     language,
     warnings,
     updateTemplate: true,
