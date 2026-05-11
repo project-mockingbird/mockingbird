@@ -13,6 +13,23 @@ import { toHostPath } from '../host-path.js';
 
 const SORTORDER_FIELD_ID = FIELD_IDS.sortorder;
 
+// Standard master-tree roots that should always render under /sitecore in
+// master view, regardless of whether anything has been authored yet. In
+// real Sitecore these exist in BOTH core (admin tree) and master (content
+// tree), but mockingbird's OOTB registry only tags them `core` - the
+// master-twin entries are not in the baked registry. Without this
+// allow-list, an empty repo hides /sitecore/content via the "hide core-only
+// nodes without serialized descendants" filter below, and the user cannot
+// create their first tenant because the parent path doesn't appear in the
+// tree.
+const ALWAYS_VISIBLE_MASTER_ROOTS = new Set([
+  '/sitecore/content',
+  '/sitecore/templates',
+  '/sitecore/layout',
+  '/sitecore/media library',
+  '/sitecore/system',
+]);
+
 // Mirrors Sitecore's `Settings.DefaultSortOrder` setting. When an item has no
 // `__Sortorder` of its own and no Standard Values cascade hit, Sitecore falls
 // back to this configured default (production convention is 100; the inner
@@ -270,8 +287,17 @@ function getMergedChildren(parentId: string, engine: Engine, maxDepth: number, c
   for (const item of registryChildren) {
     if (seenIds.has(item.id)) continue;
     // Under /sitecore in master: hide core-only structural nodes without serialized descendants
-    // (e.g. /sitecore/masters, /sitecore/client, /sitecore/unit testing)
-    if (database === 'master' && parentIsSitecore && item.database !== database && !engine.hasSerializedDescendants(item.id)) continue;
+    // (e.g. /sitecore/masters, /sitecore/client, /sitecore/unit testing).
+    // ALWAYS_VISIBLE_MASTER_ROOTS exempts the standard master-tree roots so
+    // an empty repo still shows /sitecore/content (the place to create the
+    // first tenant) even with zero authored items.
+    if (
+      database === 'master' &&
+      parentIsSitecore &&
+      item.database !== database &&
+      !engine.hasSerializedDescendants(item.id) &&
+      !ALWAYS_VISIBLE_MASTER_ROOTS.has(item.path.toLowerCase())
+    ) continue;
     // Under /sitecore/content in master: only show items with serialized descendants
     if (database === 'master' && parentIsContent && !engine.hasSerializedDescendants(item.id)) continue;
     // Deduplicate by name: items can exist in both core and master with different IDs.
