@@ -30,6 +30,13 @@ export type InsertBranchParent = {
  * Returns undefined when the path resolves nowhere - callers decide whether
  * that's a hard error (tenant location validation) or a skip-with-warning
  * (cross-cutting folder roots that may not exist in every install).
+ *
+ * NOTE: mockingbird's path index is db-blind, so when two distinct items
+ * exist at the same path in different databases (e.g. `/sitecore/templates/Project`
+ * has a master Template Folder `825b30b4...` AND a core plain Folder
+ * `fdcc1875...`), this function returns whichever one wins the path index.
+ * Callers that need a specific database's item (almost everything in SXA
+ * scaffolding wants master) should use `resolveInsertParentById` instead.
  */
 export function resolveInsertParent(
   engine: Engine,
@@ -40,6 +47,30 @@ export function resolveInsertParent(
     return { item: { id: tree.item.id, path: tree.item.path }, filePath: tree.filePath };
   }
   const reg = engine.getRegistryItemByPath(path);
+  if (!reg) return undefined;
+  const filePath = engine.resolveFilePath(reg.path, reg.name);
+  return { item: { id: reg.id, path: reg.path }, filePath };
+}
+
+/**
+ * Resolve a canonical Sitecore id to an InsertBranchParent, bypassing the
+ * path index entirely. Tree-first, registry-second. The id is master-specific
+ * by convention (SXA scaffolding always targets master, mirroring the SPE
+ * script's `Get-ItemByIdSafe "{<canonical-id>}"` pattern).
+ *
+ * Use this for any insertion target where mockingbird's db-blind path index
+ * could resolve to the wrong database's twin - notably the Project roots
+ * referenced by Add-JSSTenant.ps1.
+ */
+export function resolveInsertParentById(
+  engine: Engine,
+  id: string,
+): InsertBranchParent | undefined {
+  const tree = engine.getItemById(id);
+  if (tree) {
+    return { item: { id: tree.item.id, path: tree.item.path }, filePath: tree.filePath };
+  }
+  const reg = engine.getRegistryItem(id);
   if (!reg) return undefined;
   const filePath = engine.resolveFilePath(reg.path, reg.name);
   return { item: { id: reg.id, path: reg.path }, filePath };

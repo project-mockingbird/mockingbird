@@ -15,7 +15,7 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { dirname } from 'path';
 import type { Engine } from '../index.js';
-import { insertBranch, resolveInsertParent, type InsertBranchParent } from '../insert-branch.js';
+import { insertBranch, resolveInsertParent, resolveInsertParentById, type InsertBranchParent } from '../insert-branch.js';
 import { insertItem, insertItemAtParent } from '../insert-item.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { dispatchAction, defaultPorts, type ActionContext } from './actions.js';
@@ -36,6 +36,25 @@ import {
 
 // SXA Headless template/branch GUIDs (lowercase, dashed). See spec table.
 const TENANT_BRANCH_ID = '2d3805b9-3089-44f3-b952-d45c44add7f8';
+
+// SPE-canonical Project root ids (Add-JSSTenant.ps1 lines 50-55). Looked up
+// by id, not by path, because mockingbird's path index is db-blind and
+// `/sitecore/templates/Project` exists in BOTH master (canonical `825b30b4`,
+// Template Folder) AND core (anomaly `fdcc1875`, plain Folder) - so a
+// path-based lookup can land on the wrong twin. SPE itself uses
+// `Get-ItemByIdSafe "{<id>}"` for the same reason. All five ids are
+// master-db items.
+const PROJECT_ROOT_IDS = {
+  Templates: '825b30b4-b40b-422e-9920-23a1b6bda89c',
+  Media: '90ae357f-6171-4ea9-808c-5600b678f726',
+  PlaceholderSettings: 'f5f0fbe3-61ad-4967-a5d8-8d760331d6a1',
+  Renderings: '1995806f-0a84-42b5-93b0-88f0e2ff872c',
+  Settings: '0af56f64-b5d7-473f-9497-1dc19265e494',
+  // Branches: /sitecore/templates/Branches/Project is currently absent
+  // from the OOTB registry entirely; resolution falls back to path-based
+  // (which also misses). Tracked as a separate registry-gap follow-up.
+};
+const PROJECT_BRANCHES_PATH = '/sitecore/templates/Branches/Project';
 
 // _Base Tenant fields (Foundation/Experience Accelerator/Multisite/Base/_Base Tenant).
 const FIELD_TENANT_TEMPLATES = '9c596379-f8d4-45d1-a064-cdf1ede2e7c7';
@@ -250,19 +269,23 @@ export async function scaffoldHeadlessTenant(
   };
 
   const tenantTail = `/${input.tenantName}`;
-  const projectRoots: Record<string, string> = {
-    PlaceholderSettings: '/sitecore/layout/Placeholder Settings/Project',
-    Renderings: '/sitecore/layout/Renderings/Project',
-    Branches: '/sitecore/templates/Branches/Project',
-    Settings: '/sitecore/system/Settings/Project',
+  // Resolve cross-cutting Project roots by SPE-canonical (master-db) id
+  // rather than by path. mockingbird's path index is db-blind and at least
+  // /sitecore/templates/Project has master + core twins - path resolution
+  // can land on the wrong one. Branches/Project has no canonical id in the
+  // OOTB registry today, so it stays path-based and skip-with-warning'd.
+  const folderRoots: Record<string, InsertBranchParent | undefined> = {
+    PlaceholderSettings: resolveInsertParentById(engine, PROJECT_ROOT_IDS.PlaceholderSettings),
+    Renderings: resolveInsertParentById(engine, PROJECT_ROOT_IDS.Renderings),
+    Settings: resolveInsertParentById(engine, PROJECT_ROOT_IDS.Settings),
+    Branches: resolveInsertParent(engine, PROJECT_BRANCHES_PATH),
   };
 
   const folderItemIds: Record<string, string | undefined> = {};
-  for (const [key, rootPath] of Object.entries(projectRoots)) {
-    const root = resolveInsertParent(engine, rootPath);
+  for (const [key, root] of Object.entries(folderRoots)) {
     const tplId = folderTemplateIds[key];
     if (!root || !tplId) {
-      warnings.push(`Cross-cutting folder skipped (${key}): missing root ${rootPath} or template`);
+      warnings.push(`Cross-cutting folder skipped (${key}): missing root or template`);
       continue;
     }
     const created = await insertItemAtParent(engine, root, {
@@ -270,12 +293,11 @@ export async function scaffoldHeadlessTenant(
       name: input.tenantName,
     });
     folderItemIds[key] = created.rootItemId;
-    const path = `${rootPath}${tenantTail}`;
-    createdPaths.push(path);
+    createdPaths.push(`${root.item.path}${tenantTail}`);
   }
 
-  // Templates root (under /sitecore/templates/Project).
-  const projectTemplatesRoot = resolveInsertParent(engine, '/sitecore/templates/Project');
+  // Templates root (under master /sitecore/templates/Project).
+  const projectTemplatesRoot = resolveInsertParentById(engine, PROJECT_ROOT_IDS.Templates);
   let templatesRootId: string | undefined;
   if (projectTemplatesRoot && projectFolderTemplateId) {
     const created = await insertItemAtParent(engine, projectTemplatesRoot, {
@@ -285,11 +307,11 @@ export async function scaffoldHeadlessTenant(
     templatesRootId = created.rootItemId;
     createdPaths.push(`/sitecore/templates/Project${tenantTail}`);
   } else {
-    warnings.push('Templates root skipped: /sitecore/templates/Project missing or Project Folder template missing');
+    warnings.push('Templates root skipped: master /sitecore/templates/Project missing or Project Folder template missing');
   }
 
-  // Media library folders (mirror Add-TenantMediaLibrary).
-  const projectMediaRoot = resolveInsertParent(engine, '/sitecore/media library/Project');
+  // Media library folders (mirror Add-TenantMediaLibrary, master db).
+  const projectMediaRoot = resolveInsertParentById(engine, PROJECT_ROOT_IDS.Media);
   const mediaFolderTplId = lookupTemplateIdByPath(engine, MEDIA_FOLDER_TEMPLATE_PATH);
   let mediaLibraryId: string | undefined;
   let sharedMediaId: string | undefined;
