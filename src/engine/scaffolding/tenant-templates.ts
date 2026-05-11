@@ -14,6 +14,7 @@ import { insertItemAtParent } from '../insert-item.js';
 import type { InsertBranchParent } from '../insert-branch.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { BASE_TEMPLATE_FIELD_ID, STANDARD_VALUES_NAME, resolveLookupKey } from './scaffold-lookup.js';
+import { hydrateDefinitionActions } from './definition-items.js';
 
 // Sitecore "Template" template - every per-tenant template item uses this
 // as its template-of-template, mirroring the SPE script's New-Item
@@ -110,14 +111,28 @@ export async function applyTenantTemplates(
 ): Promise<{ tenantTemplateIds: string[]; warnings: string[] }> {
   const warnings: string[] = [];
   const tenantTemplateIds: string[] = [];
-  const sourceIds = getSourceTemplateIds(engine, definitions);
+  // Definitions returned by discoverTenantDefinitions have empty .actions arrays;
+  // hydrateDefinitionActions builds them from the engine's tree on demand.
+  // We hydrate here so the helper composes cleanly with the orchestrator
+  // (which itself re-hydrates per dispatch pass downstream).
+  const hydratedDefinitions: DefinitionItem[] = definitions.map(def => ({
+    ...def,
+    actions: def.actions.length > 0
+      ? def.actions
+      : hydrateDefinitionActions(engine, def, warnings),
+  }));
+  const sourceIds = getSourceTemplateIds(engine, hydratedDefinitions);
   for (const sourceId of sourceIds) {
     try {
       const { templateId } = await createTenantTemplate(engine, parent, sourceId);
       tenantTemplateIds.push(templateId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      warnings.push(`applyTenantTemplates: skipped source ${sourceId} (${msg})`);
+      const sourcePath =
+        engine.getItemById(sourceId)?.item.path ??
+        engine.getRegistryItem(sourceId)?.path ??
+        sourceId;
+      warnings.push(`applyTenantTemplates: skipped "${sourcePath}" (${msg})`);
     }
   }
   return { tenantTemplateIds, warnings };

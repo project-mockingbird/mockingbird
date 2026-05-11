@@ -8,6 +8,72 @@ import { resolveInsertParent } from '../../../src/engine/insert-branch.js';
 import { clearTemplateSchemaCache } from '../../../src/engine/template-schema.js';
 import type { DefinitionItem } from '../../../src/engine/scaffolding/types.js';
 
+// clearTemplateSchemaCache is required because the schema cache is
+// process-global; leaving it populated between tests would cause stale
+// field-scope data from one test to contaminate the next. Hoisted to
+// file-level so every current and future test in this file is covered.
+beforeEach(() => { clearTemplateSchemaCache(); });
+afterEach(() => { clearTemplateSchemaCache(); });
+
+/**
+ * Writes the 3-item fixture registry (Template Template -> Data section ->
+ * __Base template field) into `fixDir` and returns the absolute path.
+ * Both createTenantTemplate and applyTenantTemplates tests need this registry
+ * so that:
+ *   (a) insertItemAtParent's template-exists guard can resolve Template Template
+ *       via engine.getRegistryItem, and
+ *   (b) applyFieldUpdates can route __Base template to sharedFields by reading
+ *       the field's shared=1 flag via getTemplateSchema.
+ */
+function writeFixtureRegistry(fixDir: string): string {
+  const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
+  const TEMPLATE_SECTION_TEMPLATE_ID = 'e269fbb5-3750-427a-9149-7aa950b49301';
+  const TEMPLATE_FIELD_TEMPLATE_ID = '455a3e98-a627-4b40-8035-e683a0331ac7';
+  const BASE_TEMPLATE_FIELD_ID = '12c33f3f-86c5-43a5-aeb4-5598cec45116';
+  const DATA_SECTION_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
+  const registryPath = join(fixDir, 'fixture-registry.json');
+  writeFileSync(registryPath, JSON.stringify({
+    version: '3.0',
+    source: 'fixture',
+    extractedAt: '2024-01-01T00:00:00Z',
+    items: [
+      {
+        id: TEMPLATE_TEMPLATE_ID,
+        name: 'Template',
+        parent: '12345678-1234-1234-1234-123456789abc',
+        template: TEMPLATE_TEMPLATE_ID,
+        path: '/sitecore/templates/System/Templates/Template',
+        database: 'master',
+        sharedFields: {},
+      },
+      {
+        id: DATA_SECTION_ID,
+        name: 'Data',
+        parent: TEMPLATE_TEMPLATE_ID,
+        template: TEMPLATE_SECTION_TEMPLATE_ID,
+        path: '/sitecore/templates/System/Templates/Template/Data',
+        database: 'master',
+        sharedFields: {},
+      },
+      {
+        id: BASE_TEMPLATE_FIELD_ID,
+        name: '__Base template',
+        parent: DATA_SECTION_ID,
+        template: TEMPLATE_FIELD_TEMPLATE_ID,
+        path: '/sitecore/templates/System/Templates/Template/Data/__Base template',
+        database: 'master',
+        sharedFields: {
+          // shared = "1" so applyFieldUpdates routes this to sharedFields
+          'be351a73-fcb0-4213-93fa-c302d8ab4f51': '1',
+          // type = TreelistEx
+          'ab162cc0-dc80-4abf-8871-998ee5d7ba32': 'TreelistEx',
+        },
+      },
+    ],
+  }));
+  return registryPath;
+}
+
 async function buildEmptyEngine() {
   const fixDir = mkdtempSync(join(tmpdir(), 'mb-tenant-tpl-'));
   writeFileSync(join(fixDir, 'sitecore.json'), JSON.stringify({ modules: ['*.module.json'] }));
@@ -48,12 +114,6 @@ describe('getSourceTemplateIds', () => {
 });
 
 describe('createTenantTemplate', () => {
-  // clearTemplateSchemaCache() is required because the schema cache is
-  // process-global; leaving it populated between tests would cause
-  // stale field-scope data from one test to contaminate the next.
-  beforeEach(() => { clearTemplateSchemaCache(); });
-  afterEach(() => { clearTemplateSchemaCache(); });
-
   it('creates Template item under parent with __Base template + Standard Values child', async () => {
     const fixDir = mkdtempSync(join(tmpdir(), 'mb-tenant-tpl-create-'));
     writeFileSync(join(fixDir, 'sitecore.json'), JSON.stringify({ modules: ['*.module.json'] }));
@@ -83,57 +143,7 @@ describe('createTenantTemplate', () => {
     // sitecore.json already uses *.module.json glob - no rewrite needed; both
     // mod.module.json and src.module.json are picked up on engine.init().
 
-    // Seed a minimal registry so the engine can:
-    //   (a) resolve Template Template (ab86861a) via getRegistryItem - needed by
-    //       insertItemAtParent's template-exists guard.
-    //   (b) resolve __Base template (12c33f3f) field scope via getTemplateSchema -
-    //       needed by applyFieldUpdates so it routes the field to sharedFields.
-    // The registry contains: Template Template -> Data section -> __Base template field.
-    const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
-    const TEMPLATE_SECTION_TEMPLATE_ID = 'e269fbb5-3750-427a-9149-7aa950b49301';
-    const TEMPLATE_FIELD_TEMPLATE_ID = '455a3e98-a627-4b40-8035-e683a0331ac7';
-    const BASE_TEMPLATE_FIELD_ID = '12c33f3f-86c5-43a5-aeb4-5598cec45116';
-    const DATA_SECTION_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
-    const registryPath = join(fixDir, 'fixture-registry.json');
-    writeFileSync(registryPath, JSON.stringify({
-      version: '3.0',
-      source: 'fixture',
-      extractedAt: '2024-01-01T00:00:00Z',
-      items: [
-        {
-          id: TEMPLATE_TEMPLATE_ID,
-          name: 'Template',
-          parent: '12345678-1234-1234-1234-123456789abc',
-          template: TEMPLATE_TEMPLATE_ID,
-          path: '/sitecore/templates/System/Templates/Template',
-          database: 'master',
-          sharedFields: {},
-        },
-        {
-          id: DATA_SECTION_ID,
-          name: 'Data',
-          parent: TEMPLATE_TEMPLATE_ID,
-          template: TEMPLATE_SECTION_TEMPLATE_ID,
-          path: '/sitecore/templates/System/Templates/Template/Data',
-          database: 'master',
-          sharedFields: {},
-        },
-        {
-          id: BASE_TEMPLATE_FIELD_ID,
-          name: '__Base template',
-          parent: DATA_SECTION_ID,
-          template: TEMPLATE_FIELD_TEMPLATE_ID,
-          path: '/sitecore/templates/System/Templates/Template/Data/__Base template',
-          database: 'master',
-          sharedFields: {
-            // shared = "1" so applyFieldUpdates routes this to sharedFields
-            'be351a73-fcb0-4213-93fa-c302d8ab4f51': '1',
-            // type = TreelistEx
-            'ab162cc0-dc80-4abf-8871-998ee5d7ba32': 'TreelistEx',
-          },
-        },
-      ],
-    }));
+    const registryPath = writeFixtureRegistry(fixDir);
 
     const engine = new Engine({ rootDir: fixDir, registryPath });
     await engine.init();
@@ -161,9 +171,6 @@ describe('createTenantTemplate', () => {
 });
 
 describe('applyTenantTemplates', () => {
-  beforeEach(() => { clearTemplateSchemaCache(); });
-  afterEach(() => { clearTemplateSchemaCache(); });
-
   it('creates one tenant template per unique source across definitions, returns their ids', async () => {
     const fixDir = mkdtempSync(join(tmpdir(), 'mb-tenant-apply-'));
     writeFileSync(join(fixDir, 'sitecore.json'), JSON.stringify({ modules: ['*.module.json'] }));
@@ -201,49 +208,7 @@ describe('applyTenantTemplates', () => {
       `---\nID: "${protoBId}"\nParent: "${srcBId}"\nTemplate: "${srcBId}"\nPath: /sitecore/templates/sources/srcB/protoB\n`,
     );
 
-    const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
-    const TEMPLATE_SECTION_TEMPLATE_ID = 'e269fbb5-3750-427a-9149-7aa950b49301';
-    const TEMPLATE_FIELD_TEMPLATE_ID = '455a3e98-a627-4b40-8035-e683a0331ac7';
-    const BASE_TEMPLATE_FIELD_ID = '12c33f3f-86c5-43a5-aeb4-5598cec45116';
-    const DATA_SECTION_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
-    const registryPath = join(fixDir, 'fixture-registry.json');
-    writeFileSync(registryPath, JSON.stringify({
-      version: '3.0',
-      source: 'fixture',
-      extractedAt: '2024-01-01T00:00:00Z',
-      items: [
-        {
-          id: TEMPLATE_TEMPLATE_ID,
-          name: 'Template',
-          parent: '12345678-1234-1234-1234-123456789abc',
-          template: TEMPLATE_TEMPLATE_ID,
-          path: '/sitecore/templates/System/Templates/Template',
-          database: 'master',
-          sharedFields: {},
-        },
-        {
-          id: DATA_SECTION_ID,
-          name: 'Data',
-          parent: TEMPLATE_TEMPLATE_ID,
-          template: TEMPLATE_SECTION_TEMPLATE_ID,
-          path: '/sitecore/templates/System/Templates/Template/Data',
-          database: 'master',
-          sharedFields: {},
-        },
-        {
-          id: BASE_TEMPLATE_FIELD_ID,
-          name: '__Base template',
-          parent: DATA_SECTION_ID,
-          template: TEMPLATE_FIELD_TEMPLATE_ID,
-          path: '/sitecore/templates/System/Templates/Template/Data/__Base template',
-          database: 'master',
-          sharedFields: {
-            'be351a73-fcb0-4213-93fa-c302d8ab4f51': '1',
-            'ab162cc0-dc80-4abf-8871-998ee5d7ba32': 'TreelistEx',
-          },
-        },
-      ],
-    }));
+    const registryPath = writeFixtureRegistry(fixDir);
 
     const engine = new Engine({ rootDir: fixDir, registryPath });
     await engine.init();
@@ -270,6 +235,61 @@ describe('applyTenantTemplates', () => {
       for (const id of created.tenantTemplateIds) {
         expect(childIds.has(id)).toBe(true);
       }
+      // Verify each tenant template's __Base template points at one of the source ids.
+      for (const id of created.tenantTemplateIds) {
+        const node = engine.getItemById(id)!;
+        const baseField = node.item.sharedFields.find(
+          f => f.id.toLowerCase() === '12c33f3f-86c5-43a5-aeb4-5598cec45116',
+        );
+        expect([srcAId, srcBId]).toContain(baseField?.value.toLowerCase());
+      }
+    } finally {
+      rmSync(fixDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hydrates un-hydrated defs (actions:[]) before computing source ids - no crash, empty result when no action items exist', async () => {
+    // Test approach: cheapest option - pass a def with actions:[] whose id does
+    // not exist in the engine. hydrateDefinitionActions will warn ("not found in
+    // tree or registry") and return []. applyTenantTemplates must not throw and
+    // must return zero tenantTemplateIds. This regression-safe shape ensures the
+    // hydration branch is exercised; any future regression that skips hydration
+    // will break only the existing test above (where pre-hydrated actions already
+    // carry prototypeIds). Together the two tests pin both paths.
+    const fixDir = mkdtempSync(join(tmpdir(), 'mb-tenant-apply-hydrate-'));
+    writeFileSync(join(fixDir, 'sitecore.json'), JSON.stringify({ modules: ['*.module.json'] }));
+    writeFileSync(join(fixDir, 'tenant.module.json'), JSON.stringify({
+      namespace: 'tenant',
+      items: { includes: [{ name: 'templates', path: '/sitecore/templates/Project/Z' }] },
+    }));
+    const tplRootId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+    mkdirSync(join(fixDir, 'templates'), { recursive: true });
+    writeFileSync(join(fixDir, 'templates', 'Z.yml'),
+      `---\nID: "${tplRootId}"\nParent: "00000000-0000-0000-0000-000000000000"\nTemplate: "0437fee2-44c9-46a6-abe9-28858d9fee8c"\nPath: /sitecore/templates/Project/Z\n`,
+    );
+    const registryPath = writeFixtureRegistry(fixDir);
+    const engine = new Engine({ rootDir: fixDir, registryPath });
+    await engine.init();
+    try {
+      const parent = resolveInsertParent(engine, '/sitecore/templates/Project/Z')!;
+      // Def has actions:[] and a definition-item id that does not exist in the
+      // engine. hydrateDefinitionActions warns and returns []; the function must
+      // not throw and must produce zero tenantTemplateIds.
+      const defs: DefinitionItem[] = [
+        {
+          id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+          path: '/definitions/empty-def', name: 'EmptyDef',
+          isSystemModule: false, includeByDefault: true, includeIfInstalled: [],
+          hasChildren: true, source: 'registry',
+          actions: [],
+        },
+      ];
+      const result = await applyTenantTemplates(engine, parent, defs);
+      expect(result.tenantTemplateIds).toHaveLength(0);
+      // hydrateDefinitionActions emits one warning when the definition item is
+      // not found; that warning surfaces through the shared warnings array.
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toMatch(/not found in tree or registry/i);
     } finally {
       rmSync(fixDir, { recursive: true, force: true });
     }
