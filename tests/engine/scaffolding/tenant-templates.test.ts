@@ -159,7 +159,9 @@ describe('createTenantTemplate', () => {
       expect(node.item.path).toBe('/sitecore/templates/Project/X/MyTpl');
       expect(node.item.template.toLowerCase()).toBe('ab86861a-6030-46c5-b394-e8f99e8b87db');
       const baseField = node.item.sharedFields.find(f => f.id.toLowerCase() === '12c33f3f-86c5-43a5-aeb4-5598cec45116');
-      expect(baseField?.value.toLowerCase()).toBe(sourceTplId);
+      // Sitecore stores TreelistEx field values as `{GUID}` braced/uppercase
+      // so parseGuidList (which only matches `{...}` runs) can read them.
+      expect(baseField?.value).toBe(`{${sourceTplId.toUpperCase()}}`);
 
       const sv = engine.getItemById(result.standardValuesId)!;
       expect(sv.item.path).toBe('/sitecore/templates/Project/X/MyTpl/__Standard Values');
@@ -241,7 +243,8 @@ describe('applyTenantTemplates', () => {
         const baseField = node.item.sharedFields.find(
           f => f.id.toLowerCase() === '12c33f3f-86c5-43a5-aeb4-5598cec45116',
         );
-        expect([srcAId, srcBId]).toContain(baseField?.value.toLowerCase());
+        const bare = baseField?.value.replace(/[{}]/g, '').toLowerCase();
+        expect([srcAId, srcBId]).toContain(bare);
       }
     } finally {
       rmSync(fixDir, { recursive: true, force: true });

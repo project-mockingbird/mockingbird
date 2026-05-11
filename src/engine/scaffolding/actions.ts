@@ -11,6 +11,7 @@ import type { Engine } from '../index.js';
 import type { ScaffoldingAction } from './types.js';
 import { ScaffoldError } from './types.js';
 import { BASE_TEMPLATE_FIELD_ID, STANDARD_VALUES_NAME, resolveLookupKey } from './scaffold-lookup.js';
+import { formatGuidBraced, normalizeGuid } from '../guid.js';
 
 /** Sitecore's BranchTemplate template ID. */
 const BRANCH_TEMPLATE_ID = '35E75C72-4985-4E09-88C3-0EAC6CD1E64F'.toLowerCase();
@@ -89,10 +90,19 @@ export async function dispatchAction(action: ScaffoldingAction, ctx: ActionConte
 }
 
 function appendIds(existing: string, toAdd: string[]): string {
-  const parts = existing ? existing.split('|').filter(Boolean) : [];
+  // Brace-normalize all parts (existing + new) to Sitecore's canonical
+  // `{GUID}|{GUID}|...` form. Without braces, parseGuidList (which only
+  // matches `{...}` runs) treats the value as empty and every
+  // base-template walker — templateInheritsFrom, setTenantTemplate,
+  // SCT resolution — silently returns "no inheritance found".
+  const normalize = (id: string): string => formatGuidBraced(normalizeGuid(id));
+  const parts = existing
+    ? existing.split('|').filter(Boolean).map(normalize)
+    : [];
   for (const id of toAdd) {
-    if (!parts.some(p => p.toLowerCase() === id.toLowerCase())) {
-      parts.push(id);
+    const n = normalize(id);
+    if (!parts.some(p => p.toLowerCase() === n.toLowerCase())) {
+      parts.push(n);
     }
   }
   return parts.join('|');

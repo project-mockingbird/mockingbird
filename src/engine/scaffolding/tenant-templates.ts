@@ -15,6 +15,7 @@ import type { InsertBranchParent } from '../insert-branch.js';
 import { applyFieldUpdates } from './field-updates.js';
 import { BASE_TEMPLATE_FIELD_ID, STANDARD_VALUES_NAME, resolveLookupKey } from './scaffold-lookup.js';
 import { hydrateDefinitionActions } from './definition-items.js';
+import { formatGuidBraced } from '../guid.js';
 
 // Sitecore "Template" template - every per-tenant template item uses this
 // as its template-of-template, mirroring the SPE script's New-Item
@@ -75,9 +76,14 @@ export async function createTenantTemplate(
   });
   const templateId = tplResult.rootItemId;
 
-  // 2. Set __Base template to point at the source.
+  // 2. Set __Base template to point at the source. Real Sitecore stores
+  // TreelistEx values as `{GUID}|{GUID}|...` with braces - and that is what
+  // parseGuidList (used by templateInheritsFrom + every other base-template
+  // walker) expects. Writing a bare GUID here would silently break the
+  // inheritance chain for any code that walks it (notably setTenantTemplate
+  // on the site scaffold side).
   await applyFieldUpdates(engine, [
-    { itemId: templateId, fieldId: BASE_TEMPLATE_FIELD_ID, value: sourceTemplateId },
+    { itemId: templateId, fieldId: BASE_TEMPLATE_FIELD_ID, value: formatGuidBraced(sourceTemplateId) },
   ]);
 
   // 3. Create __Standard Values child whose template = the new template id
