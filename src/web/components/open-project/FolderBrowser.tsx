@@ -64,7 +64,7 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
     >
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Pick a sitecore.json (or navigate to one)</DialogTitle>
+          <DialogTitle>Select a configuration file</DialogTitle>
         </DialogHeader>
         <div className="flex items-center gap-2 border rounded px-2 py-1.5 text-sm">
           <Button
