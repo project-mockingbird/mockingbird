@@ -66,12 +66,22 @@ function ContentTreePage() {
 
   const { data: validation } = useQuery({
     queryKey: ['validation'],
-    queryFn: async () =>
-      (await fetch('/api/validate', {
+    // The readiness middleware returns 503 for /api/* during the brief window
+    // when the engine is transitioning state (open-project, indexing). Without
+    // the res.ok guard, .json() would parse the 503 body ({status, progress})
+    // and React Query would cache it as the validation result, breaking any
+    // consumer that expects an `errors` array. Throw on non-OK so the query
+    // enters error state and consumers keep the previous good value (or
+    // remain undefined until a real response arrives).
+    queryFn: async () => {
+      const res = await fetch('/api/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
-      })).json(),
+      });
+      if (!res.ok) throw new Error(`validate ${res.status}`);
+      return res.json();
+    },
     refetchInterval: 30_000,
   });
   const errorCount =

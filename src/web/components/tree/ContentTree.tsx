@@ -1178,7 +1178,10 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
   );
 
   const errorItemIds = useMemo(() => {
-    if (!validation) return new Set<string>();
+    // Belt-and-braces: even if the validation query is fixed, defend against
+    // a malformed shape sneaking in via cache, stale state, or a future caller
+    // that doesn't validate. `errors` must be an array for filter() to work.
+    if (!validation || !Array.isArray(validation.errors)) return new Set<string>();
     return new Set(
       validation.errors.filter((e) => e.itemId).map((e) => e.itemId!),
     );
