@@ -12,8 +12,14 @@ const host = process.env.HOST ?? '127.0.0.1';
 const registryPath = process.env.REGISTRY_PATH;
 const indexCachePath = process.env.INDEX_CACHE_PATH;
 
-const sitecoreJsonPath = resolve(process.env.SCS_SITECORE_JSON ?? './sitecore.json');
-const rootDir = dirname(sitecoreJsonPath);
+// SCS_SITECORE_JSON is optional. When set, the engine boots into the named
+// workspace (existing container-as-a-service deployment for head-app
+// integrations). When unset, the server boots in no-project mode and the
+// first-run wizard (UI) is responsible for picking a workspace at runtime.
+const sitecoreJsonPath = process.env.SCS_SITECORE_JSON
+  ? resolve(process.env.SCS_SITECORE_JSON)
+  : undefined;
+const rootDir = sitecoreJsonPath ? dirname(sitecoreJsonPath) : undefined;
 
 const contentSitecoreJson = process.env.SCS_CONTENT_SITECORE_JSON;
 const contentPaths = contentSitecoreJson ? [dirname(resolve(contentSitecoreJson))] : [];
@@ -49,31 +55,36 @@ async function main(): Promise<void> {
   console.log(`Mockingbird API`);
   console.log(`  Listening: http://${host}:${port}`);
   console.log(`  Registry: ${engine.isRegistryLoaded() ? `loaded (${engine.registrySize()} OOTB items)` : 'not loaded'}`);
-  console.log(`  Indexing serialization in background...`);
 
-  const indexStart = Date.now();
-  let lastScanned = -1;
-  const tick = setInterval(() => {
-    if (engine.readiness.state !== 'initializing') return;
-    const { scanned, total } = engine.readiness.progress;
-    if (scanned === lastScanned) return;
-    lastScanned = scanned;
-    const pct = total > 0 ? Math.floor((scanned / total) * 100) : 0;
-    console.log(`  [index] ${scanned}/${total} (${pct}%)`);
-  }, 3000);
-  tick.unref?.();
+  if (rootDir) {
+    console.log(`  Indexing serialization in background...`);
 
-  engine.readiness
-    .ready()
-    .then(() => {
-      clearInterval(tick);
-      const secs = ((Date.now() - indexStart) / 1000).toFixed(1);
-      console.log(`  Indexing complete: ${engine.getAllItems().length} items in ${secs}s`);
-    })
-    .catch((err) => {
-      clearInterval(tick);
-      console.error(`  Indexing failed:`, err);
-    });
+    const indexStart = Date.now();
+    let lastScanned = -1;
+    const tick = setInterval(() => {
+      if (engine.readiness.state !== 'initializing') return;
+      const { scanned, total } = engine.readiness.progress;
+      if (scanned === lastScanned) return;
+      lastScanned = scanned;
+      const pct = total > 0 ? Math.floor((scanned / total) * 100) : 0;
+      console.log(`  [index] ${scanned}/${total} (${pct}%)`);
+    }, 3000);
+    tick.unref?.();
+
+    engine.readiness
+      .ready()
+      .then(() => {
+        clearInterval(tick);
+        const secs = ((Date.now() - indexStart) / 1000).toFixed(1);
+        console.log(`  Indexing complete: ${engine.getAllItems().length} items in ${secs}s`);
+      })
+      .catch((err) => {
+        clearInterval(tick);
+        console.error(`  Indexing failed:`, err);
+      });
+  } else {
+    console.log(`  No project loaded. Open one via the web UI to begin authoring.`);
+  }
 }
 
 main().catch((err) => {
