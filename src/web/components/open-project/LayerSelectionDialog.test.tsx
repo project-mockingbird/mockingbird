@@ -119,4 +119,63 @@ describe('LayerSelectionDialog', () => {
     );
     expect(screen.getByText(/overlaps another candidate/i)).toBeInTheDocument();
   });
+
+  it('renders "Add another layer" button when onAddAnother is provided', () => {
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+        onAddAnother={() => {}}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /add another layer/i })).toBeInTheDocument();
+  });
+
+  it('does not render "Add another layer" button when onAddAnother is omitted', () => {
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /add another layer/i })).not.toBeInTheDocument();
+  });
+
+  it('fires onAddAnother when the button is clicked', () => {
+    const onAddAnother = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+        onAddAnother={onAddAnother}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /add another layer/i }));
+    expect(onAddAnother).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a spinner glyph on the Open project button while isPending', () => {
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+        isPending
+      />,
+    );
+    const openBtn = screen.getByRole('button', { name: /opening/i });
+    expect(openBtn).toBeDisabled();
+    expect(document.body.querySelector('.animate-spin')).toBeInTheDocument();
+  });
 });

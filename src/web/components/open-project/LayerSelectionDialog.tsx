@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '@/lib/icon';
-import { mdiAlert, mdiArrowDown, mdiArrowUp } from '@mdi/js';
+import { mdiAlert, mdiArrowDown, mdiArrowUp, mdiLoading } from '@mdi/js';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,8 @@ interface LayerSelectionDialogProps {
   candidates: ReadonlyArray<ScsConfigCandidate>;
   onClose: () => void;
   onConfirm: (layers: OpenProjectLayer[]) => void;
+  /** When provided, an "Add another layer" footer button appears that re-opens the FolderBrowser. */
+  onAddAnother?: () => void;
   isPending?: boolean;
   serverError?: string | null;
 }
@@ -55,6 +57,7 @@ export function LayerSelectionDialog({
   candidates,
   onClose,
   onConfirm,
+  onAddAnother,
   isPending = false,
   serverError = null,
 }: LayerSelectionDialogProps) {
@@ -208,7 +211,18 @@ export function LayerSelectionDialog({
           <Button variant="outline" size="sm" onClick={onClose} disabled={isPending}>
             Cancel
           </Button>
+          {onAddAnother && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAddAnother}
+              disabled={isPending}
+            >
+              Add another layer
+            </Button>
+          )}
           <Button size="sm" onClick={handleConfirm} disabled={!canSubmit}>
+            {isPending && <Icon path={mdiLoading} className="size-3 mr-1 animate-spin" />}
             {isPending ? 'Opening...' : 'Open project'}
           </Button>
         </DialogFooter>
