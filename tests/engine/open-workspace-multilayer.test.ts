@@ -198,8 +198,26 @@ describe('Engine.openWorkspace - multi-layer precedence', () => {
     await expect(
       engine.openWorkspace([{ sitecoreJsonPath: join(layerA, 'sitecore.json'), name: 'OOTB' }]),
     ).rejects.toThrow(/'ootb' is reserved/);
-    // openWorkspace calls closeWorkspace before the name check, so state is no-project.
-    expect(engine.readiness.state).toBe('no-project');
+    // ootb-check fires before closeWorkspace; fresh engine never started init,
+    // so state remains 'initializing'.
+    expect(engine.readiness.state).toBe('initializing');
+  });
+
+  it('rejection of a "ootb"-named layer preserves an already-open workspace', async () => {
+    engine = new Engine({ registryPath: registryFixture });
+    // Open a valid project first.
+    await engine.openWorkspace([
+      { sitecoreJsonPath: join(layerA, 'sitecore.json'), name: 'authoring' },
+      { sitecoreJsonPath: join(layerB, 'sitecore.json'), name: 'content' },
+    ]);
+    expect(engine.readiness.state).toBe('ready');
+    const layersBefore = engine.getLayers();
+    // A subsequent bad call must NOT tear down the existing workspace.
+    await expect(
+      engine.openWorkspace([{ sitecoreJsonPath: join(layerA, 'sitecore.json'), name: 'ootb' }]),
+    ).rejects.toThrow(/'ootb' is reserved/);
+    expect(engine.readiness.state).toBe('ready');
+    expect(engine.getLayers()).toEqual(layersBefore);
   });
 
   it('extends openWorkspace to populate provenance for the merged tree', async () => {

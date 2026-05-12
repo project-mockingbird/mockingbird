@@ -1017,15 +1017,16 @@ export class Engine {
    * reason.
    */
   async openWorkspace(layers: LayerSpec[]): Promise<void> {
-    await this.closeWorkspace();
-
     // Reject 'ootb' as a user layer name (case-insensitive). The sentinel is
-    // reserved for the registry substrate in provenance shapes.
+    // reserved for the registry substrate in provenance shapes. Validated
+    // BEFORE closeWorkspace so a bad call does not tear down an open workspace.
     for (const layer of layers) {
       if (layer.name.toLowerCase() === 'ootb') {
         throw new Error(`Layer name 'ootb' is reserved; received layer with name "${layer.name}"`);
       }
     }
+
+    await this.closeWorkspace();
 
     this._layers = layers.slice();
 
@@ -1047,13 +1048,15 @@ export class Engine {
       await this.startInit();
       await this.readiness.ready();
       // Eager provenance fill: every tree node attributes to the single layer.
+      let nodeCount = 0;
       for (const node of this.tree.getAllNodes()) {
         this._itemProvenance.set(node.item.id, {
           winnerLayer: primary.name,
           contributingLayers: [primary.name],
         });
+        nodeCount++;
       }
-      this._layerStats.set(primary.name, this.tree.getAllNodes().length);
+      this._layerStats.set(primary.name, nodeCount);
       return;
     }
 
@@ -1089,10 +1092,8 @@ export class Engine {
         if (isFirstSighting || comparePushOps(incomingPushOps, existingPushOps) > 0) {
           this.tree.addItem(node.item, node.filePath, node.module);
           pushOpsByItemId.set(node.item.id, incomingPushOps);
-          // Winner is always the last entry in contributingLayers.
-          const winnerPos = contributors.indexOf(layer.name);
-          if (winnerPos >= 0) contributors.splice(winnerPos, 1);
-          contributors.push(layer.name);
+          // contributors already has layer.name pushed at the top of the loop; it's
+          // naturally last since the loser branch doesn't add it. Winner = last contributor.
           this._itemProvenance.set(node.item.id, {
             winnerLayer: layer.name,
             contributingLayers: contributors.slice(),
