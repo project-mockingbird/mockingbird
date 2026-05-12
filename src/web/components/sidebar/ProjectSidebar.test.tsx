@@ -6,6 +6,18 @@ import '@testing-library/jest-dom';
 import { ProjectSidebar } from './ProjectSidebar';
 import { resetLayerState } from '@/state/layerState';
 
+// Provide a minimal localStorage stub for jsdom environments that may not have it
+const localStorageStub = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => { store[k] = v; },
+    removeItem: (k: string) => { delete store[k]; },
+    clear: () => { store = {}; },
+  };
+})();
+Object.defineProperty(window, 'localStorage', { value: localStorageStub });
+
 const statusReady = {
   state: 'ready' as const,
   layers: [
@@ -18,7 +30,10 @@ const statusReady = {
 
 const statusNoProject = { state: 'no-project' as const, layers: [], registryItemCount: 22613 };
 
-beforeEach(() => resetLayerState());
+beforeEach(() => {
+  resetLayerState();
+  localStorageStub.clear();
+});
 
 describe('<ProjectSidebar>', () => {
   it('renders nothing when state is no-project', () => {
@@ -50,5 +65,35 @@ describe('<ProjectSidebar>', () => {
     render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={onClose} />);
     await user.click(screen.getByRole('button', { name: /close/i }));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('collapse button hides layer rows and shows an expand button', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    // Layer rows are visible initially
+    expect(screen.getByText('authoring')).toBeInTheDocument();
+    // Click the collapse button
+    await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
+    // Layer rows are now hidden
+    expect(screen.queryByText('authoring')).not.toBeInTheDocument();
+    // The collapsed strip shows an expand button
+    expect(screen.getByRole('button', { name: /expand sidebar/i })).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-collapsed')).toBeInTheDocument();
+  });
+
+  it('expand button restores sidebar content after collapse', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
+    await user.click(screen.getByRole('button', { name: /expand sidebar/i }));
+    expect(screen.getByText('authoring')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-collapsed')).not.toBeInTheDocument();
+  });
+
+  it('persists collapsed state to localStorage', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
+    expect(localStorageStub.getItem('mockingbird.sidebar.collapsed')).toBe('true');
   });
 });

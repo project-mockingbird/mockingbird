@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/lib/icon';
-import { mdiFolderArrowRight, mdiClose } from '@mdi/js';
+import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight } from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 
@@ -24,9 +25,27 @@ interface ProjectSidebarProps {
 }
 
 const OOTB_GREY = '#9ca3af';
+const STORAGE_KEY = 'mockingbird.sidebar.collapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(value: boolean): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, String(value));
+  } catch {
+    // ignore storage errors in restricted environments
+  }
+}
 
 export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProps) {
   const { isVisible, setVisibility, rename, recolor, overrides } = useLayerState();
+  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
 
   if (status.state === 'no-project') return null;
   if (!status.layers || status.layers.length === 0) return null;
@@ -44,13 +63,51 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const projectPath = firstPath.replace(/\/[^/]+\/[^/]+$/, '');
   const projectLabel = projectPath.split('/').filter(Boolean).pop() ?? 'project';
 
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      writeCollapsed(next);
+      return next;
+    });
+  };
+
+  if (collapsed) {
+    return (
+      <aside
+        data-testid="sidebar-collapsed"
+        className="w-8 border-l bg-card flex flex-col items-center py-2 h-full shrink-0"
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleCollapsed}
+          aria-label="Expand sidebar"
+          className="p-0 size-6"
+        >
+          <Icon path={mdiChevronLeft} className="size-4" />
+        </Button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="w-72 border-l bg-card flex flex-col h-full shrink-0">
-      <div className="px-3 py-2 border-b">
-        <div className="font-semibold text-sm">{projectLabel}</div>
-        <div className="font-mono text-[10px] text-muted-foreground truncate" title={projectPath}>
-          {projectPath}
+      <div className="px-3 py-2 border-b flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-semibold text-sm">{projectLabel}</div>
+          <div className="font-mono text-[10px] text-muted-foreground truncate" title={projectPath}>
+            {projectPath}
+          </div>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleCollapsed}
+          aria-label="Collapse sidebar"
+          className="p-0 size-6 shrink-0 mt-0.5"
+        >
+          <Icon path={mdiChevronRight} className="size-4" />
+        </Button>
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
