@@ -7,6 +7,13 @@ import { useOpenProject } from '@/hooks/useOpenProject';
 interface OpenProjectWizardProps {
   open: boolean;
   onClose: () => void;
+  /**
+   * 'first-run' (default): used by NoProjectState's chooser path.
+   * 'switch': used by ProjectSidebar's Switch button. Behavior is identical
+   * today; the prop is reserved for future divergence (e.g. preserving
+   * picked-layer history across opens).
+   */
+  initialMode?: 'first-run' | 'switch';
 }
 
 type Step = 'folder' | 'layers';
@@ -22,7 +29,8 @@ interface PickedLayer {
  * JSON), then confirm + open. Multi-layer is progressive via the dialog's
  * "Add another layer" button which returns the wizard to the folder step.
  */
-export function OpenProjectWizard({ open, onClose }: OpenProjectWizardProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: OpenProjectWizardProps) {
   const [step, setStep] = useState<Step>('folder');
   const [pickedLayers, setPickedLayers] = useState<PickedLayer[]>([]);
   const openProject = useOpenProject();

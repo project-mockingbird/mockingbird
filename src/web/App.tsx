@@ -18,6 +18,9 @@ import { useEngineStatus } from '@/hooks/useEngineStatus';
 import { WorkspaceShell } from '@/components/workspace/WorkspaceShell';
 import { CartPane, readPersistedCartPaneOpen } from '@/components/package/CartPane';
 import { CheckoutDialog } from '@/components/package/CheckoutDialog';
+import { ProjectSidebar } from '@/components/sidebar/ProjectSidebar';
+import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
+import { useCloseProject } from '@/hooks/useCloseProject';
 import { toast } from 'sonner';
 
 // IsePage pulls Monaco (~3.5 MB) and xterm into its dependency tree. Loading
@@ -64,6 +67,13 @@ function ContentTreePage() {
     [setSetting, settings],
   );
 
+  const { data: status } = useEngineStatus();
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const close = useCloseProject();
+
+  const handleSwitch = () => setSwitchOpen(true);
+  const handleClose = () => close.mutate();
+
   const { data: validation } = useQuery({
     queryKey: ['validation'],
     // The readiness middleware returns 503 for /api/* during the brief window
@@ -94,12 +104,37 @@ function ContentTreePage() {
         onValidationClick={() => setValidationOpen(true)}
         onCartToggle={() => setCartPaneOpen((o) => !o)}
       />
-      <WorkspaceShell
-        validationOpen={validationOpen}
-        setValidationOpen={setValidationOpen}
-        persistedSize={persistedSize}
-        onTreePanelResize={onTreePanelResize}
-      />
+      <div className="flex flex-1 min-h-0">
+        <WorkspaceShell
+          validationOpen={validationOpen}
+          setValidationOpen={setValidationOpen}
+          persistedSize={persistedSize}
+          onTreePanelResize={onTreePanelResize}
+        />
+        {status?.state === 'ready' && status.layers && status.layers.length > 0 && (
+          <ProjectSidebar
+            status={{
+              state: status.state,
+              layers: status.layers.map((l) => ({
+                name: l.name,
+                sitecoreJsonPath: l.sitecoreJsonPath,
+                color: l.color,
+                effectiveCount: l.effectiveCount ?? 0,
+              })),
+              registryItemCount: 0,
+            }}
+            onSwitch={handleSwitch}
+            onClose={handleClose}
+          />
+        )}
+      </div>
+      {switchOpen && (
+        <OpenProjectWizard
+          open
+          onClose={() => setSwitchOpen(false)}
+          initialMode="switch"
+        />
+      )}
       <StatusBar database={database} onDatabaseChange={setDatabase} />
       <CartPane
         open={cartPaneOpen}

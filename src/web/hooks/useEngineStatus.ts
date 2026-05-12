@@ -7,9 +7,12 @@ import { useQuery } from '@tanstack/react-query';
  * colors at open time so post-open status snapshots usually carry one.
  */
 export interface LayerSummary {
-  sitecoreJsonPath: string;
+  sitecoreJsonPath?: string;
   name: string;
   color?: string;
+  /** Item count attributed to this layer by the engine. Included on all layers
+   * returned from /api/status when state is 'ready'. */
+  effectiveCount?: number;
 }
 
 export interface EngineStatus {

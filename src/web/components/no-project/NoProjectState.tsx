@@ -52,7 +52,7 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
         onBrowseOotbOnly={() => setChooserOpen(false)}
       />
       {wizardOpen && (
-        <OpenProjectWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
+        <OpenProjectWizard open={wizardOpen} onClose={() => setWizardOpen(false)} initialMode="first-run" />
       )}
     </EmptyState>
   );
