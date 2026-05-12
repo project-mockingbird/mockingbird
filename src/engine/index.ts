@@ -971,6 +971,30 @@ export class Engine {
     }
   }
 
+  /**
+   * Closes the currently-open workspace, returning the engine to 'no-project'
+   * state. Tears down the file watcher (if any) and clears the in-memory tree.
+   * The OOTB registry stays loaded.
+   *
+   * Safe to call from no-project state (no-op).
+   */
+  async closeWorkspace(): Promise<void> {
+    if (this.readiness.state === 'no-project') return;
+    if (this.watcher) {
+      await this.watcher.close();
+      this.watcher = null;
+    }
+    if (this._cacheWritePromise) {
+      try { await this._cacheWritePromise; } catch { /* swallow - tear-down */ }
+      this._cacheWritePromise = null;
+    }
+    this.tree = new ItemTree();
+    this.modules = [];
+    this._cacheRoots = [];
+    this.readiness.reset();
+    this.readiness.markNoProject();
+  }
+
   async writeItemFile(item: ScsItem): Promise<string> {
     const itemName = item.path.split('/').pop()!;
     const filePath = this.resolveFilePath(item.path, itemName);
