@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { NoProjectState } from '../../no-project/NoProjectState';
+import { NoProjectState } from './NoProjectState';
 
 describe('NoProjectState', () => {
   it('renders the headline and helper copy', () => {

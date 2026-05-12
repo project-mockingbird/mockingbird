@@ -1,6 +1,7 @@
 import { Icon } from '@/lib/icon';
 import { mdiFolderOpen } from '@mdi/js';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-states';
 
 interface NoProjectStateProps {
   onOpenProject: () => void;
@@ -14,7 +15,7 @@ interface NoProjectStateProps {
  */
 export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+    <EmptyState>
       <Icon path={mdiFolderOpen} className="size-12 text-muted-foreground" />
       <div className="space-y-1">
         <h2 className="text-lg font-medium">No project loaded</h2>
@@ -25,6 +26,6 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
         </p>
       </div>
       <Button onClick={onOpenProject}>Open a project</Button>
-    </div>
+    </EmptyState>
   );
 }
