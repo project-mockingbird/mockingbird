@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Icon } from '@/lib/icon';
-import { mdiFolder, mdiFolderOpen, mdiCheckCircle, mdiChevronLeft } from '@mdi/js';
+import { mdiFolder, mdiFileCode, mdiCheckCircle, mdiChevronLeft } from '@mdi/js';
 import {
   Dialog,
   DialogContent,
@@ -10,13 +10,13 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { useFsList } from '@/hooks/useFsList';
+import { useFsList, type FsConfigFileEntry } from '@/hooks/useFsList';
 
 interface FolderBrowserProps {
   open: boolean;
   onClose: () => void;
-  /** Called with the workspace-relative path the user picked. */
-  onConfirm: (path: string) => void;
+  /** Called with the picked file path, its module count, and its push-ops summary. */
+  onFilePick: (filePath: string, moduleCount: number, pushOpsSummary: string) => void;
 }
 
 function parentPathOf(path: string): string | null {
@@ -28,17 +28,28 @@ function parentPathOf(path: string): string | null {
 }
 
 /**
- * Folder-picker dialog that walks the workspace mount via /api/fs/list. The
- * user navigates by clicking folder rows; the "Scan this folder for projects"
- * button submits the currently-displayed path to the caller.
+ * Folder + file picker. Walks the workspace mount via /api/fs/list?includeFiles=true.
+ * Directories are clickable to navigate; config-file rows (JSON files matching the
+ * SCS root-config shape) are clickable to pick. A "Use sitecore.json from this folder"
+ * shortcut activates when the current folder itself contains a sitecore.json file.
  */
-export function FolderBrowser({ open, onClose, onConfirm }: FolderBrowserProps) {
+export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps) {
   const [currentPath, setCurrentPath] = useState('/');
-  const { data, isLoading, error } = useFsList(open ? currentPath : null);
+  const { data, isLoading, error } = useFsList(open ? currentPath : null, {
+    includeFiles: true,
+  });
   const parent = parentPathOf(currentPath);
+
+  const sitecoreJsonAtRoot = data?.entries.find(
+    (e): e is FsConfigFileEntry => e.kind === 'config-file' && e.name === 'sitecore.json',
+  );
 
   const goUp = () => {
     if (parent !== null) setCurrentPath(parent);
+  };
+
+  const handleConfigFileClick = (entry: FsConfigFileEntry) => {
+    onFilePick(entry.path, entry.moduleCount, entry.pushOpsSummary);
   };
 
   return (
@@ -53,7 +64,7 @@ export function FolderBrowser({ open, onClose, onConfirm }: FolderBrowserProps) 
     >
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Pick a folder to scan</DialogTitle>
+          <DialogTitle>Pick a sitecore.json (or navigate to one)</DialogTitle>
         </DialogHeader>
         <div className="flex items-center gap-2 border rounded px-2 py-1.5 text-sm">
           <Button
@@ -84,32 +95,57 @@ export function FolderBrowser({ open, onClose, onConfirm }: FolderBrowserProps) 
           )}
           {!isLoading && !error && data && data.entries.length === 0 && (
             <div className="p-6 text-sm text-muted-foreground text-center">
-              No subfolders here.
+              Nothing here.
             </div>
           )}
           {!isLoading && !error && data && data.entries.length > 0 && (
             <ul>
-              {data.entries.map((entry) => (
-                <li key={entry.path}>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPath(entry.path)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-accent"
-                  >
-                    <Icon path={mdiFolder} className="size-4 text-muted-foreground" />
-                    <span className="flex-1 truncate">{entry.name}</span>
-                    {entry.hasSitecoreJson && (
-                      <span
-                        data-testid={`has-sitecore-json-${entry.name}`}
-                        className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
+              {data.entries.map((entry) => {
+                if (entry.kind === 'directory') {
+                  return (
+                    <li key={entry.path}>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPath(entry.path)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-accent"
                       >
-                        <Icon path={mdiCheckCircle} className="size-3" />
-                        sitecore.json
+                        <Icon path={mdiFolder} className="size-4 text-muted-foreground" />
+                        <span className="flex-1 truncate">{entry.name}</span>
+                        {entry.hasSitecoreJson && (
+                          <span
+                            data-testid={`has-sitecore-json-${entry.name}`}
+                            className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
+                          >
+                            <Icon path={mdiCheckCircle} className="size-3" />
+                            sitecore.json
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                }
+                return (
+                  <li key={entry.path}>
+                    <button
+                      type="button"
+                      onClick={() => handleConfigFileClick(entry)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-accent"
+                    >
+                      <Icon path={mdiFileCode} className="size-4 text-foreground" />
+                      <span className="flex-1 truncate font-mono">{entry.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {entry.moduleCount} module
+                        {entry.moduleCount === 1 ? '' : 's'}
+                        {entry.pushOpsSummary && (
+                          <>
+                            {' '}&middot; {entry.pushOpsSummary}
+                          </>
+                        )}
                       </span>
-                    )}
-                  </button>
-                </li>
-              ))}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -117,10 +153,15 @@ export function FolderBrowser({ open, onClose, onConfirm }: FolderBrowserProps) 
           <Button variant="outline" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" onClick={() => onConfirm(currentPath)}>
-            <Icon path={mdiFolderOpen} className="size-3 mr-1" />
-            Scan this folder for projects
-          </Button>
+          {sitecoreJsonAtRoot && (
+            <Button
+              size="sm"
+              onClick={() => handleConfigFileClick(sitecoreJsonAtRoot)}
+            >
+              <Icon path={mdiFileCode} className="size-3 mr-1" />
+              Use sitecore.json from this folder
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
