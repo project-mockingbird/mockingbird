@@ -1,4 +1,4 @@
-export type ReadinessStateName = 'initializing' | 'ready' | 'error';
+export type ReadinessStateName = 'initializing' | 'ready' | 'error' | 'no-project';
 
 export interface IndexProgress {
   scanned: number;
@@ -17,8 +17,12 @@ export class ReadinessState {
     return this.state === 'ready';
   }
 
+  isNoProject(): boolean {
+    return this.state === 'no-project';
+  }
+
   ready(): Promise<void> {
-    if (this.state === 'ready') return Promise.resolve();
+    if (this.state === 'ready' || this.state === 'no-project') return Promise.resolve();
     if (this.state === 'error') return Promise.reject(this.error ?? new Error('unknown error'));
     return new Promise<void>((resolve, reject) => {
       this.resolvers.push(resolve);
@@ -34,6 +38,15 @@ export class ReadinessState {
   markReady(): void {
     if (this.state !== 'initializing') return;
     this.state = 'ready';
+    const resolvers = this.resolvers;
+    this.resolvers = [];
+    this.rejecters = [];
+    for (const resolve of resolvers) resolve();
+  }
+
+  markNoProject(): void {
+    if (this.state !== 'initializing') return;
+    this.state = 'no-project';
     const resolvers = this.resolvers;
     this.resolvers = [];
     this.rejecters = [];
