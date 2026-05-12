@@ -16,9 +16,15 @@ beforeAll(async () => {
   await mkdir(join(workspaceRoot, 'project-b', 'nested'), { recursive: true });
   await mkdir(join(workspaceRoot, '.git'), { recursive: true });           // noise dir, should be excluded
   await mkdir(join(workspaceRoot, '.sitecore'), { recursive: true });       // legitimate dot-prefixed, should appear
-  await writeFile(join(workspaceRoot, 'project-a', 'sitecore.json'), '{"modules":["x/**"]}');
+  await writeFile(
+    join(workspaceRoot, 'project-a', 'sitecore.json'),
+    '{"$schema":"https://schema.sitecore.com/RootConfigurationFile.schema.json","modules":["x/**"]}',
+  );
   // project-b has no sitecore.json; nested subfolder does
-  await writeFile(join(workspaceRoot, 'project-b', 'nested', 'sitecore.json'), '{"modules":["y/**"]}');
+  await writeFile(
+    join(workspaceRoot, 'project-b', 'nested', 'sitecore.json'),
+    '{"$schema":"https://schema.sitecore.com/RootConfigurationFile.schema.json","modules":["y/**"]}',
+  );
   await writeFile(join(workspaceRoot, 'README.md'), '# top-level file - should not appear in listing');
   process.env.MOCKINGBIRD_WORKSPACE_ROOT = workspaceRoot;
 });
@@ -124,5 +130,101 @@ describe('GET /api/fs/list', () => {
     const body = res.json();
     const names = body.entries.map((e: { name: string }) => e.name);
     expect(names).not.toContain('README.md');
+  });
+
+  it('lists config-file entries when includeFiles=true is set', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/fs/list?path=/project-a&includeFiles=true',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const configFile = body.entries.find((e: { name: string }) => e.name === 'sitecore.json');
+    expect(configFile).toBeDefined();
+    expect(configFile.kind).toBe('config-file');
+    expect(configFile.isDirectory).toBe(false);
+    expect(typeof configFile.moduleCount).toBe('number');
+    expect(typeof configFile.pushOpsSummary).toBe('string');
+  });
+
+  it('omits files when includeFiles is false or unset', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/fs/list?path=/project-a',
+    });
+    const body = res.json();
+    const configFile = body.entries.find((e: { name: string }) => e.name === 'sitecore.json');
+    expect(configFile).toBeUndefined();
+  });
+
+  it('tags directory entries with kind="directory" when includeFiles=true', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/fs/list?path=/&includeFiles=true',
+    });
+    const body = res.json();
+    const projectA = body.entries.find((e: { name: string }) => e.name === 'project-a');
+    expect(projectA).toBeDefined();
+    expect(projectA.kind).toBe('directory');
+    expect(projectA.isDirectory).toBe(true);
+  });
+
+  it('omits JSON files that do not match the SCS root-config shape', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const filterDir = join(workspaceRoot, 'mixed-jsons');
+    await mkdir(filterDir, { recursive: true });
+    await writeFile(
+      join(filterDir, 'sitecore.json'),
+      '{"$schema":"https://schema.sitecore.com/RootConfigurationFile.schema.json","modules":["x/**"]}',
+    );
+    await writeFile(join(filterDir, 'package.json'), '{"name":"unrelated","version":"1.0.0"}');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/fs/list?path=/mixed-jsons&includeFiles=true',
+    });
+    const body = res.json();
+    const names = body.entries.map((e: { name: string }) => e.name);
+    expect(names).toContain('sitecore.json');
+    expect(names).not.toContain('package.json');
+  });
+
+  it('skips malformed JSON files without erroring', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const badDir = join(workspaceRoot, 'bad-json');
+    await mkdir(badDir, { recursive: true });
+    await writeFile(
+      join(badDir, 'sitecore.json'),
+      '{"$schema":"https://schema.sitecore.com/RootConfigurationFile.schema.json","modules":["x/**"]}',
+    );
+    await writeFile(join(badDir, 'broken.json'), '{not valid json');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/fs/list?path=/bad-json&includeFiles=true',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const names = body.entries.map((e: { name: string }) => e.name);
+    expect(names).toContain('sitecore.json');
+    expect(names).not.toContain('broken.json');
   });
 });
