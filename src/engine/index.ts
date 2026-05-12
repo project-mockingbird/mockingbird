@@ -19,7 +19,7 @@ import {
   FIELD_IDS,
 } from './constants.js';
 import type { EngineOptions, ItemNode, ModuleConfig, ScsItem, ValidationResult } from './types.js';
-import type { LayerSpec } from './layer-spec.js';
+import { comparePushOps, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
 import type { MutationPlan } from './mutation-plan.js';
 import { insertItem as insertItemImpl, type InsertItemArgs, type InsertItemResult } from './insert-item.js';
 import { resolveChildFilePath } from './child-file-path.js';
@@ -1002,31 +1002,83 @@ export class Engine {
    * down any currently-open workspace first. An empty layer list returns the
    * engine to 'no-project' state.
    *
-   * For Plan 2 Task 4, only the FIRST layer's sitecore.json is loaded into
-   * the tree; multi-layer merging arrives in a later task. The full layer
-   * list is still stored on the engine and exposed via getLayers() so the
-   * API + UI can see the user's choice.
+   * Single-layer mode delegates to startInit (file watcher + cache work as
+   * usual). Multi-layer mode runs a custom scan-and-merge that resolves
+   * per-item precedence via SCS allowedPushOperations strength. The file
+   * watcher is disabled in multi-layer mode (re-open to pick up changes);
+   * the engine cache also does not write in multi-layer mode for the same
+   * reason.
    */
   async openWorkspace(layers: LayerSpec[]): Promise<void> {
     await this.closeWorkspace();
     this._layers = layers.slice();
 
     if (layers.length === 0) {
-      // closeWorkspace already left us in no-project; nothing else to do.
       return;
     }
 
-    // Single-layer support for now. Multi-layer merge arrives in a later task.
-    const primary = layers[0];
-    this.options = {
-      ...this.options,
-      rootDir: dirname(primary.sitecoreJsonPath),
-    };
+    if (layers.length === 1) {
+      // Single-layer path: existing battle-tested flow via startInit.
+      const primary = layers[0];
+      this.options = {
+        ...this.options,
+        rootDir: dirname(primary.sitecoreJsonPath),
+      };
+      this._initStarted = false;
+      this.readiness.reset();
+      await this.startInit();
+      await this.readiness.ready();
+      return;
+    }
 
-    this._initStarted = false;
+    // Multi-layer path: scan each layer separately, merge by push-ops precedence.
     this.readiness.reset();
-    await this.startInit();
-    await this.readiness.ready();
+
+    const pushOpsByItemId = new Map<string, AllowedPushOperations | undefined>();
+
+    for (const layer of layers) {
+      const layerRoot = dirname(layer.sitecoreJsonPath);
+      const layerModules = await discoverModules(layerRoot).catch(() => []);
+      this.modules.push(...layerModules);
+
+      const partialTree = await scanDirectory(layerRoot, {
+        label: `scan:${layer.name}`,
+        onProgress: (scanned, total) => this.readiness.markProgress(scanned, total),
+      });
+
+      for (const node of partialTree.getAllNodes()) {
+        const incomingPushOps = this._findCoveringPushOps(node.item.path, layerModules);
+        const existingPushOps = pushOpsByItemId.get(node.item.id);
+        const isFirstSighting = !this.tree.getById(node.item.id);
+
+        if (isFirstSighting || comparePushOps(incomingPushOps, existingPushOps) > 0) {
+          this.tree.addItem(node.item, node.filePath, node.module);
+          pushOpsByItemId.set(node.item.id, incomingPushOps);
+        }
+      }
+    }
+
+    this.readiness.markReady();
+  }
+
+  /**
+   * Returns the allowedPushOperations value from the ModuleInclude that
+   * covers the given Sitecore item path. Walks the supplied modules' includes
+   * and picks the first include whose `path` is a prefix of the item path.
+   * Returns undefined if no covering include is found.
+   */
+  private _findCoveringPushOps(
+    itemPath: string,
+    modules: ModuleConfig[],
+  ): AllowedPushOperations | undefined {
+    for (const module of modules) {
+      for (const include of module.items.includes) {
+        if (itemPath === include.path || itemPath.startsWith(include.path + '/')) {
+          return include.allowedPushOperations;
+        }
+      }
+    }
+    return undefined;
   }
 
   /** Returns the layer set that was last opened via openWorkspace. */
