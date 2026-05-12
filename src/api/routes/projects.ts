@@ -5,6 +5,28 @@ import { discoverScsConfigs } from '../../engine/scs-config-detector.js';
 import type { Engine } from '../../engine/index.js';
 
 /**
+ * Merges user layers with layer stats and appends the synthetic ootb row when
+ * the registry is loaded. Used by the open, close, and status routes so all
+ * three return the same layers[] shape.
+ */
+export function layersWithEffectiveCount(
+  engine: Engine,
+): Array<{ name: string; sitecoreJsonPath?: string; color?: string; effectiveCount: number }> {
+  const userLayers = engine.getLayers();
+  const stats = engine.getLayerStats();
+  const statsByName = new Map(stats.map((s) => [s.name, s.effectiveCount]));
+  const result: Array<{ name: string; sitecoreJsonPath?: string; color?: string; effectiveCount: number }> =
+    userLayers.map((l) => ({
+      ...l,
+      effectiveCount: statsByName.get(l.name) ?? 0,
+    }));
+  if (statsByName.has('ootb')) {
+    result.push({ name: 'ootb', effectiveCount: statsByName.get('ootb')! });
+  }
+  return result;
+}
+
+/**
  * Resolves a workspace-relative path to an absolute path inside the workspace
  * root, rejecting any escape attempt. Returns null on invalid input or escape.
  * Mirrors the path-jail logic from src/api/routes/fs.ts.
@@ -95,7 +117,7 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       }
       throw err;
     }
-    reply.send({ state: engine.readiness.state, layers: engine.getLayers() });
+    reply.send({ state: engine.readiness.state, layers: layersWithEffectiveCount(engine) });
   });
 
   /**
@@ -105,6 +127,6 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
    */
   app.post('/api/projects/close', async (_req, reply) => {
     await engine.closeWorkspace();
-    reply.send({ state: engine.readiness.state, layers: engine.getLayers() });
+    reply.send({ state: engine.readiness.state, layers: layersWithEffectiveCount(engine) });
   });
 }

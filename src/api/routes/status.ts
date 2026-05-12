@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Engine } from '../../engine/index.js';
 import type { SessionManager } from '../../spe/host/session-manager.js';
 import { getPhaseTimings } from '../../engine/index-timing.js';
+import { layersWithEffectiveCount } from './projects.js';
 
 // Default URL scheme for the "Open in editor" buttons in QuickInfo and the
 // Raw YAML tab. VS Code understands `vscode://file/<absolute-path>`, accepts
@@ -17,13 +18,7 @@ export function registerStatusRoute(
 ): void {
   app.get('/api/status', async () => {
     const speSnap = speManager?.state ?? null;
-    const userLayers = engine.getLayers();
-    const stats = engine.getLayerStats();
-    const statsByName = new Map(stats.map((s) => [s.name, s.effectiveCount]));
-    const layers = [
-      ...userLayers.map((l) => ({ ...l, effectiveCount: statsByName.get(l.name) ?? 0 })),
-      ...(statsByName.has('ootb') ? [{ name: 'ootb', effectiveCount: statsByName.get('ootb')! }] : []),
-    ];
+    const layers = layersWithEffectiveCount(engine);
     return {
       state: engine.readiness.state,
       progress: engine.readiness.progress,

@@ -111,6 +111,25 @@ describe('POST /api/projects/open', () => {
     expect(r2.statusCode).toBe(400);
   });
 
+  it('open response includes effectiveCount on each layer and the ootb row', async () => {
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+    await created.engine.readiness.ready();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects/open',
+      payload: { layers: [{ sitecoreJsonPath: '/project-x/sitecore.json', name: 'project-x' }] },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const userLayer = body.layers.find((l: { name: string }) => l.name === 'project-x');
+    expect(userLayer).toBeDefined();
+    expect(typeof userLayer.effectiveCount).toBe('number');
+    // Ootb row should also be present because registry is loaded.
+    expect(body.layers.find((l: { name: string }) => l.name === 'ootb')).toBeDefined();
+  });
+
   it('returns 400 when a layer path escapes the workspace root', async () => {
     const created = await createServer({ registryPath: registryFixture });
     app = created.app;
