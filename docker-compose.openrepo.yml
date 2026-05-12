@@ -1,0 +1,46 @@
+# Reference compose for Open Repository mode.
+#
+# Use this compose template when you want to author against ANY repo on your
+# host machine without baking a specific workspace into the container at boot.
+# The web UI's first-run wizard handles project selection.
+#
+# Default mounts:
+#   - ${HOME} -> /workspaces        broad host bind for project discovery
+#   - ${HOME}/.mockingbird -> /data/state   persistent profiles + recents
+#
+# If your repos live outside your home directory, edit the first volume entry
+# (e.g. swap ${HOME} for D:/code on Windows).
+#
+# If you want a fixed workspace baked in (e.g. for head-app integrations),
+# use the env-var-driven docker-compose.yml instead.
+services:
+  mockingbird:
+    image: projectmockingbird/mockingbird:1.0.1.4
+    container_name: mockingbird
+    ports:
+      # Loopback-only by default - drop the 127.0.0.1 prefix to publish to all
+      # host interfaces.
+      - "127.0.0.1:3333:3333"
+    environment:
+      PORT: 3333
+      HOST: 0.0.0.0
+      MOCKINGBIRD_CACHE_PATH: /data/cache
+      INDEX_CACHE_PATH: /data/cache/index.json.gz
+      MOCKINGBIRD_WORKSPACE_ROOT: /workspaces
+      # SCS_SITECORE_JSON intentionally unset - the first-run wizard picks
+      # the workspace at runtime via /api/fs/list and /api/projects/open.
+    volumes:
+      # Workspace bind: everything you might want to author against has to be
+      # reachable under this mount. Default ${HOME} covers ~/projects, ~/code,
+      # ~/Documents, etc. Switch to a narrower path (e.g. ~/projects) if you
+      # want tighter filesystem visibility.
+      - ${HOME}:/workspaces
+      # State mount: profiles, recent projects, user prefs. Lives on the host
+      # so it survives container rebuilds + image upgrades.
+      - ${HOME}/.mockingbird:/data/state
+      # Cache volume (existing).
+      - mockingbird-cache:/data/cache
+    restart: unless-stopped
+
+volumes:
+  mockingbird-cache:

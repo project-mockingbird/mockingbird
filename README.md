@@ -94,6 +94,20 @@ To redirect Mockingbird at a different SCS tree, just edit `SCS_ROOT` in `.env` 
 
 > **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, pin to a specific tag (e.g. `1.0.0.0`) so a Hub republish doesn't move the floor.
 
+## Open Repository mode (preview)
+
+Run mockingbird without baking a workspace into the container at boot. The web UI's first-run wizard picks the project at runtime.
+
+```bash
+docker compose -f docker-compose.openrepo.yml up
+```
+
+Then open `http://localhost:3333`. Mockingbird boots with the OOTB Sitecore registry loaded but no serialized items - the wizard handles project selection.
+
+By default the compose binds your host's home directory (`${HOME}`) to `/workspaces` in the container so the wizard can browse any repo under your home. If your repos live elsewhere, edit the first volume entry in `docker-compose.openrepo.yml`.
+
+The existing env-var-driven `docker-compose.yml` is still the right choice for head-app integrations that want a fixed workspace baked in.
+
 ## Endpoints
 
 | What | URL |
@@ -114,7 +128,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 ```json
 {
-  "state": "initializing" | "ready" | "error",
+  "state": "initializing" | "ready" | "error" | "no-project",
   "progress": { "scanned": 0, "total": 0 },
   "error": null,
   "itemCount": 0,
@@ -125,7 +139,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 | Field | Meaning |
 |---|---|
-| `state` | `initializing` while parsing, `ready` once the tree is queryable, `error` on a fatal init failure |
+| `state` | `initializing` while parsing, `ready` once the tree is queryable, `error` on a fatal init failure, `no-project` when booted without a workspace (Open Repository mode) |
 | `progress` | Live scan counter; populated during `initializing` |
 | `error` | Error message string when `state` is `error`, otherwise `null` |
 | `itemCount` | Total parsed-tree items once `state` is `ready` (zero before) |
