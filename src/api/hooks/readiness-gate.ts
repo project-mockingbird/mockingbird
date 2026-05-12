@@ -10,7 +10,7 @@ export function registerReadinessGate(app: FastifyInstance, readiness: Readiness
     // Admin tooling is observable-during-indexing on purpose: the Logs
     // page is most useful precisely while the engine is warming up.
     if (url.startsWith('/api/admin/')) return;
-    if (readiness.isReady()) return;
+    if (readiness.isReady() || readiness.state === 'no-project') return;
     if (readiness.state === 'error') {
       reply.code(503).send({
         status: 'error',

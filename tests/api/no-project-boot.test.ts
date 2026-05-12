@@ -44,3 +44,29 @@ describe('Server boot without SCS_SITECORE_JSON', () => {
     expect(body.registryLoaded).toBe(true);
   });
 });
+
+describe('Readiness gate in no-project mode', () => {
+  it('GET /api/status returns 200 (not 503) in no-project mode', async () => {
+    delete process.env.SCS_SITECORE_JSON;
+    delete process.env.SCS_CONTENT_SITECORE_JSON;
+
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('GET /api/modules returns 200 (not 503) in no-project mode', async () => {
+    delete process.env.SCS_SITECORE_JSON;
+    delete process.env.SCS_CONTENT_SITECORE_JSON;
+
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/modules' });
+    expect(res.statusCode).toBe(200);
+  });
+});
