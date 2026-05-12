@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { LayerSelectionDialog } from './LayerSelectionDialog';
 
@@ -177,5 +178,49 @@ describe('LayerSelectionDialog', () => {
     const openBtn = screen.getByRole('button', { name: /opening/i });
     expect(openBtn).toBeDisabled();
     expect(document.body.querySelector('.animate-spin')).toBeInTheDocument();
+  });
+
+  it('user can rename a layer inline before opening the project', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/p"
+        candidates={[{ sitecoreJsonPath: '/p/sitecore.json', moduleCount: 1, pushOpsSummary: 'CreateUpdateAndDelete' }]}
+        onClose={() => {}}
+        onConfirm={onConfirm}
+      />,
+    );
+    await user.click(screen.getByText('p'));
+    const input = screen.getByRole('textbox');
+    await user.clear(input);
+    await user.type(input, 'primary{Enter}');
+    await user.click(screen.getByRole('button', { name: /open project/i }));
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ name: 'primary' })]),
+    );
+  });
+
+  it('renaming root-level "/sitecore.json" away from "layer" works (deriveName fix)', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/"
+        candidates={[{ sitecoreJsonPath: '/sitecore.json', moduleCount: 1, pushOpsSummary: 'CreateUpdateAndDelete' }]}
+        onClose={() => {}}
+        onConfirm={onConfirm}
+      />,
+    );
+    await user.click(screen.getByText('layer'));
+    const input = screen.getByRole('textbox');
+    await user.clear(input);
+    await user.type(input, 'workspace-root{Enter}');
+    await user.click(screen.getByRole('button', { name: /open project/i }));
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ name: 'workspace-root' })]),
+    );
   });
 });

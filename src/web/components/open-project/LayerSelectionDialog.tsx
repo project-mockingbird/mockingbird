@@ -11,8 +11,10 @@ import {
 import { Button } from '@/components/ui/button';
 import type { ScsConfigCandidate } from '@/hooks/useDiscoverLayers';
 import type { OpenProjectLayer } from '@/hooks/useOpenProject';
-import { LAYER_COLOR_PALETTE, assignLayerColor } from './layer-colors';
+import { assignLayerColor } from './layer-colors';
 import { detectOverlaps } from './duplicate-detect';
+import { EditableLayerName } from '@/components/sidebar/EditableLayerName';
+import { ColorSwatch } from '@/components/sidebar/ColorSwatch';
 
 interface LayerSelectionDialogProps {
   open: boolean;
@@ -89,18 +91,6 @@ export function LayerSelectionDialog({
     });
   };
 
-  const cycleColor = (idx: number) => {
-    setRows((prev) => {
-      const next = prev.slice();
-      const currentIdx = LAYER_COLOR_PALETTE.indexOf(
-        next[idx].color as (typeof LAYER_COLOR_PALETTE)[number],
-      );
-      const nextIdx = (currentIdx + 1) % LAYER_COLOR_PALETTE.length;
-      next[idx] = { ...next[idx], color: LAYER_COLOR_PALETTE[nextIdx] };
-      return next;
-    });
-  };
-
   const checkedCount = rows.filter((r) => r.checked).length;
   const canSubmit = checkedCount > 0 && !isPending;
 
@@ -149,15 +139,26 @@ export function LayerSelectionDialog({
                     aria-label={`Include layer ${row.name}`}
                     className="mt-1"
                   />
-                  <button
-                    type="button"
-                    onClick={() => cycleColor(idx)}
-                    className="mt-0.5 size-4 rounded border shrink-0"
-                    style={{ backgroundColor: row.color }}
-                    aria-label={`Layer color for ${row.name}`}
+                  <ColorSwatch
+                    value={row.color}
+                    onChange={(c) => setRows((prev) => {
+                      const next = prev.slice();
+                      next[idx] = { ...next[idx], color: c };
+                      return next;
+                    })}
+                    ariaLabel={`Layer color for ${row.name}`}
+                    className="mt-0.5"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-mono text-xs truncate">
+                    <EditableLayerName
+                      value={row.name}
+                      onChange={(n) => setRows((prev) => {
+                        const next = prev.slice();
+                        next[idx] = { ...next[idx], name: n };
+                        return next;
+                      })}
+                    />
+                    <div className="font-mono text-xs truncate text-muted-foreground">
                       {relativeTo(rootPath, row.candidate.sitecoreJsonPath)}
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
