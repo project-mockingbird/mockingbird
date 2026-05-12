@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { FolderBrowser } from './FolderBrowser';
 import { LayerSelectionDialog } from './LayerSelectionDialog';
+import type { LayerRowState } from './LayerSelectionDialog';
 import { useOpenProject } from '@/hooks/useOpenProject';
+import { assignLayerColor } from './layer-colors';
+import { deriveName } from './layer-name';
 
 interface OpenProjectWizardProps {
   open: boolean;
@@ -18,26 +21,23 @@ interface OpenProjectWizardProps {
 
 type Step = 'folder' | 'layers';
 
-interface PickedLayer {
-  sitecoreJsonPath: string;
-  moduleCount: number;
-  pushOpsSummary: string;
-}
-
 /**
  * Two-step wizard: pick a sitecore.json file (or any SCS root-config-shaped
  * JSON), then confirm + open. Multi-layer is progressive via the dialog's
  * "Add another layer" button which returns the wizard to the folder step.
+ *
+ * Row state (name, color, checked) is owned here so that user edits survive
+ * the round-trip back to FolderBrowser when "Add another layer" is clicked.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: OpenProjectWizardProps) {
   const [step, setStep] = useState<Step>('folder');
-  const [pickedLayers, setPickedLayers] = useState<PickedLayer[]>([]);
+  const [rows, setRows] = useState<LayerRowState[]>([]);
   const openProject = useOpenProject();
 
   const reset = () => {
     setStep('folder');
-    setPickedLayers([]);
+    setRows([]);
     openProject.reset();
   };
 
@@ -51,13 +51,18 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
     moduleCount: number,
     pushOpsSummary: string,
   ) => {
-    if (pickedLayers.some((l) => l.sitecoreJsonPath === filePath)) {
+    if (rows.some((r) => r.candidate.sitecoreJsonPath === filePath)) {
       toast.warning('That layer is already added.');
       return;
     }
-    setPickedLayers((prev) => [
+    setRows((prev) => [
       ...prev,
-      { sitecoreJsonPath: filePath, moduleCount, pushOpsSummary },
+      {
+        candidate: { sitecoreJsonPath: filePath, moduleCount, pushOpsSummary },
+        checked: true,
+        color: assignLayerColor(prev.length),
+        name: deriveName(filePath),
+      },
     ]);
     setStep('layers');
   };
@@ -95,11 +100,9 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
     <LayerSelectionDialog
       open={open}
       rootPath="/"
-      candidates={pickedLayers.map((p) => ({
-        sitecoreJsonPath: p.sitecoreJsonPath,
-        moduleCount: p.moduleCount,
-        pushOpsSummary: p.pushOpsSummary,
-      }))}
+      candidates={rows.map((r) => r.candidate)}
+      initialRows={rows}
+      onRowsChange={setRows}
       onClose={handleClose}
       onConfirm={handleLayersConfirm}
       onAddAnother={handleAddAnother}

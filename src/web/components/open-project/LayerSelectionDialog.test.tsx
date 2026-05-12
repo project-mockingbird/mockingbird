@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { LayerSelectionDialog } from './LayerSelectionDialog';
+import type { LayerRowState } from './LayerSelectionDialog';
 
 const CANDIDATES = [
   {
@@ -200,6 +201,57 @@ describe('LayerSelectionDialog', () => {
     expect(onConfirm).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ name: 'primary' })]),
     );
+  });
+
+  it('initialRows seeds state so a rename made before remount is preserved', async () => {
+    // Simulate wizard passing down previously-edited rows on a second mount
+    const seededRows: LayerRowState[] = [
+      {
+        candidate: { sitecoreJsonPath: '/workspaces/repo/authoring/sitecore.json', moduleCount: 3, pushOpsSummary: 'CreateAndUpdate' },
+        checked: true,
+        color: '#22c55e',
+        name: 'my-custom-name',
+      },
+    ];
+    const onConfirm = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={seededRows.map((r) => r.candidate)}
+        initialRows={seededRows}
+        onClose={() => {}}
+        onConfirm={onConfirm}
+      />,
+    );
+    // The custom name should appear rather than the auto-derived "authoring"
+    expect(screen.getByText('my-custom-name')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /open project/i }));
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ name: 'my-custom-name' })]),
+    );
+  });
+
+  it('onRowsChange is called when a layer is renamed', async () => {
+    const user = userEvent.setup();
+    const onRowsChange = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={[{ sitecoreJsonPath: '/workspaces/repo/authoring/sitecore.json', moduleCount: 3, pushOpsSummary: 'CreateAndUpdate' }]}
+        onClose={() => {}}
+        onConfirm={() => {}}
+        onRowsChange={onRowsChange}
+      />,
+    );
+    await user.click(screen.getByText('authoring'));
+    const input = screen.getByRole('textbox');
+    await user.clear(input);
+    await user.type(input, 'renamed{Enter}');
+    expect(onRowsChange).toHaveBeenCalled();
+    const lastCall = onRowsChange.mock.calls[onRowsChange.mock.calls.length - 1][0] as LayerRowState[];
+    expect(lastCall[0].name).toBe('renamed');
   });
 
   it('renaming root-level "/sitecore.json" away from "layer" works (deriveName fix)', async () => {

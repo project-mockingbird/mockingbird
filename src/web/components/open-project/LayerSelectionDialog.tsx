@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import type { ScsConfigCandidate } from '@/hooks/useDiscoverLayers';
 import type { OpenProjectLayer } from '@/hooks/useOpenProject';
 import { assignLayerColor } from './layer-colors';
+import { deriveName } from './layer-name';
 import { detectOverlaps } from './duplicate-detect';
 import { EditableLayerName } from '@/components/sidebar/EditableLayerName';
 import { ColorSwatch } from '@/components/sidebar/ColorSwatch';
@@ -25,24 +26,27 @@ interface LayerSelectionDialogProps {
   onConfirm: (layers: OpenProjectLayer[]) => void;
   /** When provided, an "Add another layer" footer button appears that re-opens the FolderBrowser. */
   onAddAnother?: () => void;
+  /**
+   * Seed the row state on first mount. When omitted, state is derived from
+   * `candidates`. Pass this from a parent that owns row state to preserve
+   * user edits across Add-another-layer round-trips.
+   */
+  initialRows?: LayerRowState[];
+  /**
+   * Called whenever the internal row state changes. Use this to sync edits
+   * back up to a parent that owns the row state.
+   */
+  onRowsChange?: (rows: LayerRowState[]) => void;
   isPending?: boolean;
   serverError?: string | null;
 }
 
-interface LayerRowState {
+export interface LayerRowState {
   candidate: ScsConfigCandidate;
   checked: boolean;
   color: string;
   /** Human-readable layer name derived from the parent folder of the sitecore.json. */
   name: string;
-}
-
-function deriveName(sitecoreJsonPath: string): string {
-  const trimmed = sitecoreJsonPath.replace(/\/[^/]+$/, '');
-  const slash = trimmed.lastIndexOf('/');
-  if (slash < 0) return 'layer';
-  const parent = trimmed.slice(slash + 1);
-  return parent.length > 0 ? parent : 'layer';
 }
 
 function relativeTo(rootPath: string, sitecoreJsonPath: string): string {
@@ -60,21 +64,32 @@ export function LayerSelectionDialog({
   onClose,
   onConfirm,
   onAddAnother,
+  initialRows,
+  onRowsChange,
   isPending = false,
   serverError = null,
 }: LayerSelectionDialogProps) {
   const overlaps = useMemo(() => detectOverlaps(candidates), [candidates]);
-  const [rows, setRows] = useState<LayerRowState[]>(() =>
-    candidates.map((c, i) => ({
+  const [rows, setRows] = useState<LayerRowState[]>(() => {
+    if (initialRows && initialRows.length > 0) return initialRows;
+    return candidates.map((c, i) => ({
       candidate: c,
       checked: true,
       color: assignLayerColor(i),
       name: deriveName(c.sitecoreJsonPath),
-    })),
-  );
+    }));
+  });
+
+  const updateRows = (updater: (prev: LayerRowState[]) => LayerRowState[]) => {
+    setRows((prev) => {
+      const next = updater(prev);
+      onRowsChange?.(next);
+      return next;
+    });
+  };
 
   const toggle = (idx: number) => {
-    setRows((prev) => {
+    updateRows((prev) => {
       const next = prev.slice();
       next[idx] = { ...next[idx], checked: !next[idx].checked };
       return next;
@@ -84,7 +99,7 @@ export function LayerSelectionDialog({
   const move = (idx: number, dir: -1 | 1) => {
     const target = idx + dir;
     if (target < 0 || target >= rows.length) return;
-    setRows((prev) => {
+    updateRows((prev) => {
       const next = prev.slice();
       [next[idx], next[target]] = [next[target], next[idx]];
       return next;
@@ -141,7 +156,7 @@ export function LayerSelectionDialog({
                   />
                   <ColorSwatch
                     value={row.color}
-                    onChange={(c) => setRows((prev) => {
+                    onChange={(c) => updateRows((prev) => {
                       const next = prev.slice();
                       next[idx] = { ...next[idx], color: c };
                       return next;
@@ -152,7 +167,7 @@ export function LayerSelectionDialog({
                   <div className="flex-1 min-w-0">
                     <EditableLayerName
                       value={row.name}
-                      onChange={(n) => setRows((prev) => {
+                      onChange={(n) => updateRows((prev) => {
                         const next = prev.slice();
                         next[idx] = { ...next[idx], name: n };
                         return next;
