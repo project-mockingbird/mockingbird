@@ -6,8 +6,7 @@ import type { Engine } from '../../engine/index.js';
 
 /**
  * Merges user layers with layer stats and appends the synthetic ootb row when
- * the registry is loaded. Used by the open, close, and status routes so all
- * three return the same layers[] shape.
+ * the registry is loaded. Used by the open and status routes.
  */
 export function layersWithEffectiveCount(
   engine: Engine,
@@ -124,9 +123,12 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
    * Tears down the current workspace and transitions the engine back to
    * no-project. Idempotent: calling on a no-project engine returns the same
    * shape without error.
+   *
+   * Per spec the response is always { state: 'no-project', layers: [] }.
+   * Consumers don't need substrate counts here; the state itself signals closure.
    */
   app.post('/api/projects/close', async (_req, reply) => {
     await engine.closeWorkspace();
-    reply.send({ state: engine.readiness.state, layers: layersWithEffectiveCount(engine) });
+    reply.send({ state: engine.readiness.state, layers: [] });
   });
 }

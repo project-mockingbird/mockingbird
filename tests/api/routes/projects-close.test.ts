@@ -56,9 +56,7 @@ describe('POST /api/projects/close', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.state).toBe('no-project');
-    // User layers are cleared; ootb row appears because registry is loaded.
-    expect(body.layers.find((l: { name: string }) => l.name === 'x')).toBeUndefined();
-    expect(body.layers.find((l: { name: string }) => l.name === 'ootb')).toBeDefined();
+    expect(body.layers).toEqual([]);
     expect(created.engine.readiness.state).toBe('no-project');
   });
 
@@ -71,9 +69,6 @@ describe('POST /api/projects/close', () => {
 
     const res = await app.inject({ method: 'POST', url: '/api/projects/close', payload: {} });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.state).toBe('no-project');
-    // No user layers; ootb row present because registry fixture is loaded.
-    expect(body.layers.every((l: { name: string }) => l.name === 'ootb')).toBe(true);
+    expect(res.json()).toEqual({ state: 'no-project', layers: [] });
   });
 });
