@@ -1168,8 +1168,6 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
   const { data: ancestors } = useAncestors(selectedId);
   const [search, setSearch] = useState('');
   const [collapseKey, setCollapseKey] = useState(0);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  void wizardOpen;
 
   // Set of ancestor IDs that should auto-expand so the selected node becomes
   // visible in the tree. Recomputed when the ancestor chain changes; child
@@ -1243,7 +1241,7 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
   }, [tabId]);
 
   if (status?.state === 'no-project') {
-    return <NoProjectState onOpenProject={() => setWizardOpen(true)} />;
+    return <NoProjectState />;
   }
 
   if (status?.state !== 'ready' || isLoading) {
