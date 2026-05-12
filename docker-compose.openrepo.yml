@@ -5,11 +5,13 @@
 # The web UI's first-run wizard handles project selection.
 #
 # Default mounts:
-#   - ${HOME} -> /workspaces        broad host bind for project discovery
-#   - ${HOME}/.mockingbird -> /data/state   persistent profiles + recents
+#   - ${MOCKINGBIRD_WORKSPACE_HOST:-./} -> /workspaces   broad host bind for project discovery
+#   - ./data/state                      -> /data/state   persistent profiles + recents
 #
-# If your repos live outside your home directory, edit the first volume entry
-# (e.g. swap ${HOME} for D:/code on Windows).
+# By default the directory containing this compose file (the repo root) is
+# mounted at /workspaces - zero shell setup required. Override
+# MOCKINGBIRD_WORKSPACE_HOST in .env to point at a broader directory if your
+# authoring repos live elsewhere (e.g. C:/projects, ~/code, $HOME).
 #
 # If you want a fixed workspace baked in (e.g. for head-app integrations),
 # use the env-var-driven docker-compose.yml instead.
@@ -31,13 +33,14 @@ services:
       # the workspace at runtime via /api/fs/list and /api/projects/open.
     volumes:
       # Workspace bind: everything you might want to author against has to be
-      # reachable under this mount. Default ${HOME} covers ~/projects, ~/code,
-      # ~/Documents, etc. Switch to a narrower path (e.g. ~/projects) if you
-      # want tighter filesystem visibility.
-      - ${HOME}:/workspaces
+      # reachable under this mount. Default is the directory you ran compose
+      # from (the repo root). Override via MOCKINGBIRD_WORKSPACE_HOST in .env
+      # to widen (e.g. C:/projects on Windows, ~/code on macOS/Linux).
+      - ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
       # State mount: profiles, recent projects, user prefs. Lives on the host
-      # so it survives container rebuilds + image upgrades.
-      - ${HOME}/.mockingbird:/data/state
+      # next to the compose file so it survives container rebuilds + image
+      # upgrades. Mirrors the cache-mount convention.
+      - ./data/state:/data/state
       # Cache volume (existing).
       - mockingbird-cache:/data/cache
     restart: unless-stopped
