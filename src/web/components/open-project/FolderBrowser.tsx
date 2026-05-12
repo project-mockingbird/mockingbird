@@ -30,11 +30,13 @@ function parentPathOf(path: string): string | null {
 /**
  * Folder + file picker. Walks the workspace mount via /api/fs/list?includeFiles=true.
  * Directories are clickable to navigate; config-file rows (JSON files matching the
- * SCS root-config shape) are clickable to pick. A "Use sitecore.json from this folder"
- * shortcut activates when the current folder itself contains a sitecore.json file.
+ * SCS root-config shape) are single-click-to-highlight. A "Select" footer button
+ * commits the highlighted file. A "Use sitecore.json from this folder" shortcut
+ * activates when the current folder itself contains a sitecore.json file.
  */
 export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps) {
   const [currentPath, setCurrentPath] = useState('/');
+  const [selectedFile, setSelectedFile] = useState<FsConfigFileEntry | null>(null);
   const { data, isLoading, error } = useFsList(open ? currentPath : null, {
     includeFiles: true,
   });
@@ -45,11 +47,25 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
   );
 
   const goUp = () => {
-    if (parent !== null) setCurrentPath(parent);
+    if (parent !== null) {
+      setCurrentPath(parent);
+      setSelectedFile(null);
+    }
   };
 
-  const handleConfigFileClick = (entry: FsConfigFileEntry) => {
-    onFilePick(entry.path, entry.moduleCount, entry.pushOpsSummary);
+  const handleFileRowClick = (entry: FsConfigFileEntry) => {
+    setSelectedFile((prev) => (prev?.path === entry.path ? null : entry));
+  };
+
+  const handleSelect = () => {
+    if (selectedFile) {
+      onFilePick(selectedFile.path, selectedFile.moduleCount, selectedFile.pushOpsSummary);
+    }
+  };
+
+  const handleFolderClick = (path: string) => {
+    setCurrentPath(path);
+    setSelectedFile(null);
   };
 
   return (
@@ -58,6 +74,7 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
       onOpenChange={(o) => {
         if (!o) {
           setCurrentPath('/');
+          setSelectedFile(null);
           onClose();
         }
       }}
@@ -106,7 +123,7 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
                     <li key={entry.path}>
                       <button
                         type="button"
-                        onClick={() => setCurrentPath(entry.path)}
+                        onClick={() => handleFolderClick(entry.path)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-accent"
                       >
                         <Icon path={mdiFolder} className="size-4 text-muted-foreground" />
@@ -124,12 +141,14 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
                     </li>
                   );
                 }
+                const isSelected = selectedFile?.path === entry.path;
                 return (
                   <li key={entry.path}>
                     <button
                       type="button"
-                      onClick={() => handleConfigFileClick(entry)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-accent"
+                      onClick={() => handleFileRowClick(entry)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-accent${isSelected ? ' bg-accent' : ''}`}
+                      aria-pressed={isSelected}
                     >
                       <Icon path={mdiFileCode} className="size-4 text-foreground" />
                       <span className="flex-1 truncate font-mono">{entry.name}</span>
@@ -155,13 +174,21 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
           </Button>
           {sitecoreJsonAtRoot && (
             <Button
+              variant="outline"
               size="sm"
-              onClick={() => handleConfigFileClick(sitecoreJsonAtRoot)}
+              onClick={() => onFilePick(sitecoreJsonAtRoot.path, sitecoreJsonAtRoot.moduleCount, sitecoreJsonAtRoot.pushOpsSummary)}
             >
               <Icon path={mdiFileCode} className="size-3 mr-1" />
               Use sitecore.json from this folder
             </Button>
           )}
+          <Button
+            size="sm"
+            disabled={selectedFile === null}
+            onClick={handleSelect}
+          >
+            Select
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

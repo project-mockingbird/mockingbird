@@ -50,11 +50,18 @@ function wrap(ui: React.ReactElement) {
   );
 }
 
+/** Helper: click a file row to highlight it, then click Select to pick it. */
+async function pickFile(fileName: string) {
+  await waitFor(() => screen.getByText(fileName));
+  fireEvent.click(screen.getByText(fileName));
+  fireEvent.click(screen.getByRole('button', { name: /^select$/i }));
+}
+
 describe('OpenProjectWizard', () => {
   let restoreFetch: () => void = () => {};
   afterEach(() => restoreFetch());
 
-  it('clicking a config-file row advances to the layer-selection step with one layer', async () => {
+  it('selecting a config file advances to the layer-selection step with one layer', async () => {
     restoreFetch = setupFetchMock((_method, url) => {
       if (url.includes('/api/fs/list')) {
         return {
@@ -75,8 +82,7 @@ describe('OpenProjectWizard', () => {
       return {};
     });
     wrap(<OpenProjectWizard open onClose={() => {}} />);
-    await waitFor(() => screen.getByText('sitecore.json'));
-    fireEvent.click(screen.getByText('sitecore.json'));
+    await pickFile('sitecore.json');
     await waitFor(() => screen.getByRole('button', { name: /open project/i }));
     expect(screen.getByText('sitecore.json')).toBeInTheDocument();
   });
@@ -102,8 +108,7 @@ describe('OpenProjectWizard', () => {
       return {};
     });
     wrap(<OpenProjectWizard open onClose={() => {}} />);
-    await waitFor(() => screen.getByText('sitecore.json'));
-    fireEvent.click(screen.getByText('sitecore.json'));
+    await pickFile('sitecore.json');
     await waitFor(() => screen.getByRole('button', { name: /add another layer/i }));
     fireEvent.click(screen.getByRole('button', { name: /add another layer/i }));
     await waitFor(() => screen.getByTestId('folder-browser-path'));
@@ -131,12 +136,13 @@ describe('OpenProjectWizard', () => {
       return {};
     });
     wrap(<OpenProjectWizard open onClose={() => {}} />);
-    await waitFor(() => screen.getByText('sitecore.json'));
-    fireEvent.click(screen.getByText('sitecore.json'));
+    await pickFile('sitecore.json');
     await waitFor(() => screen.getByRole('button', { name: /add another layer/i }));
     fireEvent.click(screen.getByRole('button', { name: /add another layer/i }));
     await waitFor(() => screen.getByTestId('folder-browser-path'));
+    // Highlight and select the same file again
     fireEvent.click(screen.getByText('sitecore.json'));
+    fireEvent.click(screen.getByRole('button', { name: /^select$/i }));
     await waitFor(() => expect(document.body.textContent ?? '').toMatch(/already added/i));
   });
 });

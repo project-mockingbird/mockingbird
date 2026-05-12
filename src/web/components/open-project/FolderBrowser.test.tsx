@@ -66,7 +66,7 @@ describe('FolderBrowser', () => {
     expect(screen.getByText(/CreateAndUpdate/)).toBeInTheDocument();
   });
 
-  it('fires onFilePick when a config-file row is clicked', async () => {
+  it('clicking a file row highlights it but does NOT fire onFilePick', async () => {
     restoreFetch = setupFetchMock(() => ({
       path: '/some-project',
       entries: [
@@ -85,11 +85,56 @@ describe('FolderBrowser', () => {
     wrap(<FolderBrowser open onClose={() => {}} onFilePick={onFilePick} />);
     await waitFor(() => screen.getByText('sitecore.json'));
     fireEvent.click(screen.getByText('sitecore.json'));
+    expect(onFilePick).not.toHaveBeenCalled();
+    // Select button should now be enabled
+    expect(screen.getByRole('button', { name: /^select$/i })).toBeEnabled();
+  });
+
+  it('fires onFilePick when file row is clicked then Select button is clicked', async () => {
+    restoreFetch = setupFetchMock(() => ({
+      path: '/some-project',
+      entries: [
+        {
+          name: 'sitecore.json',
+          path: '/some-project/sitecore.json',
+          isDirectory: false,
+          hasSitecoreJson: false,
+          kind: 'config-file',
+          moduleCount: 1,
+          pushOpsSummary: 'CreateUpdateAndDelete',
+        },
+      ],
+    }));
+    const onFilePick = vi.fn();
+    wrap(<FolderBrowser open onClose={() => {}} onFilePick={onFilePick} />);
+    await waitFor(() => screen.getByText('sitecore.json'));
+    fireEvent.click(screen.getByText('sitecore.json'));
+    fireEvent.click(screen.getByRole('button', { name: /^select$/i }));
     expect(onFilePick).toHaveBeenCalledWith(
       '/some-project/sitecore.json',
       1,
       'CreateUpdateAndDelete',
     );
+  });
+
+  it('Select button is disabled when no file row is highlighted', async () => {
+    restoreFetch = setupFetchMock(() => ({
+      path: '/some-project',
+      entries: [
+        {
+          name: 'sitecore.json',
+          path: '/some-project/sitecore.json',
+          isDirectory: false,
+          hasSitecoreJson: false,
+          kind: 'config-file',
+          moduleCount: 1,
+          pushOpsSummary: 'CreateAndUpdate',
+        },
+      ],
+    }));
+    wrap(<FolderBrowser open onClose={() => {}} onFilePick={() => {}} />);
+    await waitFor(() => screen.getByText('sitecore.json'));
+    expect(screen.getByRole('button', { name: /^select$/i })).toBeDisabled();
   });
 
   it('shows the "Use sitecore.json from this folder" shortcut when current path contains a sitecore.json', async () => {
