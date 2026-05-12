@@ -1359,9 +1359,13 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
     function filterByLayer(node: TreeNode): TreeNode | null {
       const winner = node.provenance?.winnerLayer;
       const allowSelf = !winner || layerVisMap[winner] !== false;
-      const children = (node.children ?? [])
-        .map(filterByLayer)
-        .filter(Boolean) as TreeNode[];
+      // Lazy-load case: children not yet fetched. Preserve undefined so
+      // useChildren fires on expand. Filter applies only to nodes whose
+      // children are inline in the initial tree response.
+      if (node.children === undefined) {
+        return allowSelf ? node : null;
+      }
+      const children = node.children.map(filterByLayer).filter(Boolean) as TreeNode[];
       if (!allowSelf && children.length === 0) return null;
       return { ...node, children };
     }
