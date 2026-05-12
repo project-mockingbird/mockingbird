@@ -22,6 +22,7 @@ export function registerStatusRoute(
       progress: engine.readiness.progress,
       error: engine.readiness.error?.message ?? null,
       itemCount: engine.readiness.isReady() ? engine.getAllItems().length : 0,
+      layers: engine.getLayers(),
       registryLoaded: engine.isRegistryLoaded(),
       cacheStale: engine.isCacheStale(),
       editorUrlTemplate: process.env.MOCKINGBIRD_EDITOR_URL_TEMPLATE ?? DEFAULT_EDITOR_URL_TEMPLATE,

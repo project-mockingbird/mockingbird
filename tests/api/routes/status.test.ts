@@ -94,4 +94,15 @@ describe('GET /api/status (no-project boot)', () => {
     expect(body.state).toBe('no-project');
     expect(body.registryLoaded).toBe(true);
   });
+
+  it('reports layers as empty array in no-project mode', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+    expect(Array.isArray(body.layers)).toBe(true);
+    expect(body.layers.length).toBe(0);
+  });
 });

@@ -47,4 +47,45 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       reply.send({ candidates });
     },
   );
+
+  /**
+   * Opens a workspace by activating the given layers. Each layer's
+   * sitecoreJsonPath is workspace-relative and path-jailed.
+   */
+  app.post<{
+    Body: {
+      layers?: Array<{
+        sitecoreJsonPath?: string;
+        name?: string;
+        color?: string;
+      }>;
+    };
+  }>('/api/projects/open', async (req, reply) => {
+    const layers = req.body?.layers;
+    if (!Array.isArray(layers) || layers.length === 0) {
+      reply.code(400).send({ error: 'body.layers must be a non-empty array' });
+      return;
+    }
+
+    const resolved = [];
+    for (const layer of layers) {
+      if (typeof layer.sitecoreJsonPath !== 'string' || typeof layer.name !== 'string') {
+        reply.code(400).send({ error: 'each layer must have sitecoreJsonPath and name strings' });
+        return;
+      }
+      const absolute = resolveWorkspacePath(workspaceRoot, layer.sitecoreJsonPath);
+      if (absolute === null) {
+        reply.code(400).send({ error: `layer path "${layer.sitecoreJsonPath}" escapes workspace root` });
+        return;
+      }
+      resolved.push({
+        sitecoreJsonPath: absolute,
+        name: layer.name,
+        color: layer.color,
+      });
+    }
+
+    await engine.openWorkspace(resolved);
+    reply.send({ state: engine.readiness.state, layers: engine.getLayers() });
+  });
 }
