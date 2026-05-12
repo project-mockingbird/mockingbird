@@ -136,8 +136,11 @@ export interface ItemChangeEvent {
 
 /** Options for the engine's public API. */
 export interface EngineOptions {
-  /** Root directory containing sitecore.json and serialized items. */
-  rootDir: string;
+  /** Root directory containing sitecore.json and serialized items. When omitted,
+   *  engine boots in 'no-project' mode: registry loads but no serialized items
+   *  are indexed. Used for the Open Repository mode's first-run state.
+   */
+  rootDir?: string;
   /** Additional roots with their own sitecore.json to merge into the tree. */
   contentPaths?: string[];
   /** Whether to watch for file changes. Default: false. */

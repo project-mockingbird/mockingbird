@@ -55,6 +55,9 @@ import type { ModuleConfig } from '../types.js';
  */
 function deriveEmitTarget(engine: Engine, baseName: string): string {
   const rootDir = engine.getRootDir();
+  if (!rootDir) {
+    throw new Error('Scaffolding requires an open project (rootDir is undefined)');
+  }
 
   // 1. Mirror an existing loaded module's directory + extension.
   for (const mod of engine.getModules()) {

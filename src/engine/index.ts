@@ -85,7 +85,9 @@ export class Engine {
     this._initStarted = true;
 
     const modulesTimer = startPhase('discoverModules (rootDir)');
-    this.modules = await discoverModules(this.options.rootDir).catch(() => []);
+    this.modules = this.options.rootDir
+      ? await discoverModules(this.options.rootDir).catch(() => [])
+      : [];
     modulesTimer.end({ modules: this.modules.length });
 
     if (this.options.registryPath) {
@@ -120,6 +122,11 @@ export class Engine {
 
   private async indexInBackground(): Promise<void> {
     const totalTimer = startPhase('indexInBackground TOTAL');
+    if (!this.options.rootDir) {
+      totalTimer.end({ items: 0, ready: 'no-project' });
+      this.readiness.markNoProject();
+      return;
+    }
     let staleVerifyPromise: Promise<boolean> | null = null;
     try {
       const onProgress = (scanned: number, total: number) =>
@@ -359,7 +366,7 @@ export class Engine {
       if (this._closed) return;
 
       if (this.options.watch) {
-        const watchPaths = [this.options.rootDir, ...(this.options.contentPaths ?? [])];
+        const watchPaths = [this.options.rootDir!, ...(this.options.contentPaths ?? [])];
         // Tracks last-processed mtime per path. Docker Desktop (Windows / WSL2) gRPC FUSE bind mounts surface phantom polling events for the same underlying mtime as metadata resyncs; without this dedupe one save fires the watcher pipeline several times.
         const lastProcessedMtime = new Map<string, number>();
         this.watcher = new FileWatcher(watchPaths, async (event) => {
@@ -487,6 +494,7 @@ export class Engine {
    * see the new includes immediately.
    */
   async reloadModules(): Promise<void> {
+    if (!this.options.rootDir) return;
     this.modules = await discoverModules(this.options.rootDir).catch(() => []);
   }
 
@@ -496,7 +504,7 @@ export class Engine {
   }
 
   /** Workspace root directory (the dir holding `sitecore.json`). */
-  getRootDir(): string {
+  getRootDir(): string | undefined {
     return this.options.rootDir;
   }
 
@@ -1072,6 +1080,9 @@ export class Engine {
   }
 
   resolveFilePath(itemSitecorePath: string, itemName: string): string {
+    if (!this.options.rootDir) {
+      throw new Error('resolveFilePath is not available in no-project mode');
+    }
     const normalizedItem = itemSitecorePath.toLowerCase();
     for (const mod of this.modules) {
       const modDir = dirname(mod.filePath);
