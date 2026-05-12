@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { FolderBrowser } from './FolderBrowser';
 import { LayerSelectionDialog } from './LayerSelectionDialog';
-import { useDiscoverLayers } from '@/hooks/useDiscoverLayers';
 import { useOpenProject } from '@/hooks/useOpenProject';
 
 interface OpenProjectWizardProps {
@@ -12,23 +11,25 @@ interface OpenProjectWizardProps {
 
 type Step = 'folder' | 'layers';
 
+interface PickedLayer {
+  sitecoreJsonPath: string;
+  moduleCount: number;
+  pushOpsSummary: string;
+}
+
 /**
- * Two-step wizard: pick a folder, then pick which discovered sitecore.json
- * files to load as layers. On success, the engine state transitions from
- * 'no-project' to 'ready' via /api/projects/open; the parent component
- * (NoProjectState) closes us and the existing status-polling drives the
- * tree view to re-render.
+ * Two-step wizard: pick a sitecore.json file (or any SCS root-config-shaped
+ * JSON), then confirm + open. Multi-layer is progressive via the dialog's
+ * "Add another layer" button which returns the wizard to the folder step.
  */
 export function OpenProjectWizard({ open, onClose }: OpenProjectWizardProps) {
   const [step, setStep] = useState<Step>('folder');
-  const [rootPath, setRootPath] = useState<string>('/');
-  const discover = useDiscoverLayers();
+  const [pickedLayers, setPickedLayers] = useState<PickedLayer[]>([]);
   const openProject = useOpenProject();
 
   const reset = () => {
     setStep('folder');
-    setRootPath('/');
-    discover.reset();
+    setPickedLayers([]);
     openProject.reset();
   };
 
@@ -37,18 +38,24 @@ export function OpenProjectWizard({ open, onClose }: OpenProjectWizardProps) {
     onClose();
   };
 
-  const handleFolderConfirm = async (path: string) => {
-    setRootPath(path);
-    try {
-      const result = await discover.mutateAsync({ path });
-      if (result.candidates.length === 0) {
-        toast.error('No sitecore.json files found in that folder.');
-        return;
-      }
-      setStep('layers');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to scan folder');
+  const handleFilePick = (
+    filePath: string,
+    moduleCount: number,
+    pushOpsSummary: string,
+  ) => {
+    if (pickedLayers.some((l) => l.sitecoreJsonPath === filePath)) {
+      toast.warning('That layer is already added.');
+      return;
     }
+    setPickedLayers((prev) => [
+      ...prev,
+      { sitecoreJsonPath: filePath, moduleCount, pushOpsSummary },
+    ]);
+    setStep('layers');
+  };
+
+  const handleAddAnother = () => {
+    setStep('folder');
   };
 
   const handleLayersConfirm = async (
@@ -71,7 +78,7 @@ export function OpenProjectWizard({ open, onClose }: OpenProjectWizardProps) {
       <FolderBrowser
         open={open}
         onClose={handleClose}
-        onConfirm={handleFolderConfirm}
+        onFilePick={handleFilePick}
       />
     );
   }
@@ -79,10 +86,15 @@ export function OpenProjectWizard({ open, onClose }: OpenProjectWizardProps) {
   return (
     <LayerSelectionDialog
       open={open}
-      rootPath={rootPath}
-      candidates={discover.data?.candidates ?? []}
+      rootPath="/"
+      candidates={pickedLayers.map((p) => ({
+        sitecoreJsonPath: p.sitecoreJsonPath,
+        moduleCount: p.moduleCount,
+        pushOpsSummary: p.pushOpsSummary,
+      }))}
       onClose={handleClose}
       onConfirm={handleLayersConfirm}
+      onAddAnother={handleAddAnother}
       isPending={openProject.isPending}
       serverError={openProject.error?.message ?? null}
     />
