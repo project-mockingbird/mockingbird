@@ -19,6 +19,7 @@ import {
   FIELD_IDS,
 } from './constants.js';
 import type { EngineOptions, ItemNode, ModuleConfig, ScsItem, ValidationResult } from './types.js';
+import type { LayerSpec } from './layer-spec.js';
 import type { MutationPlan } from './mutation-plan.js';
 import { insertItem as insertItemImpl, type InsertItemArgs, type InsertItemResult } from './insert-item.js';
 import { resolveChildFilePath } from './child-file-path.js';
@@ -64,6 +65,7 @@ export class Engine {
   private _watcherReady: Promise<void> = Promise.resolve();
   // Cached for the close-time cache rewrite so we don't re-run discoverModules on shutdown.
   private _cacheRoots: CacheRoot[] = [];
+  private _layers: LayerSpec[] = [];
 
   constructor(options: EngineOptions) {
     this.options = options;
@@ -993,6 +995,43 @@ export class Engine {
     this._cacheRoots = [];
     this.readiness.reset();
     this.readiness.markNoProject();
+  }
+
+  /**
+   * Opens a workspace with N layers (each a sitecore.json reference). Tears
+   * down any currently-open workspace first. An empty layer list returns the
+   * engine to 'no-project' state.
+   *
+   * For Plan 2 Task 4, only the FIRST layer's sitecore.json is loaded into
+   * the tree; multi-layer merging arrives in a later task. The full layer
+   * list is still stored on the engine and exposed via getLayers() so the
+   * API + UI can see the user's choice.
+   */
+  async openWorkspace(layers: LayerSpec[]): Promise<void> {
+    await this.closeWorkspace();
+    this._layers = layers.slice();
+
+    if (layers.length === 0) {
+      // closeWorkspace already left us in no-project; nothing else to do.
+      return;
+    }
+
+    // Single-layer support for now. Multi-layer merge arrives in a later task.
+    const primary = layers[0];
+    this.options = {
+      ...this.options,
+      rootDir: dirname(primary.sitecoreJsonPath),
+    };
+
+    this._initStarted = false;
+    this.readiness.reset();
+    await this.startInit();
+    await this.readiness.ready();
+  }
+
+  /** Returns the layer set that was last opened via openWorkspace. */
+  getLayers(): readonly LayerSpec[] {
+    return this._layers;
   }
 
   async writeItemFile(item: ScsItem): Promise<string> {

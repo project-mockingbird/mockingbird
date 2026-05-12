@@ -1,3 +1,5 @@
+export type { LayerSpec, AllowedPushOperations } from './layer-spec.js';
+
 /** A single field entry in SCS YAML (used in SharedFields, Language Fields, and Version Fields). */
 export interface ScsField {
   /** Field definition GUID (lowercase, no braces). */
