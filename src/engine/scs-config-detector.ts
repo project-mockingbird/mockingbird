@@ -67,7 +67,7 @@ export async function discoverScsConfigs(rootDir: string): Promise<ScsConfigCand
   return candidates;
 }
 
-async function isScsConfigShape(filePath: string): Promise<boolean> {
+export async function isScsConfigShape(filePath: string): Promise<boolean> {
   let raw;
   try {
     raw = await readFile(filePath, 'utf8');
@@ -97,7 +97,7 @@ async function isScsConfigShape(filePath: string): Promise<boolean> {
   );
 }
 
-async function summarizeCandidate(
+export async function summarizeCandidate(
   sitecoreJsonPath: string,
 ): Promise<{ moduleCount: number; pushOpsSummary: string }> {
   const raw = await readFile(sitecoreJsonPath, 'utf8');
