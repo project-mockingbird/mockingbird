@@ -43,6 +43,7 @@ import { useCopyItem } from '@/hooks/useCopyItem';
 import { useMoveItem } from '@/hooks/useMoveItem';
 import { useRefreshItem } from '@/hooks/useRefreshItem';
 import { useRenameItem } from '@/hooks/useRenameItem';
+import { NoProjectState } from '@/components/no-project/NoProjectState';
 import { InsertItemDialog } from './InsertItemDialog';
 import { HeadlessSiteCollectionDialog } from './HeadlessSiteCollectionDialog';
 import { ScaffoldConfirmDialog, type CoverageGap } from './ScaffoldConfirmDialog';
@@ -1167,6 +1168,8 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
   const { data: ancestors } = useAncestors(selectedId);
   const [search, setSearch] = useState('');
   const [collapseKey, setCollapseKey] = useState(0);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  void wizardOpen;
 
   // Set of ancestor IDs that should auto-expand so the selected node becomes
   // visible in the tree. Recomputed when the ancestor chain changes; child
@@ -1238,6 +1241,10 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
     workspaceStore.patchTab(tabId, { expandedNodes: new Map() });
     setCollapseKey((k) => k + 1);
   }, [tabId]);
+
+  if (status?.state === 'no-project') {
+    return <NoProjectState onOpenProject={() => setWizardOpen(true)} />;
+  }
 
   if (status?.state !== 'ready' || isLoading) {
     const indexing = (status?.state as string) === 'indexing';
