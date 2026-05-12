@@ -19,7 +19,10 @@ import { createPinoBridge } from './logging/pino-bridge.js';
 export interface ServerOptions {
   port?: number;
   host?: string;
-  rootDir: string;
+  /** Workspace root containing sitecore.json. When omitted, server boots in
+   *  no-project mode (watch disabled; serialized items not loaded). The OOTB
+   *  registry still loads when registryPath is supplied. */
+  rootDir?: string;
   contentPaths?: string[];
   registryPath?: string;
   indexCachePath?: string;
@@ -44,7 +47,7 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   const engine = new Engine({
     rootDir: opts.rootDir,
     contentPaths: opts.contentPaths,
-    watch: true,
+    watch: opts.rootDir !== undefined,
     registryPath: opts.registryPath,
     indexCachePath: opts.indexCachePath,
     onItemChange: (event) => notifyItemChange(engine, event),
