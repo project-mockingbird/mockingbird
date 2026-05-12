@@ -65,6 +65,9 @@ import {
 import { useNodeExpansion } from '@/state/useNodeExpansion';
 import { useTabId } from '@/state/tabContext';
 import { workspaceStore } from '@/state/workspaceStore';
+import { useLayerState } from '@/state/layerState';
+import { ProvenanceBar } from './ProvenanceBar';
+import { LayerLegend } from './LayerLegend';
 import { containingFolder } from '@/lib/folder-path';
 import { pickNeighborAfterDelete } from '@/lib/delete-neighbor';
 import { toast } from 'sonner';
@@ -164,6 +167,8 @@ interface ContentTreeNodeProps {
   validationErrors: Set<string>;
   database: string;
   autoExpandIds: Set<string>;
+  layerColors?: Record<string, string>;
+  layerVisibility?: Record<string, boolean>;
 }
 
 function ContentTreeNode({
@@ -176,6 +181,8 @@ function ContentTreeNode({
   validationErrors,
   database,
   autoExpandIds,
+  layerColors = {},
+  layerVisibility = {},
 }: ContentTreeNodeProps) {
   const { isExpanded: expanded, setExpanded } = useNodeExpansion(node.id, node.autoExpand ?? false);
   const isSelected = node.id === selectedId;
@@ -696,7 +703,7 @@ function ContentTreeNode({
                 isExpanded: expanded,
               })}
               className={cn(
-                'group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
+                'relative group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
                 'focus:outline-none',
                 isFocused && 'ring-1 ring-ring ring-inset',
                 isSelected && 'bg-accent font-medium',
@@ -704,12 +711,19 @@ function ContentTreeNode({
                   ? 'text-muted-foreground hover:bg-accent/50'
                   : 'hover:bg-accent',
               )}
-              style={{ paddingLeft: `${depth * 16 + 4}px` }}
+              style={{ paddingLeft: `${depth * 16 + 16}px` }}
               onClick={() => {
                 kbNav.setFocusedId(node.id);
                 onSelect(node.id);
               }}
             >
+              {node.provenance && (
+                <ProvenanceBar
+                  provenance={node.provenance}
+                  layerColors={layerColors}
+                  layerVisibility={layerVisibility}
+                />
+              )}
               {node.hasChildren ? (
                 <button
                   tabIndex={-1}
@@ -1130,6 +1144,8 @@ function ContentTreeNode({
               validationErrors={validationErrors}
               database={database}
               autoExpandIds={autoExpandIds}
+              layerColors={layerColors}
+              layerVisibility={layerVisibility}
             />
           ))}
         </div>
@@ -1238,6 +1254,41 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
       .filter(Boolean) as TreeNode[];
   }, [tree, search]);
 
+  const layerVisibility = useLayerState((s) => s.visibility);
+  const layerOverrides = useLayerState((s) => s.overrides);
+
+  const layerColorsByName = useMemo(() => {
+    const m: Record<string, string> = { ootb: '#9ca3af' };
+    for (const l of status?.layers ?? []) {
+      if (l.name === 'ootb') continue;
+      m[l.name] = (layerOverrides[l.name]?.color ?? l.color ?? '#888888') as string;
+    }
+    return m;
+  }, [status?.layers, layerOverrides]);
+
+  const layerVisMap = useMemo(() => {
+    const m: Record<string, boolean> = { ootb: true };
+    for (const l of status?.layers ?? []) {
+      if (l.name === 'ootb') continue;
+      m[l.name] = layerVisibility[l.name] !== false;
+    }
+    return m;
+  }, [status?.layers, layerVisibility]);
+
+  const visibleByLayerTree = useMemo(() => {
+    if (!filteredTree) return filteredTree;
+    function filterByLayer(node: TreeNode): TreeNode | null {
+      const winner = node.provenance?.winnerLayer;
+      const allowSelf = !winner || layerVisMap[winner] !== false;
+      const children = (node.children ?? [])
+        .map(filterByLayer)
+        .filter(Boolean) as TreeNode[];
+      if (!allowSelf && children.length === 0) return null;
+      return { ...node, children };
+    }
+    return filteredTree.map(filterByLayer).filter(Boolean) as TreeNode[];
+  }, [filteredTree, layerVisMap]);
+
   const collapseAll = useCallback(() => {
     workspaceStore.patchTab(tabId, { expandedNodes: new Map() });
     setCollapseKey((k) => k + 1);
@@ -1321,7 +1372,7 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
         aria-label="Content tree"
       >
         <TreeKeyboardNavProvider value={kbNav}>
-          {filteredTree?.map((node) => (
+          {visibleByLayerTree?.map((node) => (
             <ContentTreeNode
               key={`${node.id}-${collapseKey}`}
               node={node}
@@ -1333,10 +1384,19 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
               validationErrors={errorItemIds}
               database={database}
               autoExpandIds={autoExpandIds}
+              layerColors={layerColorsByName}
+              layerVisibility={layerVisMap}
             />
           ))}
         </TreeKeyboardNavProvider>
       </div>
+      <LayerLegend
+        layers={(status?.layers ?? []).filter((l) => l.name !== 'ootb').map((l) => ({
+          name: layerOverrides[l.name]?.name ?? l.name,
+          color: layerOverrides[l.name]?.color ?? l.color ?? '#888888',
+        }))}
+        layerVisibility={layerVisMap}
+      />
     </div>
   );
 }
