@@ -84,9 +84,9 @@ describe('POST /api/projects/open', () => {
     const statusRes = await app.inject({ method: 'GET', url: '/api/status' });
     const body = statusRes.json();
     expect(body.layers).toBeDefined();
-    expect(body.layers.length).toBe(1);
-    expect(body.layers[0].name).toBe('project-x');
-    expect(body.layers[0].color).toBe('#56c879');
+    const userLayer = body.layers.find((l: { name: string }) => l.name === 'project-x');
+    expect(userLayer).toBeDefined();
+    expect(userLayer.color).toBe('#56c879');
   });
 
   it('returns 400 when layers is missing or empty', async () => {

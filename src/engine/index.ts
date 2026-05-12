@@ -995,6 +995,7 @@ export class Engine {
     this.tree = new ItemTree();
     this.modules = [];
     this._cacheRoots = [];
+    this._layers = [];
     this._itemProvenance.clear();
     this._layerStats.clear();
     this.readiness.reset();

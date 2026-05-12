@@ -85,7 +85,26 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       });
     }
 
-    await engine.openWorkspace(resolved);
+    try {
+      await engine.openWorkspace(resolved);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/'ootb' is reserved/.test(message)) {
+        reply.code(400).send({ error: message });
+        return;
+      }
+      throw err;
+    }
+    reply.send({ state: engine.readiness.state, layers: engine.getLayers() });
+  });
+
+  /**
+   * Tears down the current workspace and transitions the engine back to
+   * no-project. Idempotent: calling on a no-project engine returns the same
+   * shape without error.
+   */
+  app.post('/api/projects/close', async (_req, reply) => {
+    await engine.closeWorkspace();
     reply.send({ state: engine.readiness.state, layers: engine.getLayers() });
   });
 }

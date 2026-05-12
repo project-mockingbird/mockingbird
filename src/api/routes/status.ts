@@ -17,12 +17,19 @@ export function registerStatusRoute(
 ): void {
   app.get('/api/status', async () => {
     const speSnap = speManager?.state ?? null;
+    const userLayers = engine.getLayers();
+    const stats = engine.getLayerStats();
+    const statsByName = new Map(stats.map((s) => [s.name, s.effectiveCount]));
+    const layers = [
+      ...userLayers.map((l) => ({ ...l, effectiveCount: statsByName.get(l.name) ?? 0 })),
+      ...(statsByName.has('ootb') ? [{ name: 'ootb', effectiveCount: statsByName.get('ootb')! }] : []),
+    ];
     return {
       state: engine.readiness.state,
       progress: engine.readiness.progress,
       error: engine.readiness.error?.message ?? null,
       itemCount: engine.readiness.isReady() ? engine.getAllItems().length : 0,
-      layers: engine.getLayers(),
+      layers,
       registryLoaded: engine.isRegistryLoaded(),
       cacheStale: engine.isCacheStale(),
       editorUrlTemplate: process.env.MOCKINGBIRD_EDITOR_URL_TEMPLATE ?? DEFAULT_EDITOR_URL_TEMPLATE,
