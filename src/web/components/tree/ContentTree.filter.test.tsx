@@ -3,7 +3,18 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
+
+// Polyfill ResizeObserver for jsdom
+if (!global.ResizeObserver) {
+  class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  global.ResizeObserver = ResizeObserver as any;
+}
 
 vi.mock('@/hooks/useEngineStatus', () => ({
   useEngineStatus: () => ({
@@ -95,5 +106,18 @@ describe('ContentTree filter pass', () => {
     expect(screen.queryByText('a-item')).not.toBeInTheDocument();
     expect(screen.getByText('b-item')).toBeInTheDocument();
     expect(screen.getByText('root')).toBeInTheDocument();
+  });
+});
+
+describe('ContentTreeNode provenance tooltip', () => {
+  beforeEach(() => resetLayerState());
+
+  it('hover on a tree row reveals the contributing-layer attribution', async () => {
+    const user = userEvent.setup();
+    render(<ContentTree selectedId={null} onSelect={() => {}} database="master" />);
+    const row = await screen.findByText('a-item');
+    await user.hover(row);
+    // Radix tooltip renders into a portal; query by role.
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/a/);
   });
 });

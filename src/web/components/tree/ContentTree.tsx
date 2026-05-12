@@ -28,6 +28,12 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -724,56 +730,129 @@ function ContentTreeNode({
                   layerVisibility={layerVisibility}
                 />
               )}
-              {node.hasChildren ? (
-                <button
-                  tabIndex={-1}
-                  onClick={handleToggle}
-                  className="p-0.5 hover:bg-muted rounded-sm"
-                  aria-label={expanded ? 'Collapse' : 'Expand'}
-                >
-                  {isLoading ? (
-                    <Icon
-                      path={mdiLoading}
-                      className="h-3 w-3 animate-spin"
-                    />
-                  ) : (
-                    <Icon
-                      path={mdiChevronRight}
-                      className={cn(
-                        'h-3 w-3 transition-transform',
-                        expanded && 'rotate-90',
-                      )}
-                    />
-                  )}
-                </button>
+              {node.provenance ? (
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="contents">
+                        {node.hasChildren ? (
+                          <button
+                            tabIndex={-1}
+                            onClick={handleToggle}
+                            className="p-0.5 hover:bg-muted rounded-sm"
+                            aria-label={expanded ? 'Collapse' : 'Expand'}
+                          >
+                            {isLoading ? (
+                              <Icon
+                                path={mdiLoading}
+                                className="h-3 w-3 animate-spin"
+                              />
+                            ) : (
+                              <Icon
+                                path={mdiChevronRight}
+                                className={cn(
+                                  'h-3 w-3 transition-transform',
+                                  expanded && 'rotate-90',
+                                )}
+                              />
+                            )}
+                          </button>
+                        ) : (
+                          <span className="w-4" />
+                        )}
+                        <Icon
+                          path={iconPath}
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0',
+                            isRegistry
+                              ? 'text-muted-foreground/50'
+                              : 'text-muted-foreground',
+                          )}
+                        />
+                        <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
+                          {node.name}
+                        </span>
+                        <div className="ml-auto flex items-center gap-1">
+                          {hasError && (
+                            <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
+                          )}
+                          <RowActionIcons
+                            isRegistry={isRegistry}
+                            onInsert={() => setIconInsertDialogOpen(true)}
+                            onDuplicate={() => setDuplicateDialogOpen(true)}
+                            onRefresh={handleRefresh}
+                            onDelete={handleDelete}
+                            isRefreshing={refreshItemMutation.isPending}
+                          />
+                        </div>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" align="start" className="text-xs">
+                      <div className="space-y-0.5">
+                        <div className="font-medium">Provenance</div>
+                        {node.provenance.contributingLayers.map((name) => (
+                          <div key={name}>
+                            {name === node.provenance!.winnerLayer ? `${name} (winner)` : name}
+                          </div>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ) : (
-                <span className="w-4" />
+                <>
+                  {node.hasChildren ? (
+                    <button
+                      tabIndex={-1}
+                      onClick={handleToggle}
+                      className="p-0.5 hover:bg-muted rounded-sm"
+                      aria-label={expanded ? 'Collapse' : 'Expand'}
+                    >
+                      {isLoading ? (
+                        <Icon
+                          path={mdiLoading}
+                          className="h-3 w-3 animate-spin"
+                        />
+                      ) : (
+                        <Icon
+                          path={mdiChevronRight}
+                          className={cn(
+                            'h-3 w-3 transition-transform',
+                            expanded && 'rotate-90',
+                          )}
+                        />
+                      )}
+                    </button>
+                  ) : (
+                    <span className="w-4" />
+                  )}
+                  <Icon
+                    path={iconPath}
+                    className={cn(
+                      'h-3.5 w-3.5 shrink-0',
+                      isRegistry
+                        ? 'text-muted-foreground/50'
+                        : 'text-muted-foreground',
+                    )}
+                  />
+                  <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
+                    {node.name}
+                  </span>
+                  <div className="ml-auto flex items-center gap-1">
+                    {hasError && (
+                      <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
+                    )}
+                    <RowActionIcons
+                      isRegistry={isRegistry}
+                      onInsert={() => setIconInsertDialogOpen(true)}
+                      onDuplicate={() => setDuplicateDialogOpen(true)}
+                      onRefresh={handleRefresh}
+                      onDelete={handleDelete}
+                      isRefreshing={refreshItemMutation.isPending}
+                    />
+                  </div>
+                </>
               )}
-              <Icon
-                path={iconPath}
-                className={cn(
-                  'h-3.5 w-3.5 shrink-0',
-                  isRegistry
-                    ? 'text-muted-foreground/50'
-                    : 'text-muted-foreground',
-                )}
-              />
-              <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
-                {node.name}
-              </span>
-              <div className="ml-auto flex items-center gap-1">
-                {hasError && (
-                  <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
-                )}
-                <RowActionIcons
-                  isRegistry={isRegistry}
-                  onInsert={() => setIconInsertDialogOpen(true)}
-                  onDuplicate={() => setDuplicateDialogOpen(true)}
-                  onRefresh={handleRefresh}
-                  onDelete={handleDelete}
-                  isRefreshing={refreshItemMutation.isPending}
-                />
-              </div>
             </div>
           </div>
         </ContextMenuTrigger>
