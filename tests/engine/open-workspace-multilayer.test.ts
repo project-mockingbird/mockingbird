@@ -192,4 +192,25 @@ describe('Engine.openWorkspace - multi-layer precedence', () => {
     expect(node).toBeDefined();
     expect(readMarker(node!.item)).toBe('B');
   });
+
+  it('rejects a layer named "ootb" (case-insensitive)', async () => {
+    engine = new Engine({ registryPath: registryFixture });
+    await expect(
+      engine.openWorkspace([{ sitecoreJsonPath: join(layerA, 'sitecore.json'), name: 'OOTB' }]),
+    ).rejects.toThrow(/'ootb' is reserved/);
+    // openWorkspace calls closeWorkspace before the name check, so state is no-project.
+    expect(engine.readiness.state).toBe('no-project');
+  });
+
+  it('extends openWorkspace to populate provenance for the merged tree', async () => {
+    engine = new Engine({ registryPath: registryFixture });
+    await engine.openWorkspace([
+      { sitecoreJsonPath: join(layerA, 'sitecore.json'), name: 'authoring' },
+      { sitecoreJsonPath: join(layerB, 'sitecore.json'), name: 'content' },
+    ]);
+
+    const prov = engine.getItemProvenance(SAMPLE_ITEM_ID);
+    expect(prov?.winnerLayer).toBe('content');
+    expect(prov?.contributingLayers).toEqual(['authoring', 'content']);
+  });
 });

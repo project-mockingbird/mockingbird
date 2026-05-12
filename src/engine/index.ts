@@ -18,7 +18,7 @@ import {
   STANDARD_TEMPLATE_ID,
   FIELD_IDS,
 } from './constants.js';
-import type { EngineOptions, ItemNode, ModuleConfig, ScsItem, ValidationResult } from './types.js';
+import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, ValidationResult } from './types.js';
 import { comparePushOps, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
 import type { MutationPlan } from './mutation-plan.js';
 import { insertItem as insertItemImpl, type InsertItemArgs, type InsertItemResult } from './insert-item.js';
@@ -66,6 +66,8 @@ export class Engine {
   // Cached for the close-time cache rewrite so we don't re-run discoverModules on shutdown.
   private _cacheRoots: CacheRoot[] = [];
   private _layers: LayerSpec[] = [];
+  private _itemProvenance: Map<string, { winnerLayer: string; contributingLayers: string[] }> = new Map();
+  private _layerStats: Map<string, number> = new Map();
 
   constructor(options: EngineOptions) {
     this.options = options;
@@ -993,14 +995,19 @@ export class Engine {
     this.tree = new ItemTree();
     this.modules = [];
     this._cacheRoots = [];
+    this._itemProvenance.clear();
+    this._layerStats.clear();
     this.readiness.reset();
     this.readiness.markNoProject();
   }
 
   /**
    * Opens a workspace with N layers (each a sitecore.json reference). Tears
-   * down any currently-open workspace first. An empty layer list returns the
-   * engine to 'no-project' state.
+   * down any currently-open workspace first. An empty layer list loads the
+   * registry (if configured) and returns the engine to 'no-project' state.
+   *
+   * The reserved layer name 'ootb' (case-insensitive) is rejected - it is the
+   * sentinel used in provenance shapes for registry-substrate items.
    *
    * Single-layer mode delegates to startInit (file watcher + cache work as
    * usual). Multi-layer mode runs a custom scan-and-merge that resolves
@@ -1011,9 +1018,20 @@ export class Engine {
    */
   async openWorkspace(layers: LayerSpec[]): Promise<void> {
     await this.closeWorkspace();
+
+    // Reject 'ootb' as a user layer name (case-insensitive). The sentinel is
+    // reserved for the registry substrate in provenance shapes.
+    for (const layer of layers) {
+      if (layer.name.toLowerCase() === 'ootb') {
+        throw new Error(`Layer name 'ootb' is reserved; received layer with name "${layer.name}"`);
+      }
+    }
+
     this._layers = layers.slice();
 
     if (layers.length === 0) {
+      // Load the registry so callers can query ootb items even without a workspace.
+      await this._ensureRegistryLoaded();
       return;
     }
 
@@ -1028,6 +1046,14 @@ export class Engine {
       this.readiness.reset();
       await this.startInit();
       await this.readiness.ready();
+      // Eager provenance fill: every tree node attributes to the single layer.
+      for (const node of this.tree.getAllNodes()) {
+        this._itemProvenance.set(node.item.id, {
+          winnerLayer: primary.name,
+          contributingLayers: [primary.name],
+        });
+      }
+      this._layerStats.set(primary.name, this.tree.getAllNodes().length);
       return;
     }
 
@@ -1035,6 +1061,7 @@ export class Engine {
     this.readiness.reset();
 
     const pushOpsByItemId = new Map<string, AllowedPushOperations | undefined>();
+    const contributorsByItemId = new Map<string, string[]>(); // weakest -> strongest
 
     for (const layer of layers) {
       const layerRoot = dirname(layer.sitecoreJsonPath);
@@ -1051,14 +1078,59 @@ export class Engine {
         const existingPushOps = pushOpsByItemId.get(node.item.id);
         const isFirstSighting = !this.tree.getById(node.item.id);
 
+        // Track contributing layer (every layer that has the item ID, in scan order).
+        let contributors = contributorsByItemId.get(node.item.id);
+        if (!contributors) {
+          contributors = [];
+          contributorsByItemId.set(node.item.id, contributors);
+        }
+        contributors.push(layer.name);
+
         if (isFirstSighting || comparePushOps(incomingPushOps, existingPushOps) > 0) {
           this.tree.addItem(node.item, node.filePath, node.module);
           pushOpsByItemId.set(node.item.id, incomingPushOps);
+          // Winner is always the last entry in contributingLayers.
+          const winnerPos = contributors.indexOf(layer.name);
+          if (winnerPos >= 0) contributors.splice(winnerPos, 1);
+          contributors.push(layer.name);
+          this._itemProvenance.set(node.item.id, {
+            winnerLayer: layer.name,
+            contributingLayers: contributors.slice(),
+          });
+        } else {
+          // Still update contributingLayers on the existing provenance entry.
+          const existing = this._itemProvenance.get(node.item.id);
+          if (existing) {
+            existing.contributingLayers = contributors.slice();
+          }
         }
       }
     }
 
+    // Compute per-layer effective counts from the final provenance map.
+    for (const { winnerLayer } of this._itemProvenance.values()) {
+      this._layerStats.set(winnerLayer, (this._layerStats.get(winnerLayer) ?? 0) + 1);
+    }
+
     this.readiness.markReady();
+  }
+
+  /**
+   * Loads the registry from options.registryPath if it is not already loaded.
+   * No-op if registryPath is not configured or registry is already populated.
+   */
+  private async _ensureRegistryLoaded(): Promise<void> {
+    if (this.registry || !this.options.registryPath) return;
+    this.registry = new Registry();
+    try {
+      if (this.options.registryPath.endsWith('.gz')) {
+        await this.registry.loadFromGzip(this.options.registryPath);
+      } else {
+        await this.registry.loadFromJson(this.options.registryPath);
+      }
+    } catch {
+      this.registry = null;
+    }
   }
 
   /**
@@ -1084,6 +1156,35 @@ export class Engine {
   /** Returns the layer set that was last opened via openWorkspace. */
   getLayers(): readonly LayerSpec[] {
     return this._layers;
+  }
+
+  /**
+   * Returns provenance for the given item ID, or null if the item is not in
+   * the current tree and not in the registry. OOTB-only items return the
+   * synthetic shape `{ winnerLayer: 'ootb', contributingLayers: ['ootb'] }`.
+   */
+  getItemProvenance(itemId: string): ItemProvenance | null {
+    const tracked = this._itemProvenance.get(itemId);
+    if (tracked) return { winnerLayer: tracked.winnerLayer, contributingLayers: [...tracked.contributingLayers] };
+    if (this.registry?.getById(itemId)) {
+      return { winnerLayer: 'ootb', contributingLayers: ['ootb'] };
+    }
+    return null;
+  }
+
+  /**
+   * Returns the effective-item count per user layer (items where that layer
+   * wins after precedence merge) plus a synthetic 'ootb' entry with the
+   * registry size.
+   */
+  getLayerStats(): Array<{ name: string; effectiveCount: number }> {
+    const result: Array<{ name: string; effectiveCount: number }> = [];
+    for (const layer of this._layers) {
+      result.push({ name: layer.name, effectiveCount: this._layerStats.get(layer.name) ?? 0 });
+    }
+    const registrySize = this.registry?.size ?? 0;
+    if (registrySize > 0) result.push({ name: 'ootb', effectiveCount: registrySize });
+    return result;
   }
 
   async writeItemFile(item: ScsItem): Promise<string> {

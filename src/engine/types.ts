@@ -197,3 +197,20 @@ export interface RegistryData {
   extractedAt: string;
   items: RegistryItem[];
 }
+
+/**
+ * Per-item attribution computed during the layer merge at openWorkspace time.
+ * Returned from Engine.getItemProvenance(). The sentinel string 'ootb' is used
+ * for registry-only items; openWorkspace rejects user layers named 'ootb' to
+ * keep this sentinel collision-free.
+ */
+export interface ItemProvenance {
+  /** Layer name whose version is currently rendered, or 'ootb' for registry-only items. */
+  winnerLayer: string;
+  /**
+   * Every layer that has an entry for this item ID, sorted weakest -> strongest
+   * by SCS allowedPushOperations. Single-element array in single-layer mode.
+   * For 'ootb' items, the single-element array `['ootb']`.
+   */
+  contributingLayers: string[];
+}
