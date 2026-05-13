@@ -115,6 +115,53 @@ describe('OpenProjectWizard', () => {
     expect(screen.getByTestId('folder-browser-path')).toHaveTextContent('/');
   });
 
+  it('preserves user-edited project name when adding another layer', async () => {
+    // Two distinct files so the second pick is not rejected as a duplicate.
+    const entries = [
+      {
+        name: 'alpha.json',
+        path: '/alpha/sitecore.json',
+        isDirectory: false,
+        hasSitecoreJson: false,
+        kind: 'config-file' as const,
+        moduleCount: 2,
+        pushOpsSummary: 'CreateAndUpdate',
+      },
+      {
+        name: 'beta.json',
+        path: '/beta/sitecore.json',
+        isDirectory: false,
+        hasSitecoreJson: false,
+        kind: 'config-file' as const,
+        moduleCount: 1,
+        pushOpsSummary: 'CreateAndUpdate',
+      },
+    ];
+    restoreFetch = setupFetchMock((_method, url) => {
+      if (url.includes('/api/fs/list')) {
+        return { path: '/', entries };
+      }
+      return {};
+    });
+    wrap(<OpenProjectWizard open onClose={() => {}} />);
+    // 1. Pick first file - lands in layer-selection dialog.
+    await pickFile('alpha.json');
+    await waitFor(() => screen.getByLabelText(/project name/i));
+    // 2. Type a custom project name.
+    const nameInput = screen.getByLabelText(/project name/i) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'my-project' } });
+    expect(nameInput.value).toBe('my-project');
+    // 3. Click "Add Layer" to go back to folder browser.
+    fireEvent.click(screen.getByRole('button', { name: /add layer/i }));
+    await waitFor(() => screen.getByTestId('folder-browser-path'));
+    // 4. Pick second file.
+    await pickFile('beta.json');
+    // 5. Back in dialog - project name must still be the user's custom value.
+    await waitFor(() => screen.getByLabelText(/project name/i));
+    const nameInputAfter = screen.getByLabelText(/project name/i) as HTMLInputElement;
+    expect(nameInputAfter.value).toBe('my-project');
+  });
+
   it('picking the same file twice triggers a duplicate-warn toast and does not duplicate the row', async () => {
     restoreFetch = setupFetchMock((_method, url) => {
       if (url.includes('/api/fs/list')) {

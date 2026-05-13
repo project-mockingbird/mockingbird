@@ -35,12 +35,14 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
   const [step, setStep] = useState<Step>('folder');
   const [rows, setRows] = useState<LayerRowState[]>([]);
   const [projectName, setProjectName] = useState<string>('project');
+  const [userEditedProjectName, setUserEditedProjectName] = useState<boolean>(false);
   const openProject = useOpenProject();
 
   const reset = () => {
     setStep('folder');
     setRows([]);
     setProjectName('project');
+    setUserEditedProjectName(false);
     openProject.reset();
   };
 
@@ -68,9 +70,10 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
           name: deriveName(filePath),
         },
       ];
-      // Re-derive the project name each time layers are added so it stays
-      // reasonable as the user builds up a multi-layer stack.
-      setProjectName(deriveProjectName(next.map((r) => r.candidate.sitecoreJsonPath)));
+      // Only re-derive the project name if the user has not manually edited it.
+      if (!userEditedProjectName) {
+        setProjectName(deriveProjectName(next.map((r) => r.candidate.sitecoreJsonPath)));
+      }
       return next;
     });
     setStep('layers');
@@ -113,7 +116,10 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
       initialRows={rows}
       onRowsChange={setRows}
       projectName={projectName}
-      onProjectNameChange={setProjectName}
+      onProjectNameChange={(newName: string) => {
+          setProjectName(newName);
+          setUserEditedProjectName(true);
+        }}
       onClose={handleClose}
       onConfirm={handleLayersConfirm}
       onAddAnother={handleAddAnother}
