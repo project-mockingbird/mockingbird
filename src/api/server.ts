@@ -13,6 +13,7 @@ import { registerReadinessGate } from './hooks/readiness-gate.js';
 import { registerStatusRoute } from './routes/status.js';
 import { registerFsRoutes } from './routes/fs.js';
 import { registerProjectsRoutes } from './routes/projects.js';
+import { registerConfigRoutes } from './routes/config.js';
 import { SessionManager } from '../spe/host/session-manager.js';
 import { registerSpeRoutes } from './routes/spe.js';
 import { serverLogBuffer } from './logging/buffers.js';
@@ -108,6 +109,7 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   registerStatusRoute(app, engine, speManager);
   registerFsRoutes(app);
   registerProjectsRoutes(app, engine);
+  registerConfigRoutes(app);
 
   // Import and register routes (will be added incrementally)
   const { registerTreeRoutes } = await import('./routes/tree.js');
