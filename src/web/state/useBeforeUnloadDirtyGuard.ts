@@ -1,14 +1,6 @@
 // src/web/state/useBeforeUnloadDirtyGuard.ts
 import { useEffect } from 'react';
-import { workspaceStore } from './workspaceStore';
-
-function anyTabDirty(): boolean {
-  const s = workspaceStore.getState();
-  for (const id of Object.keys(s.tabs)) {
-    if (Object.keys(s.tabs[id].editedFields).length > 0) return true;
-  }
-  return false;
-}
+import { anyTabDirty } from './dirtyTabs';
 
 export function useBeforeUnloadDirtyGuard(): void {
   useEffect(() => {

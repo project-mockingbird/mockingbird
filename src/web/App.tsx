@@ -24,6 +24,8 @@ import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore } from '@/state/projectsStore';
+import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
+import { ConfirmDiscardWorkspaceDialog } from '@/components/workspace/ConfirmDiscardWorkspaceDialog';
 import { toast } from 'sonner';
 
 // IsePage pulls Monaco (~3.5 MB) and xterm into its dependency tree. Loading
@@ -77,19 +79,25 @@ function ContentTreePage() {
   const openProject = useOpenProject();
   const currentProjectHash = useProjectsStore((s) => s.lastOpenedHash);
   const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
+  const discardGate = useConfirmDiscardWorkspace();
 
   const handleSwitch = () => setChooserOpen(true);
-  const handleClose = () => close.mutate();
+  const handleClose = () => {
+    discardGate.request('close', () => close.mutate());
+  };
   const handleOpenSaved = (project: { hash: string; name: string; layers: Array<{ sitecoreJsonPath: string; name: string; color: string }> }) => {
-    setChooserOpen(false);
-    close.mutate(undefined, {
-      onSuccess: () => {
-        openProject.mutate(
-          { layers: project.layers, projectName: project.name },
-          { onSuccess: () => touchLastOpened(project.hash) },
-        );
-      },
-    });
+    const proceed = () => {
+      setChooserOpen(false);
+      close.mutate(undefined, {
+        onSuccess: () => {
+          openProject.mutate(
+            { layers: project.layers, projectName: project.name },
+            { onSuccess: () => touchLastOpened(project.hash) },
+          );
+        },
+      });
+    };
+    discardGate.request('switch', proceed);
   };
 
   const { data: validation } = useQuery({
@@ -163,6 +171,13 @@ function ContentTreePage() {
           initialMode="switch"
         />
       )}
+      <ConfirmDiscardWorkspaceDialog
+        action={discardGate.pendingAction}
+        dirtyCount={discardGate.pendingDirtyCount}
+        onConfirm={discardGate.onConfirm}
+        onCancel={discardGate.onCancel}
+      />
+
       <StatusBar database={database} onDatabaseChange={setDatabase} />
       <CartPane
         open={cartPaneOpen}
