@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/lib/icon';
 import {
-  mdiChevronLeft,
-  mdiChevronRight,
   mdiClose,
   mdiDotsVertical,
   mdiFolderArrowRight,
+  mdiLayers,
 } from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
@@ -113,10 +112,11 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           variant="ghost"
           size="sm"
           onClick={toggleCollapsed}
-          aria-label="Expand sidebar"
+          aria-label="Show content layers"
+          title="Content Layers"
           className="p-0 size-6"
         >
-          <Icon path={mdiChevronLeft} className="size-4" />
+          <Icon path={mdiLayers} className="size-4" />
         </Button>
       </aside>
     );
@@ -175,10 +175,11 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
             variant="ghost"
             size="sm"
             onClick={toggleCollapsed}
-            aria-label="Collapse sidebar"
+            aria-label="Hide content layers"
+            title="Content Layers"
             className="p-0 size-6"
           >
-            <Icon path={mdiChevronRight} className="size-4" />
+            <Icon path={mdiLayers} className="size-4" />
           </Button>
         </div>
       </div>

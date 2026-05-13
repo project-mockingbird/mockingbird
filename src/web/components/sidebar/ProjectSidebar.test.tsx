@@ -85,19 +85,19 @@ describe('<ProjectSidebar>', () => {
     // Layer rows are visible initially
     expect(screen.getByText('authoring')).toBeInTheDocument();
     // Click the collapse button
-    await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
+    await user.click(screen.getByRole('button', { name: /hide content layers/i }));
     // Layer rows are now hidden
     expect(screen.queryByText('authoring')).not.toBeInTheDocument();
     // The collapsed strip shows an expand button
-    expect(screen.getByRole('button', { name: /expand sidebar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /show content layers/i })).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-collapsed')).toBeInTheDocument();
   });
 
   it('expand button restores sidebar content after collapse', async () => {
     const user = userEvent.setup();
     renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
-    await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
-    await user.click(screen.getByRole('button', { name: /expand sidebar/i }));
+    await user.click(screen.getByRole('button', { name: /hide content layers/i }));
+    await user.click(screen.getByRole('button', { name: /show content layers/i }));
     expect(screen.getByText('authoring')).toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-collapsed')).not.toBeInTheDocument();
   });
@@ -105,7 +105,7 @@ describe('<ProjectSidebar>', () => {
   it('persists collapsed state to localStorage', async () => {
     const user = userEvent.setup();
     renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
-    await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
+    await user.click(screen.getByRole('button', { name: /hide content layers/i }));
     expect(localStorageStub.getItem('mockingbird.sidebar.collapsed')).toBe('true');
   });
 
