@@ -153,15 +153,3 @@ describe('ContentTree layer filter - lazy-load preservation', () => {
   });
 });
 
-describe('ContentTreeNode provenance tooltip', () => {
-  beforeEach(() => resetLayerState());
-
-  it('hover on a tree row reveals the contributing-layer attribution', async () => {
-    const user = userEvent.setup();
-    render(<ContentTree selectedId={null} onSelect={() => {}} database="master" />);
-    const row = await screen.findByText('a-item');
-    await user.hover(row);
-    // Radix tooltip renders into a portal; query by role.
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(/a/);
-  });
-});

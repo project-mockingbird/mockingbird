@@ -28,12 +28,6 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -782,30 +776,14 @@ function ContentTreeNode({
         <ContextMenuTrigger asChild>
           <div>
             {node.provenance ? (
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div ref={rowRef} {...rowProps}>
-                      <ProvenanceBar
-                        provenance={node.provenance}
-                        layerColors={layerColors}
-                        layerVisibility={layerVisibility}
-                      />
-                      {rowInner}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" align="start" className="text-xs">
-                    <div className="space-y-0.5">
-                      <div className="font-medium">Provenance</div>
-                      {node.provenance.contributingLayers.map((name) => (
-                        <div key={name}>
-                          {name === node.provenance!.winnerLayer ? `${name} (winner)` : name}
-                        </div>
-                      ))}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div ref={rowRef} {...rowProps}>
+                <ProvenanceBar
+                  provenance={node.provenance}
+                  layerColors={layerColors}
+                  layerVisibility={layerVisibility}
+                />
+                {rowInner}
+              </div>
             ) : (
               <div ref={rowRef} {...rowProps}>
                 {rowInner}
