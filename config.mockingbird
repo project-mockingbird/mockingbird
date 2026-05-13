@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "projects": {
+    "3e35ff1a6b6b": {
+      "hash": "3e35ff1a6b6b",
+      "name": "mockingbird-repo",
+      "layers": [
+        {
+          "sitecoreJsonPath": "/sitecore.json",
+          "name": "authoring",
+          "color": "#22c55e"
+        },
+        {
+          "sitecoreJsonPath": "/content/sitecore.json",
+          "name": "content",
+          "color": "#3b82f6"
+        }
+      ],
+      "createdAt": 1778708867326,
+      "lastOpenedAt": 1778708867326
+    }
+  }
+}

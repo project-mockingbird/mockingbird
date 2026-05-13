@@ -20,8 +20,6 @@ export interface MockingbirdConfig {
   projects: Record<string, SavedProject>;
 }
 
-const DEFAULT_CONFIG: MockingbirdConfig = { version: 1, projects: {} };
-
 /**
  * Read config.mockingbird. ENOENT and parse-failure both return the default
  * empty shape - the caller should not need to distinguish "no file yet" from

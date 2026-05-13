@@ -30,7 +30,7 @@ interface FsListResponse {
 }
 
 /** Directories that are universally noise for a project browser. */
-const HIDDEN_ENTRIES = new Set(['.git', '.vscode', '.DS_Store', '.idea', 'node_modules']);
+const HIDDEN_ENTRIES = new Set(['.git', '.vscode', '.DS_Store', '.idea', 'node_modules', '.mockingbird']);
 
 /**
  * Filesystem browser endpoint. Lists immediate children of a workspace-relative

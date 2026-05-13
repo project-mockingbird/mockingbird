@@ -43,3 +43,4 @@ serialization/
 # C# build intermediates (per-project bin/ and obj/ under src/spe/provider-csharp).
 src/spe/provider-csharp/**/bin/
 src/spe/provider-csharp/**/obj/
+.mockingbird/
