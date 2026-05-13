@@ -26,7 +26,7 @@ export function ProvenanceBar({ provenance, layerColors, layerVisibility }: Prov
         data-layer-name={name}
         aria-hidden="true"
         className="inline-block rounded-sm shrink-0"
-        style={{ width: 4, height: 16, backgroundColor: layerColors[name] ?? '#888888', marginRight: 8 }}
+        style={{ width: 4, height: 16, backgroundColor: layerColors[name] ?? '#888888', marginRight: 3 }}
       />
     );
   }
@@ -35,7 +35,7 @@ export function ProvenanceBar({ provenance, layerColors, layerVisibility }: Prov
     <span
       aria-hidden="true"
       className="inline-flex shrink-0"
-      style={{ width: 8, height: 16, gap: 1, marginRight: 6 }}
+      style={{ width: 8, height: 16, gap: 1, marginRight: 3 }}
     >
       {visible.map((name, i) => (
         <span

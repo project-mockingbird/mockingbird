@@ -67,7 +67,7 @@ describe('<ProvenanceBar>', () => {
     expect(stripe.style.width).toBe('4px');
   });
 
-  it('single-layer stripe has 8px margin-right', () => {
+  it('single-layer stripe has 3px margin-right', () => {
     const { container } = render(
       <ProvenanceBar
         provenance={{ winnerLayer: 'authoring', contributingLayers: ['authoring'] }}
@@ -76,7 +76,7 @@ describe('<ProvenanceBar>', () => {
       />,
     );
     const stripe = container.querySelector<HTMLElement>('[data-prov-stripe]')!;
-    expect(stripe.style.marginRight).toBe('8px');
+    expect(stripe.style.marginRight).toBe('3px');
   });
 
   it('multi-layer container is 8px wide with 3px sub-stripes', () => {
