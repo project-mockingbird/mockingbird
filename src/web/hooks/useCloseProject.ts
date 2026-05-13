@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLayerState } from '@/state/layerState';
+import { workspaceStore } from '@/state/workspaceStore';
 
 interface CloseResponse {
   state: string;
@@ -8,8 +9,10 @@ interface CloseResponse {
 
 /**
  * Mutation that calls POST /api/projects/close. On success: resets the
- * client-side layerState (visibility, name/color overrides) and invalidates
- * the status + tree queries so the UI re-renders to no-project state.
+ * client-side layerState (visibility, name/color overrides), resets the
+ * workspace store (tabs, selection, expanded nodes) to fresh-launch state,
+ * and invalidates the status + tree queries so the UI re-renders to
+ * no-project state.
  */
 export function useCloseProject() {
   const qc = useQueryClient();
@@ -26,6 +29,7 @@ export function useCloseProject() {
     },
     onSuccess: () => {
       resetLayers();
+      workspaceStore.reset();
       qc.invalidateQueries({ queryKey: ['status'] });
       qc.invalidateQueries({ queryKey: ['tree'] });
     },

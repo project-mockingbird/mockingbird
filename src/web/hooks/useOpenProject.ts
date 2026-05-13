@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { workspaceStore } from '@/state/workspaceStore';
 
 export interface OpenProjectLayer {
   sitecoreJsonPath: string;
@@ -12,9 +13,11 @@ export interface OpenProjectResponse {
 }
 
 /**
- * Activates a project with the given layer stack. On success, invalidates the
- * status, tree, and children queries so the UI reflects the new engine state
- * without waiting for the next polling tick.
+ * Activates a project with the given layer stack. On success, resets the
+ * workspace store (tabs, selection, expanded nodes) to fresh-launch state so
+ * stale selections from a previous project do not carry over, then invalidates
+ * the status, tree, and children queries so the UI reflects the new engine
+ * state without waiting for the next polling tick.
  */
 export function useOpenProject() {
   const qc = useQueryClient();
@@ -32,6 +35,7 @@ export function useOpenProject() {
       return res.json();
     },
     onSuccess: () => {
+      workspaceStore.reset();
       qc.invalidateQueries({ queryKey: ['status'] });
       qc.invalidateQueries({ queryKey: ['tree'] });
       qc.invalidateQueries({ queryKey: ['children'] });

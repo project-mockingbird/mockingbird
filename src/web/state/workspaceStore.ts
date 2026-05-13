@@ -52,6 +52,12 @@ export type WorkspaceState = {
 export type WorkspaceStore = {
   getState: () => WorkspaceState;
   subscribe: (listener: () => void) => () => void;
+  /**
+   * Resets the store to fresh-launch state: a single pane with one default tab,
+   * no selection, no expanded nodes, no edited fields. Call this when closing or
+   * switching projects so stale tab state does not carry over.
+   */
+  reset: () => void;
   patchTab: (tabId: TabId, patch: Partial<TabState>) => void;
   /**
    * Appends a new tab to the given pane. Returns the new TabId, or '' if
@@ -130,6 +136,15 @@ export function createWorkspaceStore(): WorkspaceStore {
     subscribe: (listener) => {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
+    },
+    reset: () => {
+      const freshId = makeTabId();
+      state = {
+        tabs: { [freshId]: getDefaultTabState(freshId) },
+        panes: [{ tabIds: [freshId], activeTabId: freshId }],
+        focusedPaneIndex: 0,
+      };
+      notify();
     },
     patchTab: (tabId, patch) => {
       const current = state.tabs[tabId];
