@@ -9,13 +9,21 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import type { ScsConfigCandidate } from '@/hooks/useDiscoverLayers';
 import type { OpenProjectLayer } from '@/hooks/useOpenProject';
 import { assignLayerColor } from './layer-colors';
 import { deriveName } from './layer-name';
 import { detectOverlaps } from './duplicate-detect';
 import { EditableLayerName } from '@/components/sidebar/EditableLayerName';
 import { ColorSwatch } from '@/components/sidebar/ColorSwatch';
+
+export interface ScsConfigCandidate {
+  /** Absolute (container-side) path to the sitecore.json. */
+  sitecoreJsonPath: string;
+  /** Number of modules the file's modules-glob resolves to on disk. */
+  moduleCount: number;
+  /** Comma-separated summary of allowedPushOperations values seen. */
+  pushOpsSummary: string;
+}
 
 interface LayerSelectionDialogProps {
   open: boolean;

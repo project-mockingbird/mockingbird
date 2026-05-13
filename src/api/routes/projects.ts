@@ -1,7 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { resolve, normalize, sep } from 'path';
-import { existsSync } from 'fs';
-import { discoverScsConfigs } from '../../engine/scs-config-detector.js';
 import type { Engine } from '../../engine/index.js';
 
 /**
@@ -42,32 +40,6 @@ function resolveWorkspacePath(workspaceRoot: string, requested: string): string 
 
 export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): void {
   const workspaceRoot = resolve(process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces');
-
-  /**
-   * Scans a workspace-relative path for sitecore.json-shaped config files.
-   * Returns candidates with moduleCount + pushOpsSummary per file.
-   */
-  app.post<{ Body: { path?: string } }>(
-    '/api/projects/discover-layers',
-    async (req, reply) => {
-      const requested = req.body?.path;
-      if (typeof requested !== 'string') {
-        reply.code(400).send({ error: 'body.path is required' });
-        return;
-      }
-      const absolute = resolveWorkspacePath(workspaceRoot, requested);
-      if (absolute === null) {
-        reply.code(400).send({ error: 'path escapes workspace root or is invalid' });
-        return;
-      }
-      if (!existsSync(absolute)) {
-        reply.code(200).send({ candidates: [] });
-        return;
-      }
-      const candidates = await discoverScsConfigs(absolute);
-      reply.send({ candidates });
-    },
-  );
 
   /**
    * Opens a workspace by activating the given layers. Each layer's
