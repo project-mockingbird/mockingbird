@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { mkdir, rm, writeFile, readFile, stat } from 'fs/promises';
-import { resolve, join } from 'path';
+import { mkdir, rm, writeFile, readFile, stat, readdir } from 'fs/promises';
+import { resolve, join, dirname, basename } from 'path';
 import { tmpdir } from 'os';
 import { readConfig, writeConfig, type MockingbirdConfig } from '../../../src/api/state/config-store.js';
 
@@ -49,6 +49,21 @@ describe('readConfig', () => {
     const result = await readConfig(configPath);
     expect(result).toEqual({ version: 1, projects: {} });
   });
+
+  it('returns a fresh default object each call (does not share the projects ref)', async () => {
+    const a = await readConfig(configPath); // ENOENT path
+    a.projects['poison'] = {
+      hash: 'poison', name: 'p', layers: [], createdAt: 0, lastOpenedAt: 0,
+    };
+    const b = await readConfig(configPath); // also ENOENT
+    expect(b.projects).toEqual({});
+  });
+
+  it('returns the default shape when version is not 1', async () => {
+    await writeFile(configPath, JSON.stringify({ version: 99, projects: { x: 1 } }), 'utf-8');
+    const result = await readConfig(configPath);
+    expect(result).toEqual({ version: 1, projects: {} });
+  });
 });
 
 describe('writeConfig', () => {
@@ -58,8 +73,11 @@ describe('writeConfig', () => {
     const written = JSON.parse(await readFile(configPath, 'utf-8'));
     expect(written).toEqual(config);
     // No leftover *.tmp files
-    const tmpAttempt = await stat(`${configPath}.tmp-${process.pid}-anything`).catch(() => null);
-    expect(tmpAttempt).toBeNull();
+    const dir = dirname(configPath);
+    const baseName = basename(configPath);
+    const files = await readdir(dir);
+    const tmpFiles = files.filter((f) => f.startsWith(`${baseName}.tmp-`));
+    expect(tmpFiles).toEqual([]);
   });
 
   it('creates the parent directory if missing', async () => {

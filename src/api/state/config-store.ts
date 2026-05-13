@@ -32,18 +32,19 @@ export async function readConfig(filePath: string): Promise<MockingbirdConfig> {
   try {
     raw = await readFile(filePath, 'utf-8');
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...DEFAULT_CONFIG };
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, projects: {} };
     throw err;
   }
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_CONFIG };
+    if (!parsed || typeof parsed !== 'object') return { version: 1, projects: {} };
+    if (parsed.version !== 1) return { version: 1, projects: {} };
     return {
-      version: parsed.version === 1 ? 1 : 1,
+      version: 1,
       projects: parsed.projects && typeof parsed.projects === 'object' ? parsed.projects : {},
     };
   } catch {
-    return { ...DEFAULT_CONFIG };
+    return { version: 1, projects: {} };
   }
 }
 
