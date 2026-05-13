@@ -6,7 +6,6 @@
 #
 # Default mounts:
 #   - ${MOCKINGBIRD_WORKSPACE_HOST:-./} -> /workspaces   broad host bind for project discovery
-#   - ./data/state                      -> /data/state   persistent profiles + recents
 #
 # By default the directory containing this compose file (the repo root) is
 # mounted at /workspaces - zero shell setup required. Override
@@ -17,7 +16,7 @@
 # use the env-var-driven docker-compose.yml instead.
 services:
   mockingbird:
-    image: projectmockingbird/mockingbird:1.0.7.1
+    image: projectmockingbird/mockingbird:1.0.8.0
     container_name: mockingbird
     ports:
       # Loopback-only by default - drop the 127.0.0.1 prefix to publish to all
@@ -38,11 +37,8 @@ services:
       # from (the repo root). Override via MOCKINGBIRD_WORKSPACE_HOST in .env
       # to widen (e.g. C:/projects on Windows, ~/code on macOS/Linux).
       - ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
-      # State mount: profiles, recent projects, user prefs. Lives on the host
-      # next to the compose file so it survives container rebuilds + image
-      # upgrades. Mirrors the cache-mount convention.
-      - ./data/state:/data/state
-      # Cache volume (existing).
+      # Cache volume: gzipped per-project index. Pure perf optimization;
+      # project config itself lives in the browser's localStorage.
       - mockingbird-cache:/data/cache
     restart: unless-stopped
 

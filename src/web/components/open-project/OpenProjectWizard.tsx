@@ -7,6 +7,8 @@ import { useOpenProject } from '@/hooks/useOpenProject';
 import { assignLayerColor } from './layer-colors';
 import { deriveName } from './layer-name';
 import { deriveProjectName } from './project-name';
+import { computeProjectHash } from '@/state/project-hash';
+import { useProjectsStore } from '@/state/projectsStore';
 
 interface OpenProjectWizardProps {
   open: boolean;
@@ -25,10 +27,9 @@ type Step = 'folder' | 'layers';
 /**
  * Two-step wizard: pick a sitecore.json file (or any SCS root-config-shaped
  * JSON), then confirm + open. Multi-layer is progressive via the dialog's
- * "Add another layer" button which returns the wizard to the folder step.
- *
- * Row state (name, color, checked) is owned here so that user edits survive
- * the round-trip back to FolderBrowser when "Add another layer" is clicked.
+ * "Add Layer" button which returns the wizard to the folder step. On
+ * successful open, the resulting layer config is saved to localStorage as a
+ * named Project.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: OpenProjectWizardProps) {
@@ -37,6 +38,8 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
   const [projectName, setProjectName] = useState<string>('project');
   const [userEditedProjectName, setUserEditedProjectName] = useState<boolean>(false);
   const openProject = useOpenProject();
+  const upsert = useProjectsStore((s) => s.upsert);
+  const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
 
   const reset = () => {
     setStep('folder');
@@ -70,7 +73,6 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
           name: deriveName(filePath),
         },
       ];
-      // Only re-derive the project name if the user has not manually edited it.
       if (!userEditedProjectName) {
         setProjectName(deriveProjectName(next.map((r) => r.candidate.sitecoreJsonPath)));
       }
@@ -85,10 +87,25 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
 
   const handleLayersConfirm = async (
     layers: { sitecoreJsonPath: string; name: string; color?: string }[],
-    profileName?: string,
   ) => {
     try {
-      await openProject.mutateAsync({ layers, projectName, profileName });
+      await openProject.mutateAsync({ layers, projectName });
+      const paths = layers.map((l) => l.sitecoreJsonPath);
+      const hash = await computeProjectHash(paths);
+      const now = new Date().toISOString();
+      const existing = useProjectsStore.getState().get(hash);
+      upsert({
+        hash,
+        name: projectName,
+        layers: layers.map((l) => ({
+          sitecoreJsonPath: l.sitecoreJsonPath,
+          name: l.name,
+          color: l.color ?? '#888888',
+        })),
+        createdAt: existing?.createdAt ?? now,
+        lastOpenedAt: now,
+      });
+      touchLastOpened(hash);
       toast.success('Project opened.');
       reset();
       onClose();

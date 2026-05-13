@@ -27,7 +27,8 @@ describe('ProjectSidebar -> Switch/Close handlers (smoke)', () => {
         />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    fireEvent.click(screen.getByRole('button', { name: /project actions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /close project/i }));
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -50,7 +51,8 @@ describe('ProjectSidebar -> Switch/Close handlers (smoke)', () => {
         />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: /switch/i }));
+    fireEvent.click(screen.getByRole('button', { name: /project actions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /open another project/i }));
     expect(onSwitch).toHaveBeenCalled();
   });
 });

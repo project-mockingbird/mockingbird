@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { Icon } from '@/lib/icon';
+import { mdiPencil } from '@mdi/js';
 
 interface EditableLayerNameProps {
   value: string;
@@ -8,8 +10,9 @@ interface EditableLayerNameProps {
 }
 
 /**
- * Inline-editable text. Click to edit; Enter or blur to commit; Esc to cancel.
- * Trims whitespace; rejects empty/whitespace-only values silently.
+ * Inline-editable text. Click the name or the hover-revealed pencil to edit;
+ * Enter or blur to commit; Esc to cancel. Trims whitespace; rejects empty/
+ * whitespace-only values silently.
  */
 export function EditableLayerName({ value, onChange, disabled, className }: EditableLayerNameProps) {
   const [editing, setEditing] = useState(false);
@@ -22,6 +25,12 @@ export function EditableLayerName({ value, onChange, disabled, className }: Edit
       inputRef.current.select();
     }
   }, [editing]);
+
+  const enterEdit = () => {
+    if (disabled) return;
+    setDraft(value);
+    setEditing(true);
+  };
 
   const commit = () => {
     const trimmed = draft.trim();
@@ -41,16 +50,29 @@ export function EditableLayerName({ value, onChange, disabled, className }: Edit
 
   if (!editing) {
     return (
-      <span
-        className={`cursor-text select-none ${className ?? ''}`}
-        onClick={() => {
-          if (disabled) return;
-          setDraft(value);
-          setEditing(true);
-        }}
-        title={disabled ? undefined : 'Click to rename'}
-      >
-        {value}
+      <span className={`group inline-flex items-center gap-1 ${className ?? ''}`}>
+        <span
+          className="cursor-text select-none"
+          onClick={enterEdit}
+          title={disabled ? undefined : 'Click to rename'}
+        >
+          {value}
+        </span>
+        {!disabled && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Rename"
+            title="Rename"
+            onClick={(e) => {
+              e.stopPropagation();
+              enterEdit();
+            }}
+            className="hidden h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground group-hover:inline-flex group-focus-within:inline-flex"
+          >
+            <Icon path={mdiPencil} className="size-3" />
+          </button>
+        )}
       </span>
     );
   }

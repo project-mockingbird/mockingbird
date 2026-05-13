@@ -72,4 +72,18 @@ describe('<EditableLayerName>', () => {
     await user.click(screen.getByText('locked'));
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
+
+  it('renders a hover-revealed Rename button that enters edit mode', async () => {
+    const user = userEvent.setup();
+    render(<EditableLayerName value="authoring" onChange={() => {}} />);
+    const renameBtn = screen.getByRole('button', { name: /rename/i });
+    expect(renameBtn).toBeInTheDocument();
+    await user.click(renameBtn);
+    expect(screen.getByRole('textbox')).toHaveValue('authoring');
+  });
+
+  it('disabled prop hides the Rename button', () => {
+    render(<EditableLayerName value="locked" onChange={() => {}} disabled />);
+    expect(screen.queryByRole('button', { name: /rename/i })).not.toBeInTheDocument();
+  });
 });

@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NoProjectState } from './NoProjectState';
+import { useProjectsStore } from '@/state/projectsStore';
 
 function makeClient() {
   return new QueryClient({
@@ -19,13 +20,13 @@ function renderWithClient(ui: React.ReactNode) {
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
-// Mock fetch with a stub the per-test setup can override.
 let fetchStub: ReturnType<typeof vi.fn>;
 const originalFetch = global.fetch;
 
 beforeEach(() => {
-  fetchStub = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 }));
+  fetchStub = vi.fn(async () => new Response('{}', { status: 200 }));
   global.fetch = fetchStub as unknown as typeof fetch;
+  useProjectsStore.setState({ projects: {}, lastOpenedHash: null, prefs: { autoRestore: true } });
 });
 
 afterEach(() => {
@@ -33,64 +34,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function defaultFetchHandler(url: string): Response {
-  if (url.includes('/api/prefs')) {
-    return new Response(JSON.stringify({ autoRestoreLastSession: false }), { status: 200 });
-  }
-  if (url.includes('/api/projects/last-session')) {
-    return new Response('null', { status: 200 });
-  }
-  if (url.includes('/api/projects/recent')) {
-    return new Response(JSON.stringify({ entries: [] }), { status: 200 });
-  }
-  return new Response('{}', { status: 200 });
-}
-
 describe('NoProjectState', () => {
   it('renders the headline and helper copy', () => {
-    fetchStub.mockImplementation(async (input) => defaultFetchHandler(String(input)));
     renderWithClient(<NoProjectState onOpenProject={() => {}} />);
     expect(screen.getByText('No project loaded')).toBeInTheDocument();
     expect(
-      screen.getByText(/Pick a folder under \/workspaces to scan for sitecore\.json/i),
+      screen.getByText(/point mockingbird at a folder with sitecore\.json/i),
     ).toBeInTheDocument();
   });
 
   it('fires onOpenProject when the primary CTA is clicked', () => {
-    fetchStub.mockImplementation(async (input) => defaultFetchHandler(String(input)));
     const onOpen = vi.fn();
     renderWithClient(<NoProjectState onOpenProject={onOpen} />);
-    fireEvent.click(screen.getByRole('button', { name: /open a project/i }));
+    fireEvent.click(screen.getByRole('button', { name: /get started/i }));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it('auto-restores when prefs.autoRestoreLastSession is true and last-session is set', async () => {
+  it('auto-restores when autoRestore is true and lastOpenedHash is set in localStorage', async () => {
     const openCalls: unknown[] = [];
     fetchStub.mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/prefs')) {
-        return new Response(JSON.stringify({ autoRestoreLastSession: true }), { status: 200 });
-      }
-      if (url.includes('/api/projects/last-session')) {
-        return new Response(JSON.stringify({ projectHash: 'h1', profileName: 'dev' }), { status: 200 });
-      }
-      if (url.includes('/api/profiles/h1/dev')) {
-        return new Response(
-          JSON.stringify({
-            profile: {
-              name: 'dev',
-              projectName: 'demo',
-              layers: [{ sitecoreJsonPath: '/sitecore.json', name: 'core', color: '#3b82f6' }],
-              createdAt: 'T0',
-              updatedAt: 'T0',
-            },
-          }),
-          { status: 200 },
-        );
-      }
-      if (url.includes('/api/projects/recent')) {
-        return new Response(JSON.stringify({ entries: [] }), { status: 200 });
-      }
       if (url.includes('/api/projects/open')) {
         openCalls.push(JSON.parse(String(init?.body ?? '{}')));
         return new Response(JSON.stringify({ state: 'ready', layers: [] }), { status: 200 });
@@ -98,32 +61,53 @@ describe('NoProjectState', () => {
       return new Response('{}', { status: 200 });
     });
 
+    useProjectsStore.setState({
+      projects: {
+        h1: {
+          hash: 'h1',
+          name: 'demo',
+          layers: [{ sitecoreJsonPath: '/sitecore.json', name: 'core', color: '#3b82f6' }],
+          createdAt: 'T0',
+          lastOpenedAt: 'T0',
+        },
+      },
+      lastOpenedHash: 'h1',
+      prefs: { autoRestore: true },
+    });
+
     renderWithClient(<NoProjectState />);
     await waitFor(() => expect(openCalls.length).toBeGreaterThan(0));
-    expect(openCalls[0]).toMatchObject({ profileName: 'dev', projectName: 'demo' });
+    expect(openCalls[0]).toMatchObject({ projectName: 'demo' });
   });
 
-  it('shows an error message when auto-restore profile fetch returns 404', async () => {
-    fetchStub.mockImplementation(async (input: RequestInfo) => {
+  it('does not auto-restore when autoRestore is false', async () => {
+    const openCalls: unknown[] = [];
+    fetchStub.mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes('/api/prefs')) {
-        return new Response(JSON.stringify({ autoRestoreLastSession: true }), { status: 200 });
-      }
-      if (url.includes('/api/projects/last-session')) {
-        return new Response(JSON.stringify({ projectHash: 'h1', profileName: 'dev' }), { status: 200 });
-      }
-      if (url.includes('/api/profiles/h1/dev')) {
-        return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
-      }
-      if (url.includes('/api/projects/recent')) {
-        return new Response(JSON.stringify({ entries: [] }), { status: 200 });
+      if (url.includes('/api/projects/open')) {
+        openCalls.push(JSON.parse(String(init?.body ?? '{}')));
+        return new Response(JSON.stringify({ state: 'ready', layers: [] }), { status: 200 });
       }
       return new Response('{}', { status: 200 });
     });
 
+    useProjectsStore.setState({
+      projects: {
+        h1: {
+          hash: 'h1',
+          name: 'demo',
+          layers: [{ sitecoreJsonPath: '/sitecore.json', name: 'core', color: '#3b82f6' }],
+          createdAt: 'T0',
+          lastOpenedAt: 'T0',
+        },
+      },
+      lastOpenedHash: 'h1',
+      prefs: { autoRestore: false },
+    });
+
     renderWithClient(<NoProjectState />);
-    await waitFor(() =>
-      expect(screen.getByText(/last session profile is missing/i)).toBeInTheDocument(),
-    );
+    // Give effects a chance to fire.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(openCalls).toHaveLength(0);
   });
 });

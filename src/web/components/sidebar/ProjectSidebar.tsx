@@ -1,17 +1,17 @@
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/lib/icon';
-import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight } from '@mdi/js';
+import {
+  mdiChevronLeft,
+  mdiChevronRight,
+  mdiClose,
+  mdiDotsVertical,
+  mdiFolderArrowRight,
+} from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
-import { ProfileDropdown } from './ProfileDropdown';
-import { useProfiles, useUpsertProfile, useDeleteProfile, useRenameProfile } from '@/hooks/useProfiles';
-import { useEngineStatus } from '@/hooks/useEngineStatus';
-import { useCloseProject } from '@/hooks/useCloseProject';
-import { useOpenProject } from '@/hooks/useOpenProject';
-import { ManageProfilesModal } from './ManageProfilesModal';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { EditableLayerName } from './EditableLayerName';
+import { useProjectsStore } from '@/state/projectsStore';
 
 interface SidebarLayer {
   name: string;
@@ -55,38 +55,37 @@ function writeCollapsed(value: boolean): void {
 export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProps) {
   const { isVisible, setVisibility, rename, recolor, overrides } = useLayerState();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
-  const [manageOpen, setManageOpen] = useState(false);
-  const [saveAsName, setSaveAsName] = useState<string | null>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
 
-  const engineStatus = useEngineStatus();
-  const projectHash = engineStatus.data?.projectHash ?? null;
-  const profilesQuery = useProfiles(projectHash);
+  const projects = useProjectsStore((s) => s.projects);
+  const lastOpenedHash = useProjectsStore((s) => s.lastOpenedHash);
+  const renameProject = useProjectsStore((s) => s.rename);
 
-  const openProject = useOpenProject();
-  const closeProject = useCloseProject();
-  const upsertProfile = useUpsertProfile();
-  const deleteProfile = useDeleteProfile();
-  const renameProfile = useRenameProfile();
+  useEffect(() => {
+    if (!actionsMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(e.target as Node)) {
+        setActionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [actionsMenuOpen]);
 
   if (status.state === 'no-project') return null;
   if (!status.layers || status.layers.length === 0) return null;
 
-  // Separate user layers from the synthetic ootb row (the API already adds it).
   const userLayers = status.layers.filter((l) => l.name !== 'ootb');
   if (userLayers.length === 0) return null;
 
   const ootbCount =
     status.layers.find((l) => l.name === 'ootb')?.effectiveCount ?? status.registryItemCount ?? 0;
 
-  // Compute a short project label. Prefer the API-supplied projectName (set
-  // at open-project time). Fall back to the path-strip heuristic.
   const firstPath = userLayers[0]?.sitecoreJsonPath ?? '';
   const projectPath = firstPath.replace(/\/[^/]+\/[^/]+$/, '');
   const pathDerivedLabel = projectPath.split('/').filter(Boolean).pop() ?? 'project';
   const projectLabel = (status.projectName?.trim() || null) ?? pathDerivedLabel;
-
-  const activeProfile = engineStatus.data?.activeProfile ?? null;
-  const profiles = profilesQuery.data?.profiles ?? [];
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -96,70 +95,11 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
     });
   };
 
-  const handleSave = () => {
-    if (!activeProfile) return;
-    upsertProfile.mutate({
-      projectHash: activeProfile.projectHash,
-      name: activeProfile.profileName,
-      projectName: status.projectName ?? 'project',
-      layers: userLayers.map((l) => ({
-        sitecoreJsonPath: l.sitecoreJsonPath ?? '',
-        name: l.name,
-        color: l.color ?? '#888888',
-      })),
-    });
-  };
-
-  const handleSaveAs = () => setSaveAsName('');
-
-  const handleSwitch = async (profileName: string) => {
-    if (!activeProfile) return;
-    try {
-      const res = await fetch(
-        `/api/profiles/${encodeURIComponent(activeProfile.projectHash)}/${encodeURIComponent(profileName)}`,
-      );
-      if (!res.ok) return;
-      const { profile } = await res.json();
-      await closeProject.mutateAsync();
-      await openProject.mutateAsync({
-        layers: profile.layers.map((l: { sitecoreJsonPath: string; name: string; color: string }) => ({
-          sitecoreJsonPath: l.sitecoreJsonPath,
-          name: l.name,
-          color: l.color,
-        })),
-        projectName: profile.projectName,
-        profileName: profile.name,
-      });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to switch profile');
-    }
-  };
-
-  const handleManage = () => setManageOpen(true);
-
-  const handleSaveAsConfirm = (name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed || !projectHash) {
-      setSaveAsName(null);
-      return;
-    }
-    upsertProfile.mutate(
-      {
-        projectHash,
-        name: trimmed,
-        projectName: status.projectName ?? 'project',
-        layers: userLayers.map((l) => ({
-          sitecoreJsonPath: l.sitecoreJsonPath ?? '',
-          name: l.name,
-          color: l.color ?? '#888888',
-        })),
-      },
-      {
-        onSuccess: () => {
-          setSaveAsName(null);
-        },
-      },
-    );
+  const handleProjectRename = (newName: string) => {
+    if (!lastOpenedHash) return;
+    const existing = projects[lastOpenedHash];
+    if (!existing) return;
+    renameProject(lastOpenedHash, newName);
   };
 
   if (collapsed) {
@@ -183,34 +123,62 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
 
   return (
     <aside className="w-72 border-l bg-card flex flex-col h-full shrink-0">
-      <div className="px-3 py-2 border-b flex items-center justify-between gap-2 h-9 overflow-hidden">
-        <div className="min-w-0">
-          <div className="font-semibold text-sm">{projectLabel}</div>
+      <div className="px-3 py-2 border-b flex items-center justify-between gap-2 h-9">
+        <div className="min-w-0 overflow-hidden flex-1">
+          <div className="font-semibold text-sm truncate">
+            <EditableLayerName value={projectLabel} onChange={handleProjectRename} />
+          </div>
           <div className="font-mono text-[10px] text-muted-foreground truncate" title={projectPath}>
             {projectPath}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleCollapsed}
-          aria-label="Collapse sidebar"
-          className="p-0 size-6 shrink-0"
-        >
-          <Icon path={mdiChevronRight} className="size-4" />
-        </Button>
-      </div>
-      <div className="px-3 py-2 border-b flex items-center gap-2">
-        <span className="text-xs text-muted-foreground shrink-0">Profile</span>
-        <div className="flex-1 min-w-0">
-          <ProfileDropdown
-            activeName={activeProfile?.profileName ?? null}
-            profiles={profiles}
-            onSave={handleSave}
-            onSaveAs={handleSaveAs}
-            onSwitch={handleSwitch}
-            onManage={handleManage}
-          />
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="relative" ref={actionsMenuRef}>
+            <button
+              type="button"
+              aria-label="Project actions"
+              title="Project actions"
+              onClick={() => setActionsMenuOpen((v) => !v)}
+              className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Icon path={mdiDotsVertical} className="size-4" />
+            </button>
+            {actionsMenuOpen && (
+              <div className="absolute right-0 z-30 mt-1 w-44 rounded border bg-popover shadow-md text-sm py-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    onSwitch();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent text-left"
+                >
+                  <Icon path={mdiFolderArrowRight} className="size-4 text-muted-foreground" />
+                  Open another project...
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    onClose();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent text-left text-danger-fg"
+                >
+                  <Icon path={mdiClose} className="size-4" />
+                  Close project
+                </button>
+              </div>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleCollapsed}
+            aria-label="Collapse sidebar"
+            className="p-0 size-6"
+          >
+            <Icon path={mdiChevronRight} className="size-4" />
+          </Button>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -234,7 +202,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           );
         })}
         <LayerRow
-          layerName="OOTB Sitecore"
+          layerName="Sitecore IAR"
           effectiveCount={ootbCount}
           color={OOTB_GREY}
           visible={true}
@@ -244,51 +212,6 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           onRecolor={() => {}}
         />
       </div>
-      <div className="border-t p-2 flex flex-col gap-1">
-        <Button variant="outline" size="sm" onClick={onSwitch} className="justify-start">
-          <Icon path={mdiFolderArrowRight} className="size-4 mr-2" /> Switch project
-        </Button>
-        <Button variant="default" colorScheme="danger" size="sm" onClick={onClose} className="justify-start">
-          <Icon path={mdiClose} className="size-4 mr-2" /> Close project
-        </Button>
-      </div>
-      <ManageProfilesModal
-        open={manageOpen}
-        profiles={profiles}
-        activeName={activeProfile?.profileName ?? null}
-        onClose={() => setManageOpen(false)}
-        onRename={(oldName, newName) =>
-          activeProfile && renameProfile.mutate({ projectHash: activeProfile.projectHash, oldName, newName })
-        }
-        onDelete={(name) =>
-          activeProfile && deleteProfile.mutate({ projectHash: activeProfile.projectHash, name })
-        }
-      />
-      {saveAsName !== null && (
-        <Dialog open={true} onOpenChange={(o) => { if (!o) setSaveAsName(null); }}>
-          <DialogContent size="sm">
-            <DialogHeader>
-              <DialogTitle>Save profile as</DialogTitle>
-            </DialogHeader>
-            <input
-              type="text"
-              value={saveAsName}
-              onChange={(e) => setSaveAsName(e.target.value)}
-              autoFocus
-              className="w-full rounded border bg-background px-2 py-1 text-sm"
-              placeholder="e.g. qa-review"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveAsConfirm(saveAsName);
-                if (e.key === 'Escape') setSaveAsName(null);
-              }}
-            />
-            <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => setSaveAsName(null)}>Cancel</Button>
-              <Button size="sm" onClick={() => handleSaveAsConfirm(saveAsName)}>Save</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </aside>
   );
 }

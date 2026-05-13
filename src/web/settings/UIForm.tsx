@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { useSettings } from './SettingsProvider';
 import { validateTheme, type ThemeValue } from './schema';
-import { usePrefs, useUpdatePrefs } from '@/hooks/usePrefs';
+import { useProjectsStore } from '@/state/projectsStore';
 import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -14,8 +14,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 export function UIForm() {
   const { settings, setSetting } = useSettings();
   const { theme, setTheme } = useTheme();
-  const { data: prefs } = usePrefs();
-  const updatePrefs = useUpdatePrefs();
+  const autoRestore = useProjectsStore((s) => s.prefs.autoRestore);
+  const setAutoRestore = useProjectsStore((s) => s.setAutoRestore);
 
   // next-themes returns undefined during SSR/first render; gate UI until mounted.
   const [mounted, setMounted] = useState(false);
@@ -124,15 +124,15 @@ export function UIForm() {
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">Open Repository</h3>
         <Field orientation="horizontal">
-          <FieldLabel htmlFor="auto-restore">Auto-restore last session on container start</FieldLabel>
+          <FieldLabel htmlFor="auto-restore">Auto-restore last project on page load</FieldLabel>
           <Switch
             id="auto-restore"
-            checked={prefs?.autoRestoreLastSession ?? false}
-            onCheckedChange={(v) => updatePrefs.mutate({ autoRestoreLastSession: v })}
+            checked={autoRestore}
+            onCheckedChange={(v) => setAutoRestore(v)}
           />
         </Field>
         <FieldDescription>
-          When on, mockingbird re-opens your last profile after a Docker restart. Closing a project clears the pointer.
+          When on, mockingbird re-opens your last project when you reload the app. State lives in localStorage; closing a project clears the pointer.
         </FieldDescription>
       </section>
     </div>

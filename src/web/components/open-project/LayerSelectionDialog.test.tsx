@@ -326,7 +326,7 @@ describe('LayerSelectionDialog', () => {
     );
   });
 
-  it('renders the save-as-profile input', () => {
+  it('does not render a save-as-profile input', () => {
     render(
       <LayerSelectionDialog
         open
@@ -336,54 +336,6 @@ describe('LayerSelectionDialog', () => {
         onConfirm={() => {}}
       />,
     );
-    expect(screen.getByLabelText(/save as profile/i)).toBeInTheDocument();
-  });
-
-  it('forwards the typed profile name via onConfirm second arg', () => {
-    const onConfirm = vi.fn();
-    render(
-      <LayerSelectionDialog
-        open
-        rootPath="/workspaces/repo"
-        candidates={CANDIDATES}
-        onClose={() => {}}
-        onConfirm={onConfirm}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText(/save as profile/i), { target: { value: 'dev' } });
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirm).toHaveBeenCalledWith(expect.any(Array), 'dev');
-  });
-
-  it('treats whitespace-only input as undefined profile name', () => {
-    const onConfirm = vi.fn();
-    render(
-      <LayerSelectionDialog
-        open
-        rootPath="/workspaces/repo"
-        candidates={CANDIDATES}
-        onClose={() => {}}
-        onConfirm={onConfirm}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText(/save as profile/i), { target: { value: '   ' } });
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirm).toHaveBeenCalledWith(expect.any(Array), undefined);
-  });
-
-  it('passes undefined profile name when save-as is empty', () => {
-    const onConfirm = vi.fn();
-    render(
-      <LayerSelectionDialog
-        open
-        rootPath="/workspaces/repo"
-        candidates={CANDIDATES}
-        onClose={() => {}}
-        onConfirm={onConfirm}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(onConfirm.mock.calls[0][1]).toBeUndefined();
+    expect(screen.queryByLabelText(/save as profile/i)).not.toBeInTheDocument();
   });
 });

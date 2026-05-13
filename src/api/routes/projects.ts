@@ -3,12 +3,6 @@ import { resolve, normalize, sep } from 'path';
 import { existsSync } from 'fs';
 import { discoverScsConfigs } from '../../engine/scs-config-detector.js';
 import type { Engine } from '../../engine/index.js';
-import { upsertRecent, readRecents, removeRecent } from '../recents-store.js';
-import { writeLastSession, readLastSession } from '../last-session-store.js';
-import { writeProjectMeta } from '../project-meta-store.js';
-import { computeProjectHash } from '../project-hash.js';
-import { readProfile } from '../profile-store.js';
-import { setActiveProfile, setCurrentProjectHash } from '../session-state.js';
 
 /**
  * Merges user layers with layer stats and appends the synthetic ootb row when
@@ -78,6 +72,9 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
   /**
    * Opens a workspace by activating the given layers. Each layer's
    * sitecoreJsonPath is workspace-relative and path-jailed.
+   *
+   * State is held client-side (localStorage); the server only carries the
+   * in-memory engine state for the duration of the session.
    */
   app.post<{
     Body: {
@@ -87,7 +84,6 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
         color?: string;
       }>;
       projectName?: string;
-      profileName?: string;
     };
   }>('/api/projects/open', async (req, reply) => {
     const layers = req.body?.layers;
@@ -126,30 +122,6 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       throw err;
     }
 
-    // Side effects: project meta + (when profileName provided) recents + last-session + active.
-    const requestPaths = layers.map((l) => l.sitecoreJsonPath as string);
-    const projectHash = computeProjectHash(requestPaths);
-    const effectiveProjectName = projectName ?? 'project';
-    const profileName = typeof req.body?.profileName === 'string' ? req.body.profileName : undefined;
-    const now = new Date().toISOString();
-
-    await writeProjectMeta({
-      projectHash,
-      lastProjectName: effectiveProjectName,
-      layerPaths: requestPaths,
-      lastOpenedAt: now,
-    });
-
-    setCurrentProjectHash(projectHash);
-
-    if (typeof profileName === 'string' && profileName.length > 0) {
-      await upsertRecent({ projectHash, projectName: effectiveProjectName, profileName, lastOpenedAt: now });
-      await writeLastSession({ projectHash, profileName });
-      setActiveProfile({ projectHash, profileName });
-    } else {
-      setActiveProfile(null);
-    }
-
     reply.send({ state: engine.readiness.state, layers: layersWithEffectiveCount(engine) });
   });
 
@@ -157,56 +129,9 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
    * Tears down the current workspace and transitions the engine back to
    * no-project. Idempotent: calling on a no-project engine returns the same
    * shape without error.
-   *
-   * Per spec the response is always { state: 'no-project', layers: [] }.
-   * Consumers don't need substrate counts here; the state itself signals closure.
    */
   app.post('/api/projects/close', async (_req, reply) => {
     await engine.closeWorkspace();
-    await writeLastSession(null);
-    setActiveProfile(null);
-    setCurrentProjectHash(null);
     reply.send({ state: engine.readiness.state, layers: [] });
-  });
-
-  app.get('/api/projects/recent', async () => {
-    const recents = await readRecents();
-    const entries = await Promise.all(
-      recents.map(async (r) => {
-        const profile = await readProfile(r.projectHash, r.profileName);
-        if (!profile) {
-          return { ...r, layerColors: [] as string[], layerCount: 0, missing: true };
-        }
-        return {
-          ...r,
-          layerColors: profile.layers.slice(0, 4).map((l) => l.color),
-          layerCount: profile.layers.length,
-        };
-      }),
-    );
-    return { entries };
-  });
-
-  app.delete<{ Body: { projectHash?: string; profileName?: string } }>(
-    '/api/projects/recent',
-    async (req, reply) => {
-      const { projectHash, profileName } = req.body ?? {};
-      if (typeof projectHash !== 'string' || typeof profileName !== 'string') {
-        reply.code(400).send({ error: 'projectHash and profileName are required' });
-        return;
-      }
-      await removeRecent(projectHash, profileName);
-      reply.send({ ok: true });
-    },
-  );
-
-  app.get('/api/projects/last-session', async () => {
-    const ls = await readLastSession();
-    return ls;
-  });
-
-  app.delete('/api/projects/last-session', async () => {
-    await writeLastSession(null);
-    return { ok: true };
   });
 }

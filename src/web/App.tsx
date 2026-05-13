@@ -20,7 +20,10 @@ import { CartPane, readPersistedCartPaneOpen } from '@/components/package/CartPa
 import { CheckoutDialog } from '@/components/package/CheckoutDialog';
 import { ProjectSidebar } from '@/components/sidebar/ProjectSidebar';
 import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
+import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
 import { useCloseProject } from '@/hooks/useCloseProject';
+import { useOpenProject } from '@/hooks/useOpenProject';
+import { useProjectsStore } from '@/state/projectsStore';
 import { toast } from 'sonner';
 
 // IsePage pulls Monaco (~3.5 MB) and xterm into its dependency tree. Loading
@@ -68,11 +71,26 @@ function ContentTreePage() {
   );
 
   const { data: status } = useEngineStatus();
-  const [switchOpen, setSwitchOpen] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const close = useCloseProject();
+  const openProject = useOpenProject();
+  const currentProjectHash = useProjectsStore((s) => s.lastOpenedHash);
+  const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
 
-  const handleSwitch = () => setSwitchOpen(true);
+  const handleSwitch = () => setChooserOpen(true);
   const handleClose = () => close.mutate();
+  const handleOpenSaved = (project: { hash: string; name: string; layers: Array<{ sitecoreJsonPath: string; name: string; color: string }> }) => {
+    setChooserOpen(false);
+    close.mutate(undefined, {
+      onSuccess: () => {
+        openProject.mutate(
+          { layers: project.layers, projectName: project.name },
+          { onSuccess: () => touchLastOpened(project.hash) },
+        );
+      },
+    });
+  };
 
   const { data: validation } = useQuery({
     queryKey: ['validation'],
@@ -129,10 +147,20 @@ function ContentTreePage() {
           />
         )}
       </div>
-      {switchOpen && (
+      <FirstRunChooser
+        open={chooserOpen}
+        onClose={() => setChooserOpen(false)}
+        onCreateNew={() => {
+          setChooserOpen(false);
+          setWizardOpen(true);
+        }}
+        onOpenExisting={handleOpenSaved}
+        currentProjectHash={currentProjectHash}
+      />
+      {wizardOpen && (
         <OpenProjectWizard
           open
-          onClose={() => setSwitchOpen(false)}
+          onClose={() => setWizardOpen(false)}
           initialMode="switch"
         />
       )}

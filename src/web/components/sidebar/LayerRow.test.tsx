@@ -31,10 +31,10 @@ describe('<LayerRow>', () => {
     expect(onToggle).toHaveBeenCalledWith(false);
   });
 
-  it('ootbSubstrate disables the toggle and rename + shows substrate label', () => {
-    render(<LayerRow {...defaults} layerName="OOTB Sitecore" ootbSubstrate />);
+  it('ootbSubstrate disables the toggle and rename', () => {
+    render(<LayerRow {...defaults} layerName="Sitecore IAR" ootbSubstrate />);
     expect(screen.getByRole('checkbox')).toBeDisabled();
-    expect(screen.getByText(/substrate/i)).toBeInTheDocument();
+    expect(screen.queryByText(/substrate/i)).not.toBeInTheDocument();
   });
 
   it('rename calls onRename', async () => {

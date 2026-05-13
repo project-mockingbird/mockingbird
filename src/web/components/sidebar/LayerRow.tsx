@@ -46,9 +46,6 @@ export function LayerRow({
           onChange={onRename}
           disabled={ootbSubstrate}
         />
-        {ootbSubstrate && (
-          <div className="text-[10px] text-muted-foreground italic">substrate</div>
-        )}
       </div>
       <span className="text-xs text-muted-foreground tabular-nums">{effectiveCount}</span>
     </div>

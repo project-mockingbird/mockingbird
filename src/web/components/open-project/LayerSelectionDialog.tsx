@@ -23,7 +23,7 @@ interface LayerSelectionDialogProps {
   rootPath: string;
   candidates: ReadonlyArray<ScsConfigCandidate>;
   onClose: () => void;
-  onConfirm: (layers: OpenProjectLayer[], profileName?: string) => void;
+  onConfirm: (layers: OpenProjectLayer[]) => void;
   /** When provided, an "Add Layer" footer button appears that re-opens the FolderBrowser. */
   onAddAnother?: () => void;
   /**
@@ -76,7 +76,6 @@ export function LayerSelectionDialog({
   serverError = null,
 }: LayerSelectionDialogProps) {
   const overlaps = useMemo(() => detectOverlaps(candidates), [candidates]);
-  const [profileNameInput, setProfileNameInput] = useState('');
   const [rows, setRows] = useState<LayerRowState[]>(() => {
     if (initialRows && initialRows.length > 0) return initialRows;
     return candidates.map((c, i) => ({
@@ -125,8 +124,7 @@ export function LayerSelectionDialog({
         name: r.name,
         color: r.color,
       }));
-    const trimmed = profileNameInput.trim();
-    onConfirm(payload, trimmed.length > 0 ? trimmed : undefined);
+    onConfirm(payload);
   };
 
   return (
@@ -242,19 +240,6 @@ export function LayerSelectionDialog({
               );
             })}
           </ul>
-        </div>
-        <div className="flex items-center gap-2">
-          <label htmlFor="save-as-profile" className="text-xs font-medium whitespace-nowrap">
-            Save as profile
-          </label>
-          <input
-            id="save-as-profile"
-            type="text"
-            value={profileNameInput}
-            onChange={(e) => setProfileNameInput(e.target.value)}
-            className="flex-1 rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            placeholder="(optional)"
-          />
         </div>
         {serverError && (
           <p className="text-xs text-destructive">{serverError}</p>

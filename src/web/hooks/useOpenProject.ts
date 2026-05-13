@@ -21,15 +21,14 @@ export interface OpenProjectResponse {
  */
 export function useOpenProject() {
   const qc = useQueryClient();
-  return useMutation<OpenProjectResponse, Error, { layers: OpenProjectLayer[]; projectName?: string; profileName?: string }>({
-    mutationFn: async ({ layers, projectName, profileName }) => {
+  return useMutation<OpenProjectResponse, Error, { layers: OpenProjectLayer[]; projectName?: string }>({
+    mutationFn: async ({ layers, projectName }) => {
       const res = await fetch('/api/projects/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           layers,
           ...(projectName !== undefined ? { projectName } : {}),
-          ...(profileName !== undefined ? { profileName } : {}),
         }),
       });
       if (!res.ok) {
@@ -43,8 +42,6 @@ export function useOpenProject() {
       qc.invalidateQueries({ queryKey: ['status'] });
       qc.invalidateQueries({ queryKey: ['tree'] });
       qc.invalidateQueries({ queryKey: ['children'] });
-      qc.invalidateQueries({ queryKey: ['recents'] });
-      qc.invalidateQueries({ queryKey: ['last-session'] });
     },
   });
 }

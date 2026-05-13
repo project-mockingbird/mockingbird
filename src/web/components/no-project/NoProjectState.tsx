@@ -5,92 +5,62 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-states';
 import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
 import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
-import { useRecents, useRemoveRecent, type RecentEntry } from '@/hooks/useRecents';
-import { useLastSession } from '@/hooks/useLastSession';
-import { usePrefs } from '@/hooks/usePrefs';
 import { useOpenProject } from '@/hooks/useOpenProject';
-import { RecentsSection } from './RecentsSection';
+import { useProjectsStore, type SavedProject } from '@/state/projectsStore';
 
 interface NoProjectStateProps {
-  /**
-   * Optional callback fired when the user clicks "Open a project". Provided
-   * for backwards compatibility with the Task 2 wiring; the internal chooser
-   * + wizard run regardless.
-   */
   onOpenProject?: () => void;
 }
 
 /**
  * Empty-state placeholder rendered by ContentTree.tsx when /api/status reports
- * state: 'no-project'. Owns the wizard state machine: button -> chooser ->
- * (folder browse -> layer select -> POST /api/projects/open) -> close.
+ * state: 'no-project'. Owns the chooser dialog + wizard. State (saved projects,
+ * last session, auto-restore prefs) lives in localStorage via projectsStore.
  */
 export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  const { data: recentsData } = useRecents();
-  const { data: lastSession } = useLastSession();
-  const { data: prefs } = usePrefs();
-  const removeRecent = useRemoveRecent();
+  const projectsMap = useProjectsStore((s) => s.projects);
+  const lastOpenedHash = useProjectsStore((s) => s.lastOpenedHash);
+  const autoRestore = useProjectsStore((s) => s.prefs.autoRestore);
+  const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
   const openProject = useOpenProject();
+  const hasSavedProjects = Object.keys(projectsMap).length > 0;
 
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const restoreAttempted = useRef(false);
 
-  // Auto-restore on mount: fires once when prefs is true AND lastSession is non-null.
+  // Auto-restore on mount: fires once when the pref is on AND there is a last
+  // opened project in localStorage.
   useEffect(() => {
     if (restoreAttempted.current) return;
-    if (!prefs || !lastSession) return;
-    if (!prefs.autoRestoreLastSession) return;
+    if (!autoRestore) return;
+    if (!lastOpenedHash) return;
+    const project = useProjectsStore.getState().get(lastOpenedHash);
+    if (!project) return;
     restoreAttempted.current = true;
+    openProject.mutate(
+      { layers: project.layers, projectName: project.name },
+      {
+        onSuccess: () => touchLastOpened(project.hash),
+        onError: (err) =>
+          setRestoreError(err instanceof Error ? err.message : 'Could not restore last project.'),
+      },
+    );
+  }, [autoRestore, lastOpenedHash, openProject, touchLastOpened]);
 
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/profiles/${encodeURIComponent(lastSession.projectHash)}/${encodeURIComponent(lastSession.profileName)}`,
-        );
-        if (!res.ok) {
-          setRestoreError('Last session profile is missing.');
-          return;
-        }
-        const { profile } = await res.json();
-        openProject.mutate({
-          layers: profile.layers,
-          projectName: profile.projectName,
-          profileName: profile.name,
-        });
-      } catch (err) {
-        setRestoreError(err instanceof Error ? err.message : 'Could not restore last session.');
-      }
-    })();
-  }, [prefs, lastSession, openProject.mutate]);
-
-  const handleOpenFromRecent = (entry: RecentEntry) => {
-    (async () => {
-      try {
-        const res = await fetch(
-          `/api/profiles/${encodeURIComponent(entry.projectHash)}/${encodeURIComponent(entry.profileName)}`,
-        );
-        if (!res.ok) {
-          setRestoreError(`Profile "${entry.profileName}" could not be opened.`);
-          return;
-        }
-        const { profile } = await res.json();
-        setRestoreError(null);
-        openProject.mutate({
-          layers: profile.layers,
-          projectName: profile.projectName,
-          profileName: profile.name,
-        });
-      } catch (err) {
-        setRestoreError(err instanceof Error ? err.message : 'Could not open profile.');
-      }
-    })();
-  };
-
-  const handleRemoveRecent = (entry: RecentEntry) => {
-    removeRecent.mutate({ projectHash: entry.projectHash, profileName: entry.profileName });
+  const handleOpenSaved = (project: SavedProject) => {
+    setRestoreError(null);
+    setChooserOpen(false);
+    openProject.mutate(
+      { layers: project.layers, projectName: project.name },
+      {
+        onSuccess: () => touchLastOpened(project.hash),
+        onError: (err) =>
+          setRestoreError(err instanceof Error ? err.message : 'Could not open project.'),
+      },
+    );
   };
 
   const handleOpenClick = () => {
@@ -104,33 +74,32 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
       <div className="space-y-1">
         <h2 className="text-lg font-medium">No project loaded</h2>
         <p className="text-sm text-muted-foreground max-w-md">
-          Pick a folder under /workspaces to scan for sitecore.json files, then
-          choose which layers to load. OOTB Sitecore items remain visible at all
-          times.
+          {hasSavedProjects
+            ? 'Open one of your saved projects, or create a new one.'
+            : 'Point Mockingbird at a folder with sitecore.json files to get started.'}
         </p>
       </div>
-      <Button onClick={handleOpenClick}>Open a project</Button>
+      <Button onClick={handleOpenClick}>Get started</Button>
 
       {restoreError && (
         <p className="text-xs text-destructive">{restoreError}</p>
       )}
-      <RecentsSection
-        entries={recentsData?.entries ?? []}
-        onOpen={handleOpenFromRecent}
-        onRemove={handleRemoveRecent}
-      />
 
       <FirstRunChooser
         open={chooserOpen}
         onClose={() => setChooserOpen(false)}
-        onOpenExisting={() => {
+        onCreateNew={() => {
           setChooserOpen(false);
           setWizardOpen(true);
         }}
-        onBrowseOotbOnly={() => setChooserOpen(false)}
+        onOpenExisting={handleOpenSaved}
       />
       {wizardOpen && (
-        <OpenProjectWizard open={wizardOpen} onClose={() => setWizardOpen(false)} initialMode="first-run" />
+        <OpenProjectWizard
+          open={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          initialMode="first-run"
+        />
       )}
     </EmptyState>
   );

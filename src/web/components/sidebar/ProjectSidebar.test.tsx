@@ -49,27 +49,29 @@ describe('<ProjectSidebar>', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders one row per user layer + an OOTB substrate row', () => {
+  it('renders one row per user layer + a Sitecore IAR substrate row', () => {
     renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
     expect(screen.getByText('authoring')).toBeInTheDocument();
     expect(screen.getByText('content')).toBeInTheDocument();
-    expect(screen.getByText(/OOTB/)).toBeInTheDocument();
+    expect(screen.getByText(/Sitecore IAR/)).toBeInTheDocument();
     expect(screen.getByText('22613')).toBeInTheDocument();
   });
 
-  it('Switch button calls onSwitch', async () => {
+  it('kebab menu "Open another project" invokes onSwitch', async () => {
     const onSwitch = vi.fn();
     const user = userEvent.setup();
     renderWithClient(<ProjectSidebar status={statusReady} onSwitch={onSwitch} onClose={() => {}} />);
-    await user.click(screen.getByRole('button', { name: /switch/i }));
+    await user.click(screen.getByRole('button', { name: /project actions/i }));
+    await user.click(screen.getByRole('button', { name: /open another project/i }));
     expect(onSwitch).toHaveBeenCalled();
   });
 
-  it('Close button calls onClose', async () => {
+  it('kebab menu "Close project" invokes onClose', async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={onClose} />);
-    await user.click(screen.getByRole('button', { name: /close/i }));
+    await user.click(screen.getByRole('button', { name: /project actions/i }));
+    await user.click(screen.getByRole('button', { name: /close project/i }));
     expect(onClose).toHaveBeenCalled();
   });
 

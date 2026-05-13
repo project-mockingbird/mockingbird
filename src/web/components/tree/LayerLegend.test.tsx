@@ -16,7 +16,7 @@ describe('<LayerLegend>', () => {
     render(<LayerLegend layers={layers} layerVisibility={{}} />);
     expect(screen.getByText('authoring')).toBeInTheDocument();
     expect(screen.getByText('content')).toBeInTheDocument();
-    expect(screen.getByText(/OOTB/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sitecore IAR/i)).toBeInTheDocument();
   });
 
   it('hidden layers render with reduced opacity', () => {
