@@ -11,6 +11,7 @@ export function computeProjectHash(workspaceRelativePaths: string[]): string {
     throw new Error('computeProjectHash requires at least one path');
   }
   const sorted = [...workspaceRelativePaths].sort();
+  // '\n' is a safe separator: POSIX paths cannot contain newline characters.
   const hash = createHash('sha1').update(sorted.join('\n')).digest('hex');
   return hash.slice(0, 12);
 }

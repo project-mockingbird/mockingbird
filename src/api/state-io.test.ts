@@ -46,4 +46,20 @@ describe('state-io', () => {
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ v: 2 });
     expect(existsSync(path + '.tmp')).toBe(false);
   });
+
+  it('writeJsonAtomic survives concurrent writes to the same path', async () => {
+    const path = join(dir, 'concurrent.json');
+    // Two simultaneous writers - both should resolve without ENOENT.
+    await Promise.all([
+      writeJsonAtomic(path, { writer: 'A' }),
+      writeJsonAtomic(path, { writer: 'B' }),
+    ]);
+    // Final file is one of the two writers (last-rename-wins), not corrupt.
+    const final = JSON.parse(readFileSync(path, 'utf8'));
+    expect(['A', 'B']).toContain(final.writer);
+    // No leftover .tmp files in the directory.
+    const { readdirSync } = await import('fs');
+    const entries = readdirSync(dir);
+    expect(entries.filter((e) => e.endsWith('.tmp'))).toEqual([]);
+  });
 });
