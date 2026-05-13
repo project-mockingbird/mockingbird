@@ -695,165 +695,122 @@ function ContentTreeNode({
       : []),
   ];
 
+  // Shared row inner content used in both provenance and non-provenance branches.
+  const rowInner = (
+    <>
+      {node.hasChildren ? (
+        <button
+          tabIndex={-1}
+          onClick={handleToggle}
+          className="p-0.5 hover:bg-muted rounded-sm"
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+        >
+          {isLoading ? (
+            <Icon
+              path={mdiLoading}
+              className="h-3 w-3 animate-spin"
+            />
+          ) : (
+            <Icon
+              path={mdiChevronRight}
+              className={cn(
+                'h-3 w-3 transition-transform',
+                expanded && 'rotate-90',
+              )}
+            />
+          )}
+        </button>
+      ) : (
+        <span className="w-4" />
+      )}
+      <Icon
+        path={iconPath}
+        className={cn(
+          'h-3.5 w-3.5 shrink-0',
+          isRegistry
+            ? 'text-muted-foreground/50'
+            : 'text-muted-foreground',
+        )}
+      />
+      <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
+        {node.name}
+      </span>
+      <div className="ml-auto flex items-center gap-1">
+        {hasError && (
+          <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
+        )}
+        <RowActionIcons
+          isRegistry={isRegistry}
+          onInsert={() => setIconInsertDialogOpen(true)}
+          onDuplicate={() => setDuplicateDialogOpen(true)}
+          onRefresh={handleRefresh}
+          onDelete={handleDelete}
+          isRefreshing={refreshItemMutation.isPending}
+        />
+      </div>
+    </>
+  );
+
+  const rowClassName = cn(
+    'relative group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
+    'focus:outline-none',
+    isFocused && 'ring-1 ring-ring ring-inset',
+    isSelected && 'bg-accent font-medium',
+    isRegistry
+      ? 'text-muted-foreground hover:bg-accent/50'
+      : 'hover:bg-accent',
+  );
+
+  const rowProps = {
+    ...kbNav.getRowProps({
+      id: node.id,
+      level: depth,
+      isParent: !!node.hasChildren,
+      isExpanded: expanded,
+    }),
+    className: rowClassName,
+    style: { paddingLeft: `${depth * 16 + 16}px` },
+    onClick: () => {
+      kbNav.setFocusedId(node.id);
+      onSelect(node.id);
+    },
+  };
+
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div>
-            <div
-              ref={rowRef}
-              {...kbNav.getRowProps({
-                id: node.id,
-                level: depth,
-                isParent: !!node.hasChildren,
-                isExpanded: expanded,
-              })}
-              className={cn(
-                'relative group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
-                'focus:outline-none',
-                isFocused && 'ring-1 ring-ring ring-inset',
-                isSelected && 'bg-accent font-medium',
-                isRegistry
-                  ? 'text-muted-foreground hover:bg-accent/50'
-                  : 'hover:bg-accent',
-              )}
-              style={{ paddingLeft: `${depth * 16 + 16}px` }}
-              onClick={() => {
-                kbNav.setFocusedId(node.id);
-                onSelect(node.id);
-              }}
-            >
-              {node.provenance && (
-                <ProvenanceBar
-                  provenance={node.provenance}
-                  layerColors={layerColors}
-                  layerVisibility={layerVisibility}
-                />
-              )}
-              {node.provenance ? (
-                <TooltipProvider delayDuration={300}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="contents">
-                        {node.hasChildren ? (
-                          <button
-                            tabIndex={-1}
-                            onClick={handleToggle}
-                            className="p-0.5 hover:bg-muted rounded-sm"
-                            aria-label={expanded ? 'Collapse' : 'Expand'}
-                          >
-                            {isLoading ? (
-                              <Icon
-                                path={mdiLoading}
-                                className="h-3 w-3 animate-spin"
-                              />
-                            ) : (
-                              <Icon
-                                path={mdiChevronRight}
-                                className={cn(
-                                  'h-3 w-3 transition-transform',
-                                  expanded && 'rotate-90',
-                                )}
-                              />
-                            )}
-                          </button>
-                        ) : (
-                          <span className="w-4" />
-                        )}
-                        <Icon
-                          path={iconPath}
-                          className={cn(
-                            'h-3.5 w-3.5 shrink-0',
-                            isRegistry
-                              ? 'text-muted-foreground/50'
-                              : 'text-muted-foreground',
-                          )}
-                        />
-                        <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
-                          {node.name}
-                        </span>
-                        <div className="ml-auto flex items-center gap-1">
-                          {hasError && (
-                            <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
-                          )}
-                          <RowActionIcons
-                            isRegistry={isRegistry}
-                            onInsert={() => setIconInsertDialogOpen(true)}
-                            onDuplicate={() => setDuplicateDialogOpen(true)}
-                            onRefresh={handleRefresh}
-                            onDelete={handleDelete}
-                            isRefreshing={refreshItemMutation.isPending}
-                          />
+            {node.provenance ? (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div ref={rowRef} {...rowProps}>
+                      <ProvenanceBar
+                        provenance={node.provenance}
+                        layerColors={layerColors}
+                        layerVisibility={layerVisibility}
+                      />
+                      {rowInner}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="start" className="text-xs">
+                    <div className="space-y-0.5">
+                      <div className="font-medium">Provenance</div>
+                      {node.provenance.contributingLayers.map((name) => (
+                        <div key={name}>
+                          {name === node.provenance!.winnerLayer ? `${name} (winner)` : name}
                         </div>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="right" align="start" className="text-xs">
-                      <div className="space-y-0.5">
-                        <div className="font-medium">Provenance</div>
-                        {node.provenance.contributingLayers.map((name) => (
-                          <div key={name}>
-                            {name === node.provenance!.winnerLayer ? `${name} (winner)` : name}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                <>
-                  {node.hasChildren ? (
-                    <button
-                      tabIndex={-1}
-                      onClick={handleToggle}
-                      className="p-0.5 hover:bg-muted rounded-sm"
-                      aria-label={expanded ? 'Collapse' : 'Expand'}
-                    >
-                      {isLoading ? (
-                        <Icon
-                          path={mdiLoading}
-                          className="h-3 w-3 animate-spin"
-                        />
-                      ) : (
-                        <Icon
-                          path={mdiChevronRight}
-                          className={cn(
-                            'h-3 w-3 transition-transform',
-                            expanded && 'rotate-90',
-                          )}
-                        />
-                      )}
-                    </button>
-                  ) : (
-                    <span className="w-4" />
-                  )}
-                  <Icon
-                    path={iconPath}
-                    className={cn(
-                      'h-3.5 w-3.5 shrink-0',
-                      isRegistry
-                        ? 'text-muted-foreground/50'
-                        : 'text-muted-foreground',
-                    )}
-                  />
-                  <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
-                    {node.name}
-                  </span>
-                  <div className="ml-auto flex items-center gap-1">
-                    {hasError && (
-                      <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
-                    )}
-                    <RowActionIcons
-                      isRegistry={isRegistry}
-                      onInsert={() => setIconInsertDialogOpen(true)}
-                      onDuplicate={() => setDuplicateDialogOpen(true)}
-                      onRefresh={handleRefresh}
-                      onDelete={handleDelete}
-                      isRefreshing={refreshItemMutation.isPending}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div ref={rowRef} {...rowProps}>
+                {rowInner}
+              </div>
+            )}
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
