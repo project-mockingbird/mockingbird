@@ -17,7 +17,7 @@
 # use the env-var-driven docker-compose.yml instead.
 services:
   mockingbird:
-    image: projectmockingbird/mockingbird:1.0.6.6
+    image: projectmockingbird/mockingbird:1.0.6.7
     container_name: mockingbird
     ports:
       # Loopback-only by default - drop the 127.0.0.1 prefix to publish to all
