@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: projectmockingbird/mockingbird:1.0.8.1
+    image: projectmockingbird/mockingbird:1.0.8.2
     container_name: ${COMPOSE_PROJECT_NAME}
     ports:
       # Bind to loopback only so a developer on a coffee-shop / hostile LAN
