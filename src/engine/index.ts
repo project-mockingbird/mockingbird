@@ -20,7 +20,7 @@ import {
   FIELD_IDS,
 } from './constants.js';
 import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, ValidationResult } from './types.js';
-import { comparePushOps, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
+import { comparePushOps, pushOpStrength, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
 import type { MutationPlan } from './mutation-plan.js';
 import { insertItem as insertItemImpl, type InsertItemArgs, type InsertItemResult } from './insert-item.js';
 import { resolveChildFilePath } from './child-file-path.js';
@@ -1105,7 +1105,13 @@ export class Engine {
     this.readiness.reset();
 
     const pushOpsByItemId = new Map<string, AllowedPushOperations | undefined>();
-    const contributorsByItemId = new Map<string, string[]>(); // weakest -> strongest
+    // Contributors are gathered in scan order with their per-include pushOps, then
+    // sorted weakest -> strongest at storage time so the winner (strongest) is
+    // always last regardless of scan order.
+    const contributorsByItemId = new Map<
+      string,
+      Array<{ name: string; ops: AllowedPushOperations | undefined }>
+    >();
     const layerCacheWrites: Promise<void>[] = [];
 
     for (const layer of layers) {
@@ -1156,28 +1162,32 @@ export class Engine {
         const existingPushOps = pushOpsByItemId.get(node.item.id);
         const isFirstSighting = !this.tree.getById(node.item.id);
 
-        // Track contributing layer (every layer that has the item ID, in scan order).
+        // Track contributing layer (every layer that has the item ID) alongside its
+        // per-include pushOps for this item, so the array can be sorted by strength
+        // before exposure.
         let contributors = contributorsByItemId.get(node.item.id);
         if (!contributors) {
           contributors = [];
           contributorsByItemId.set(node.item.id, contributors);
         }
-        contributors.push(layer.name);
+        contributors.push({ name: layer.name, ops: incomingPushOps });
+
+        const sortedNames = [...contributors]
+          .sort((a, b) => pushOpStrength(a.ops) - pushOpStrength(b.ops))
+          .map((c) => c.name);
 
         if (isFirstSighting || comparePushOps(incomingPushOps, existingPushOps) > 0) {
           this.tree.addItem(node.item, node.filePath, node.module);
           pushOpsByItemId.set(node.item.id, incomingPushOps);
-          // contributors already has layer.name pushed at the top of the loop; it's
-          // naturally last since the loser branch doesn't add it. Winner = last contributor.
           this._itemProvenance.set(node.item.id, {
             winnerLayer: layer.name,
-            contributingLayers: contributors.slice(),
+            contributingLayers: sortedNames,
           });
         } else {
           // Still update contributingLayers on the existing provenance entry.
           const existing = this._itemProvenance.get(node.item.id);
           if (existing) {
-            existing.contributingLayers = contributors.slice();
+            existing.contributingLayers = sortedNames;
           }
         }
       }

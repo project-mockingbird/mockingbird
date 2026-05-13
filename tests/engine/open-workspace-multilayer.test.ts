@@ -231,4 +231,18 @@ describe('Engine.openWorkspace - multi-layer precedence', () => {
     expect(prov?.winnerLayer).toBe('content');
     expect(prov?.contributingLayers).toEqual(['authoring', 'content']);
   });
+
+  it('orders contributingLayers by push-ops strength regardless of scan order', async () => {
+    engine = new Engine({ registryPath: registryFixture });
+    // Reverse scan order: B (CreateUpdateAndDelete, strongest) first, A (CreateOnly, weakest) second.
+    // contributingLayers must still be sorted weakest -> strongest, so winner is last.
+    await engine.openWorkspace([
+      { sitecoreJsonPath: join(layerB, 'sitecore.json'), name: 'content' },
+      { sitecoreJsonPath: join(layerA, 'sitecore.json'), name: 'authoring' },
+    ]);
+
+    const prov = engine.getItemProvenance(SAMPLE_ITEM_ID);
+    expect(prov?.winnerLayer).toBe('content');
+    expect(prov?.contributingLayers).toEqual(['authoring', 'content']);
+  });
 });
