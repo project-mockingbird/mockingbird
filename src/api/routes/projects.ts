@@ -3,6 +3,12 @@ import { resolve, normalize, sep } from 'path';
 import { existsSync } from 'fs';
 import { discoverScsConfigs } from '../../engine/scs-config-detector.js';
 import type { Engine } from '../../engine/index.js';
+import { upsertRecent, readRecents, removeRecent } from '../recents-store.js';
+import { writeLastSession, readLastSession } from '../last-session-store.js';
+import { writeProjectMeta } from '../project-meta-store.js';
+import { computeProjectHash } from '../project-hash.js';
+import { readProfile } from '../profile-store.js';
+import { setActiveProfile } from '../session-state.js';
 
 /**
  * Merges user layers with layer stats and appends the synthetic ootb row when
@@ -81,6 +87,7 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
         color?: string;
       }>;
       projectName?: string;
+      profileName?: string;
     };
   }>('/api/projects/open', async (req, reply) => {
     const layers = req.body?.layers;
@@ -118,6 +125,29 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       }
       throw err;
     }
+
+    // Side effects: project meta + (when profileName provided) recents + last-session + active.
+    const requestPaths = layers.map((l) => l.sitecoreJsonPath as string);
+    const projectHash = computeProjectHash(requestPaths);
+    const effectiveProjectName = projectName ?? 'project';
+    const profileName = typeof req.body?.profileName === 'string' ? req.body.profileName : undefined;
+    const now = new Date().toISOString();
+
+    await writeProjectMeta({
+      projectHash,
+      lastProjectName: effectiveProjectName,
+      layerPaths: requestPaths,
+      lastOpenedAt: now,
+    });
+
+    if (typeof profileName === 'string' && profileName.length > 0) {
+      await upsertRecent({ projectHash, projectName: effectiveProjectName, profileName, lastOpenedAt: now });
+      await writeLastSession({ projectHash, profileName });
+      setActiveProfile({ projectHash, profileName });
+    } else {
+      setActiveProfile(null);
+    }
+
     reply.send({ state: engine.readiness.state, layers: layersWithEffectiveCount(engine) });
   });
 
@@ -131,6 +161,49 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
    */
   app.post('/api/projects/close', async (_req, reply) => {
     await engine.closeWorkspace();
+    await writeLastSession(null);
+    setActiveProfile(null);
     reply.send({ state: engine.readiness.state, layers: [] });
+  });
+
+  app.get('/api/projects/recent', async () => {
+    const recents = await readRecents();
+    const entries = await Promise.all(
+      recents.map(async (r) => {
+        const profile = await readProfile(r.projectHash, r.profileName);
+        if (!profile) {
+          return { ...r, layerColors: [] as string[], layerCount: 0, missing: true };
+        }
+        return {
+          ...r,
+          layerColors: profile.layers.slice(0, 4).map((l) => l.color),
+          layerCount: profile.layers.length,
+        };
+      }),
+    );
+    return { entries };
+  });
+
+  app.delete<{ Body: { projectHash?: string; profileName?: string } }>(
+    '/api/projects/recent',
+    async (req, reply) => {
+      const { projectHash, profileName } = req.body ?? {};
+      if (typeof projectHash !== 'string' || typeof profileName !== 'string') {
+        reply.code(400).send({ error: 'projectHash and profileName are required' });
+        return;
+      }
+      await removeRecent(projectHash, profileName);
+      reply.send({ ok: true });
+    },
+  );
+
+  app.get('/api/projects/last-session', async () => {
+    const ls = await readLastSession();
+    return ls;
+  });
+
+  app.delete('/api/projects/last-session', async () => {
+    await writeLastSession(null);
+    return { ok: true };
   });
 }
