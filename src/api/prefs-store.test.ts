@@ -28,4 +28,15 @@ describe('prefs-store', () => {
     const result = await writePrefs({ autoRestoreLastSession: true });
     expect(result).toEqual({ autoRestoreLastSession: true });
   });
+
+  it('writePrefs strips unknown keys from the persisted file', async () => {
+    // Seed a file with a legacy key alongside the known field.
+    const { writeFileSync, readFileSync } = await import('fs');
+    writeFileSync(join(dir, 'prefs.json'), JSON.stringify({ autoRestoreLastSession: true, legacyKey: true }));
+    // Patch the known field; legacyKey should be gone after write.
+    await writePrefs({ autoRestoreLastSession: false });
+    const raw = JSON.parse(readFileSync(join(dir, 'prefs.json'), 'utf8'));
+    expect(Object.keys(raw).sort()).toEqual(['autoRestoreLastSession']);
+    expect(raw.autoRestoreLastSession).toBe(false);
+  });
 });

@@ -29,4 +29,10 @@ describe('last-session-store', () => {
     await writeLastSession(null);
     expect(await readLastSession()).toBeNull();
   });
+
+  it('readLastSession returns null on partial data (missing profileName)', async () => {
+    const { writeFileSync } = await import('fs');
+    writeFileSync(join(dir, 'last-session.json'), JSON.stringify({ projectHash: 'abc' }));
+    expect(await readLastSession()).toBeNull();
+  });
 });

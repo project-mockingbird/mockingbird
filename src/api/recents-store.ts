@@ -17,7 +17,15 @@ interface RecentsFile {
 export async function readRecents(): Promise<RecentsEntry[]> {
   const file = await readJsonOrDefault<RecentsFile>(getRecentsPath(), { entries: [] });
   if (!Array.isArray(file.entries)) return [];
-  return file.entries;
+  return file.entries.filter(
+    (e): e is RecentsEntry =>
+      !!e &&
+      typeof e === 'object' &&
+      typeof e.projectHash === 'string' &&
+      typeof e.projectName === 'string' &&
+      typeof e.profileName === 'string' &&
+      typeof e.lastOpenedAt === 'string',
+  );
 }
 
 export async function upsertRecent(entry: RecentsEntry): Promise<void> {

@@ -8,7 +8,14 @@ export interface LastSession {
 
 export async function readLastSession(): Promise<LastSession | null> {
   const value = await readJsonOrDefault<LastSession | null>(getLastSessionPath(), null);
-  if (!value || typeof value !== 'object' || typeof value.projectHash !== 'string') return null;
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    typeof value.projectHash !== 'string' ||
+    typeof value.profileName !== 'string'
+  ) {
+    return null;
+  }
   return value;
 }
 

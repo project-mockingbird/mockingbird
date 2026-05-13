@@ -51,4 +51,21 @@ describe('recents-store', () => {
     const out = await readRecents();
     expect(out.map((e) => e.profileName)).toEqual(['qa']);
   });
+
+  it('readRecents filters out malformed entries', async () => {
+    const { writeFileSync } = await import('fs');
+    writeFileSync(
+      join(dir, 'recents.json'),
+      JSON.stringify({
+        entries: [
+          { projectHash: 'a', projectName: 'p1', profileName: 'dev', lastOpenedAt: 'T1' },
+          { projectHash: 'b' }, // missing fields - dropped
+          null, // null - dropped
+          { projectHash: 'c', projectName: 'p3', profileName: 'qa', lastOpenedAt: 'T2' },
+        ],
+      }),
+    );
+    const out = await readRecents();
+    expect(out.map((e) => e.projectHash)).toEqual(['a', 'c']);
+  });
 });

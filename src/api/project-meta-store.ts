@@ -10,7 +10,14 @@ export interface ProjectMeta {
 
 export async function readProjectMeta(projectHash: string): Promise<ProjectMeta | null> {
   const meta = await readJsonOrDefault<ProjectMeta | null>(getProjectMetaPath(projectHash), null);
-  if (!meta || typeof meta !== 'object' || typeof meta.projectHash !== 'string') return null;
+  if (
+    !meta ||
+    typeof meta !== 'object' ||
+    typeof meta.projectHash !== 'string' ||
+    meta.projectHash !== projectHash
+  ) {
+    return null;
+  }
   return meta;
 }
 
