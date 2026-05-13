@@ -108,6 +108,40 @@ By default the compose binds your host's home directory (`${HOME}`) to `/workspa
 
 The existing env-var-driven `docker-compose.yml` is still the right choice for head-app integrations that want a fixed workspace baked in.
 
+## Project registry: `config.mockingbird`
+
+Mockingbird stores the saved-projects list in a workspace-local file:
+
+    ./config.mockingbird
+
+This file lives at the workspace root, alongside `sitecore.json`. **Commit it.**
+Anyone who clones the repo and runs mockingbird gets the team's saved projects
+in the "Open existing project" wizard for free - no per-developer setup needed.
+
+The file is plain JSON. Mockingbird reads it on startup via `GET /api/config`
+and writes it back via `PUT /api/config` whenever the project list changes.
+
+### Cache: `.mockingbird/cache/`
+
+Engine cache artifacts live under `.mockingbird/cache/` in the workspace mount.
+On first cache write, mockingbird:
+- creates `.mockingbird/cache/.gitkeep`
+- appends `.mockingbird/` to root `.gitignore` (idempotent)
+
+This is purely transient state. Safe to delete; rebuilds on next open. The
+cache used to live in a named docker volume (`mockingbird-cache`); 1.0.9.0
+moves it to the workspace mount so there's exactly one volume declaration.
+If upgrading from <=1.0.8.x, you can reclaim the orphaned volume:
+
+    docker volume rm mockingbird-cache
+
+### Per-user preferences (auto-restore, theme, etc.)
+
+Some settings are per-user, per-browser and stay in browser localStorage:
+auto-restore-last-project, theme, sidebar collapsed, panel sizes. These are
+intentionally NOT in `config.mockingbird` since they don't make sense to share
+across the team.
+
 ## Endpoints
 
 | What | URL |
@@ -295,6 +329,8 @@ Add `:ro` to the first three mounts if you're using Mockingbird as a read-only l
 | `SCS_CONTENT_SITECORE_JSON` | Optional second `sitecore.json` for a separate content tree. | *(empty)* |
 | `MOCKINGBIRD_CACHE_PATH` | Engine-internal cache directory. | `/data/cache` *(in compose)* |
 | `INDEX_CACHE_PATH` | Persistent cache file path | *(disabled if unset)* |
+| `MOCKINGBIRD_WORKSPACE` | Container path the host workspace is bind-mounted at. (Replaces `MOCKINGBIRD_WORKSPACE_ROOT`; old name still supported in 1.0.9.x as an alias.) | `/workspaces` |
+| `MOCKINGBIRD_CONFIG_PATH` | Where the team-shared project registry lives. Override for tests or non-standard layouts. | `${MOCKINGBIRD_WORKSPACE}/config.mockingbird` |
 
 ### Host interpolation (set in `.env` - `docker-compose.yml` has no fallbacks, so each must be set)
 
