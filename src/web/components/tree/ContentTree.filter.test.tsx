@@ -69,11 +69,12 @@ const defaultTreeData = [
 
 // useTree and useChildren are vi.fn()s so individual tests can call mockReturnValue.
 const mockUseTree = vi.fn(() => ({ data: defaultTreeData, isLoading: false }));
-const mockUseChildren = vi.fn(() => ({ data: [] }));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockUseChildren: ReturnType<typeof vi.fn<() => { data: any[] }>> = vi.fn(() => ({ data: [] }));
 
 vi.mock('@/hooks/useItems', () => ({
   useTree: () => mockUseTree(),
-  useChildren: (...args: unknown[]) => mockUseChildren(...args),
+  useChildren: () => mockUseChildren(),
   useCreateItem: () => ({ mutateAsync: vi.fn() }),
   useDeleteItem: () => ({ mutateAsync: vi.fn() }),
   useAncestors: () => ({ data: [] }),

@@ -20,15 +20,12 @@ export function ColorSwatch({ value, onChange, disabled, className, ariaLabel }:
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          style={{ backgroundColor: value }}
-          aria-label={ariaLabel ?? 'Pick layer color'}
-          className={`size-4 rounded border shrink-0 disabled:cursor-not-allowed ${className ?? ''}`}
-        />
-      </PopoverTrigger>
+      <PopoverTrigger
+        disabled={disabled}
+        style={{ backgroundColor: value }}
+        aria-label={ariaLabel ?? 'Pick layer color'}
+        className={`size-4 rounded border shrink-0 disabled:cursor-not-allowed ${className ?? ''}`}
+      />
       <PopoverContent className="w-auto p-2">
         <div className="grid grid-cols-4 gap-1">
           {LAYER_COLOR_PALETTE.map((color) => (
