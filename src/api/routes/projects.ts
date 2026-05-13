@@ -8,7 +8,7 @@ import { writeLastSession, readLastSession } from '../last-session-store.js';
 import { writeProjectMeta } from '../project-meta-store.js';
 import { computeProjectHash } from '../project-hash.js';
 import { readProfile } from '../profile-store.js';
-import { setActiveProfile } from '../session-state.js';
+import { setActiveProfile, setCurrentProjectHash } from '../session-state.js';
 
 /**
  * Merges user layers with layer stats and appends the synthetic ootb row when
@@ -140,6 +140,8 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       lastOpenedAt: now,
     });
 
+    setCurrentProjectHash(projectHash);
+
     if (typeof profileName === 'string' && profileName.length > 0) {
       await upsertRecent({ projectHash, projectName: effectiveProjectName, profileName, lastOpenedAt: now });
       await writeLastSession({ projectHash, profileName });
@@ -163,6 +165,7 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
     await engine.closeWorkspace();
     await writeLastSession(null);
     setActiveProfile(null);
+    setCurrentProjectHash(null);
     reply.send({ state: engine.readiness.state, layers: [] });
   });
 

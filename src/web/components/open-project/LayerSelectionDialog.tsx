@@ -23,7 +23,7 @@ interface LayerSelectionDialogProps {
   rootPath: string;
   candidates: ReadonlyArray<ScsConfigCandidate>;
   onClose: () => void;
-  onConfirm: (layers: OpenProjectLayer[]) => void;
+  onConfirm: (layers: OpenProjectLayer[], profileName?: string) => void;
   /** When provided, an "Add Layer" footer button appears that re-opens the FolderBrowser. */
   onAddAnother?: () => void;
   /**
@@ -43,8 +43,6 @@ interface LayerSelectionDialogProps {
   onProjectNameChange?: (name: string) => void;
   isPending?: boolean;
   serverError?: string | null;
-  /** Optional save-as profile name. Fires alongside onConfirm with the trimmed value (or undefined if empty/whitespace). */
-  onConfirmProfile?: (profileName: string | undefined) => void;
 }
 
 export interface LayerRowState {
@@ -76,7 +74,6 @@ export function LayerSelectionDialog({
   onProjectNameChange,
   isPending = false,
   serverError = null,
-  onConfirmProfile,
 }: LayerSelectionDialogProps) {
   const overlaps = useMemo(() => detectOverlaps(candidates), [candidates]);
   const [profileNameInput, setProfileNameInput] = useState('');
@@ -129,8 +126,7 @@ export function LayerSelectionDialog({
         color: r.color,
       }));
     const trimmed = profileNameInput.trim();
-    onConfirmProfile?.(trimmed.length > 0 ? trimmed : undefined);
-    onConfirm(payload);
+    onConfirm(payload, trimmed.length > 0 ? trimmed : undefined);
   };
 
   return (
@@ -264,9 +260,6 @@ export function LayerSelectionDialog({
           <p className="text-xs text-destructive">{serverError}</p>
         )}
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isPending}>
-            Cancel
-          </Button>
           {onAddAnother && (
             <Button
               variant="outline"
@@ -277,6 +270,9 @@ export function LayerSelectionDialog({
               Add Layer
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={onClose} disabled={isPending}>
+            Cancel
+          </Button>
           <Button size="sm" onClick={handleConfirm} disabled={!canSubmit}>
             {isPending && <Icon path={mdiLoading} className="size-3 mr-1 animate-spin" />}
             {isPending ? 'Opening...' : 'Open project'}

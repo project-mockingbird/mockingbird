@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/lib/icon';
-import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight, mdiCog } from '@mdi/js';
+import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight } from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { ProfileDropdown } from './ProfileDropdown';
@@ -10,9 +10,7 @@ import { useProfiles, useUpsertProfile, useDeleteProfile, useRenameProfile } fro
 import { useEngineStatus } from '@/hooks/useEngineStatus';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
-import { SettingsPopover } from './SettingsPopover';
 import { ManageProfilesModal } from './ManageProfilesModal';
-import { usePrefs, useUpdatePrefs } from '@/hooks/usePrefs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface SidebarLayer {
@@ -57,20 +55,18 @@ function writeCollapsed(value: boolean): void {
 export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProps) {
   const { isVisible, setVisibility, rename, recolor, overrides } = useLayerState();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [saveAsName, setSaveAsName] = useState<string | null>(null);
 
   const engineStatus = useEngineStatus();
-  const profilesQuery = useProfiles(engineStatus.data?.activeProfile?.projectHash ?? null);
+  const projectHash = engineStatus.data?.projectHash ?? null;
+  const profilesQuery = useProfiles(projectHash);
 
   const openProject = useOpenProject();
   const closeProject = useCloseProject();
   const upsertProfile = useUpsertProfile();
   const deleteProfile = useDeleteProfile();
   const renameProfile = useRenameProfile();
-  const { data: prefs } = usePrefs();
-  const updatePrefs = useUpdatePrefs();
 
   if (status.state === 'no-project') return null;
   if (!status.layers || status.layers.length === 0) return null;
@@ -143,13 +139,13 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
 
   const handleSaveAsConfirm = (name: string) => {
     const trimmed = name.trim();
-    if (!trimmed || !activeProfile) {
+    if (!trimmed || !projectHash) {
       setSaveAsName(null);
       return;
     }
     upsertProfile.mutate(
       {
-        projectHash: activeProfile.projectHash,
+        projectHash,
         name: trimmed,
         projectName: status.projectName ?? 'project',
         layers: userLayers.map((l) => ({
@@ -158,7 +154,11 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           color: l.color ?? '#888888',
         })),
       },
-      { onSuccess: () => setSaveAsName(null) },
+      {
+        onSuccess: () => {
+          setSaveAsName(null);
+        },
+      },
     );
   };
 
@@ -193,15 +193,6 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setSettingsOpen((v) => !v)}
-          aria-label="Settings"
-          className="p-0 size-6 shrink-0"
-        >
-          <Icon path={mdiCog} className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
           onClick={toggleCollapsed}
           aria-label="Collapse sidebar"
           className="p-0 size-6 shrink-0"
@@ -209,14 +200,6 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           <Icon path={mdiChevronRight} className="size-4" />
         </Button>
       </div>
-      {settingsOpen && (
-        <div className="px-3 pb-2 border-b">
-          <SettingsPopover
-            autoRestoreLastSession={prefs?.autoRestoreLastSession ?? false}
-            onChange={(patch) => updatePrefs.mutate(patch)}
-          />
-        </div>
-      )}
       <div className="px-3 py-2 border-b flex items-center gap-2">
         <span className="text-xs text-muted-foreground shrink-0">Profile</span>
         <div className="flex-1 min-w-0">

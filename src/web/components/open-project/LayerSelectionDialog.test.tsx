@@ -80,7 +80,7 @@ describe('LayerSelectionDialog', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /open project/i }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
-    const payload = onConfirm.mock.calls[0][0];
+    const [payload] = onConfirm.mock.calls[0];
     expect(payload).toHaveLength(2);
     expect(payload[0].sitecoreJsonPath).toBe('/workspaces/repo/authoring/sitecore.json');
     expect(payload[0].name).toBe('authoring');
@@ -101,7 +101,7 @@ describe('LayerSelectionDialog', () => {
     );
     fireEvent.click(screen.getAllByLabelText('Move layer down')[0]);
     fireEvent.click(screen.getByRole('button', { name: /open project/i }));
-    const payload = onConfirm.mock.calls[0][0];
+    const [payload] = onConfirm.mock.calls[0];
     expect(payload[0].name).toBe('content');
     expect(payload[1].name).toBe('authoring');
   });
@@ -198,7 +198,7 @@ describe('LayerSelectionDialog', () => {
     await user.clear(input);
     await user.type(input, 'primary{Enter}');
     await user.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirm).toHaveBeenCalledWith(
+    expect(onConfirm.mock.calls[0][0]).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'primary' })]),
     );
   });
@@ -227,7 +227,7 @@ describe('LayerSelectionDialog', () => {
     // The custom name should appear rather than the auto-derived "authoring"
     expect(screen.getByText('my-custom-name')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirm).toHaveBeenCalledWith(
+    expect(onConfirm.mock.calls[0][0]).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'my-custom-name' })]),
     );
   });
@@ -321,7 +321,7 @@ describe('LayerSelectionDialog', () => {
     await user.clear(input);
     await user.type(input, 'workspace-root{Enter}');
     await user.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirm).toHaveBeenCalledWith(
+    expect(onConfirm.mock.calls[0][0]).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'workspace-root' })]),
     );
   });
@@ -339,8 +339,7 @@ describe('LayerSelectionDialog', () => {
     expect(screen.getByLabelText(/save as profile/i)).toBeInTheDocument();
   });
 
-  it('forwards the typed profile name via onConfirmProfile', () => {
-    const onConfirmProfile = vi.fn();
+  it('forwards the typed profile name via onConfirm second arg', () => {
     const onConfirm = vi.fn();
     render(
       <LayerSelectionDialog
@@ -349,33 +348,30 @@ describe('LayerSelectionDialog', () => {
         candidates={CANDIDATES}
         onClose={() => {}}
         onConfirm={onConfirm}
-        onConfirmProfile={onConfirmProfile}
       />,
     );
     fireEvent.change(screen.getByLabelText(/save as profile/i), { target: { value: 'dev' } });
     fireEvent.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirmProfile).toHaveBeenCalledWith('dev');
+    expect(onConfirm).toHaveBeenCalledWith(expect.any(Array), 'dev');
   });
 
-  it('treats whitespace-only input as undefined', () => {
-    const onConfirmProfile = vi.fn();
+  it('treats whitespace-only input as undefined profile name', () => {
+    const onConfirm = vi.fn();
     render(
       <LayerSelectionDialog
         open
         rootPath="/workspaces/repo"
         candidates={CANDIDATES}
         onClose={() => {}}
-        onConfirm={() => {}}
-        onConfirmProfile={onConfirmProfile}
+        onConfirm={onConfirm}
       />,
     );
     fireEvent.change(screen.getByLabelText(/save as profile/i), { target: { value: '   ' } });
     fireEvent.click(screen.getByRole('button', { name: /open project/i }));
-    expect(onConfirmProfile).toHaveBeenCalledWith(undefined);
+    expect(onConfirm).toHaveBeenCalledWith(expect.any(Array), undefined);
   });
 
-  it('emits onConfirmProfile only when onConfirmProfile is provided', () => {
-    // Without onConfirmProfile prop, no crash; onConfirm still fires.
+  it('passes undefined profile name when save-as is empty', () => {
     const onConfirm = vi.fn();
     render(
       <LayerSelectionDialog
@@ -388,5 +384,6 @@ describe('LayerSelectionDialog', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: /open project/i }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onConfirm.mock.calls[0][1]).toBeUndefined();
   });
 });
