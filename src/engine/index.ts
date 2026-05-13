@@ -1,5 +1,6 @@
 import { mkdir, writeFile, stat, rm } from 'fs/promises';
 import { resolve, dirname, sep } from 'path';
+import { createHash } from 'crypto';
 import { scanDirectory, scanAdditionalRoot } from './scanner.js';
 import { ItemTree } from './tree.js';
 import { Registry } from './registry.js';
@@ -26,6 +27,32 @@ import { resolveChildFilePath } from './child-file-path.js';
 import { ReadinessState } from './readiness.js';
 import { startPhase } from './index-timing.js';
 import { loadPublishDateOverrides } from './layout/publish-dates.js';
+
+/**
+ * Derives a per-workspace cache path from a base cache path and a stable
+ * workspace identity string (the primary sitecoreJsonPath). Injects a 12-char
+ * sha1 hex prefix before the `.json.gz` extension so each project gets its
+ * own cache file without touching the base path shape.
+ *
+ * Example:
+ *   base       = "/data/cache/index.json.gz"
+ *   workspaceKey = "/workspaces/proj/sitecore.json"
+ *   result     = "/data/cache/index-<12hexchars>.json.gz"
+ *
+ * Returns undefined when basePath is undefined (cache disabled).
+ */
+function deriveCachePath(basePath: string | undefined, workspaceKey: string): string | undefined {
+  if (!basePath) return undefined;
+  const hash = createHash('sha1').update(workspaceKey).digest('hex').slice(0, 12);
+  const lastDot = basePath.lastIndexOf('.json.gz');
+  if (lastDot < 0) {
+    // Unexpected extension shape - append hash before the last dot.
+    const dotIdx = basePath.lastIndexOf('.');
+    if (dotIdx < 0) return `${basePath}-${hash}`;
+    return `${basePath.slice(0, dotIdx)}-${hash}${basePath.slice(dotIdx)}`;
+  }
+  return `${basePath.slice(0, lastDot)}-${hash}.json.gz`;
+}
 
 export class Engine {
   private options: EngineOptions;
@@ -1043,9 +1070,14 @@ export class Engine {
     if (layers.length === 1) {
       // Single-layer path: existing battle-tested flow via startInit.
       const primary = layers[0];
+      // Derive a per-workspace cache path so multiple projects each keep
+      // their own cache. Multi-layer mode does not use the cache (same as
+      // before); only single-layer mode benefits from this derivation.
+      const perProjectCachePath = deriveCachePath(this.options.indexCachePath, primary.sitecoreJsonPath);
       this.options = {
         ...this.options,
         rootDir: dirname(primary.sitecoreJsonPath),
+        indexCachePath: perProjectCachePath,
       };
       this._initStarted = false;
       this.readiness.reset();
