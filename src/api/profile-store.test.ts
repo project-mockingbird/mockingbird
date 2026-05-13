@@ -9,6 +9,7 @@ import {
   deleteProfile,
   renameProfile,
   type Profile,
+  type ProfileLayer,
 } from './profile-store.js';
 
 const HASH = 'abc123def456';
@@ -131,5 +132,34 @@ describe('profile-store', () => {
 
   it('deleteProfile is idempotent (no throw on missing)', async () => {
     await expect(deleteProfile(HASH, 'never-existed')).resolves.toBeUndefined();
+  });
+
+  it('upsertProfile rejects malformed layer entries', async () => {
+    const bad = makeProfile({
+      layers: [
+        { sitecoreJsonPath: '/x', name: 'core', color: '#000' },
+        // missing color
+        { sitecoreJsonPath: '/y', name: 'oops' } as unknown as ProfileLayer,
+      ],
+    });
+    await expect(upsertProfile(HASH, bad)).rejects.toThrow(/invalid profile layer/);
+  });
+
+  it('readProfile returns null when stored layers are malformed', async () => {
+    // Write a profile JSON directly with a bad layer.
+    const { writeFileSync, mkdirSync } = await import('fs');
+    const profilesDir = join(dir, 'projects', HASH, 'profiles');
+    mkdirSync(profilesDir, { recursive: true });
+    writeFileSync(
+      join(profilesDir, 'corrupt-layers.json'),
+      JSON.stringify({
+        name: 'corrupt-layers',
+        projectName: 'demo',
+        layers: [{ name: 'no-path' }], // missing sitecoreJsonPath and color
+        createdAt: 'T0',
+        updatedAt: 'T0',
+      }),
+    );
+    expect(await readProfile(HASH, 'corrupt-layers')).toBeNull();
   });
 });

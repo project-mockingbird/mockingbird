@@ -93,4 +93,19 @@ describe('profiles routes', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it('POST /api/profiles rejects malformed layer entries with 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/profiles',
+      payload: {
+        projectHash: 'abc',
+        name: 'dev',
+        projectName: 'demo',
+        layers: [{ sitecoreJsonPath: '/x', name: 'no-color' }],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/invalid profile layer/);
+  });
 });

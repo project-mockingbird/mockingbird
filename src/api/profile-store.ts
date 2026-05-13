@@ -33,12 +33,29 @@ function assertValidName(name: string): void {
   }
 }
 
+function isValidProfileLayer(value: unknown): value is ProfileLayer {
+  if (!value || typeof value !== 'object') return false;
+  const l = value as Record<string, unknown>;
+  return (
+    typeof l.sitecoreJsonPath === 'string' &&
+    typeof l.name === 'string' &&
+    typeof l.color === 'string'
+  );
+}
+
 export async function readProfile(projectHash: string, name: string): Promise<Profile | null> {
   assertValidName(name);
   const path = getProfilePath(projectHash, name);
   if (!existsSync(path)) return null;
   const raw = await readJsonOrDefault<Profile | null>(path, null);
-  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.layers)) return null;
+  if (
+    !raw ||
+    typeof raw !== 'object' ||
+    !Array.isArray(raw.layers) ||
+    !raw.layers.every(isValidProfileLayer)
+  ) {
+    return null;
+  }
   return raw;
 }
 
@@ -74,6 +91,9 @@ export async function upsertProfile(projectHash: string, profile: Profile): Prom
     createdAt: existing?.createdAt ?? profile.createdAt ?? now,
     updatedAt: existing ? now : (profile.updatedAt ?? now),
   };
+  if (!merged.layers.every(isValidProfileLayer)) {
+    throw new Error('invalid profile layer entry');
+  }
   await writeJsonAtomic(path, merged);
   return merged;
 }
