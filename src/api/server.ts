@@ -8,6 +8,7 @@ import fastifyStatic from '@fastify/static';
 import { multistream } from 'pino';
 import { Engine } from '../engine/index.js';
 import { ensureWorkspaceLayout } from '../engine/workspace-bootstrap.js';
+import { ensureConfigExists, resolveConfigPath } from './state/config-store.js';
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
 import { registerReadinessGate } from './hooks/readiness-gate.js';
@@ -65,6 +66,9 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   const workspaceRoot = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
   await ensureWorkspaceLayout(workspaceRoot).catch((err) => {
     console.warn('[workspace] bootstrap failed (non-fatal):', err);
+  });
+  await ensureConfigExists(resolveConfigPath()).catch((err) => {
+    console.warn('[workspace] config.mockingbird bootstrap failed (non-fatal):', err);
   });
 
   // CORS: default policy allows ONLY same-origin (no Origin header at all,

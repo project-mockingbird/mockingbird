@@ -1,12 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { resolve, join } from 'path';
-import { readConfig, writeConfig, type MockingbirdConfig } from '../state/config-store.js';
-
-function resolveConfigPath(): string {
-  if (process.env.MOCKINGBIRD_CONFIG_PATH) return resolve(process.env.MOCKINGBIRD_CONFIG_PATH);
-  const workspace = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
-  return join(resolve(workspace), 'config.mockingbird');
-}
+import { readConfig, writeConfig, resolveConfigPath, type MockingbirdConfig } from '../state/config-store.js';
 
 function isValidConfigBody(body: unknown): body is MockingbirdConfig {
   if (!body || typeof body !== 'object') return false;

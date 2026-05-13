@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { mkdir, rm, writeFile, readFile, stat, readdir } from 'fs/promises';
 import { resolve, join, dirname, basename } from 'path';
 import { tmpdir } from 'os';
-import { readConfig, writeConfig, type MockingbirdConfig } from '../../../src/api/state/config-store.js';
+import { readConfig, writeConfig, ensureConfigExists, resolveConfigPath, type MockingbirdConfig } from '../../../src/api/state/config-store.js';
 
 let tmpRoot: string;
 let configPath: string;
@@ -103,5 +103,64 @@ describe('writeConfig', () => {
     await writeConfig(configPath, config);
     const read = await readConfig(configPath);
     expect(read).toEqual(config);
+  });
+});
+
+describe('ensureConfigExists', () => {
+  it('creates an empty default config when the file is missing', async () => {
+    await ensureConfigExists(configPath);
+    const written = JSON.parse(await readFile(configPath, 'utf-8'));
+    expect(written).toEqual({ version: 1, projects: {} });
+  });
+
+  it('leaves an existing file untouched (idempotent)', async () => {
+    const existing: MockingbirdConfig = {
+      version: 1,
+      projects: {
+        'h1': {
+          hash: 'h1', name: 'preexisting', layers: [], createdAt: 1, lastOpenedAt: 2,
+        },
+      },
+    };
+    await writeFile(configPath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+    const before = await stat(configPath);
+    await ensureConfigExists(configPath);
+    const after = await stat(configPath);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    const onDisk = JSON.parse(await readFile(configPath, 'utf-8'));
+    expect(onDisk).toEqual(existing);
+  });
+
+  it('creates parent directories if missing', async () => {
+    const nested = join(tmpRoot, 'fresh-workspace', 'config.mockingbird');
+    await ensureConfigExists(nested);
+    const written = JSON.parse(await readFile(nested, 'utf-8'));
+    expect(written).toEqual({ version: 1, projects: {} });
+  });
+});
+
+describe('resolveConfigPath', () => {
+  const ORIGINAL_ENV = { ...process.env };
+  beforeEach(() => {
+    delete process.env.MOCKINGBIRD_CONFIG_PATH;
+    delete process.env.MOCKINGBIRD_WORKSPACE;
+    delete process.env.MOCKINGBIRD_WORKSPACE_ROOT;
+  });
+  afterAll(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it('honors MOCKINGBIRD_CONFIG_PATH when set', () => {
+    process.env.MOCKINGBIRD_CONFIG_PATH = '/explicit/path/cfg.mockingbird';
+    expect(resolveConfigPath()).toBe(resolve('/explicit/path/cfg.mockingbird'));
+  });
+
+  it('joins config.mockingbird onto MOCKINGBIRD_WORKSPACE when CONFIG_PATH is unset', () => {
+    process.env.MOCKINGBIRD_WORKSPACE = '/ws';
+    expect(resolveConfigPath()).toBe(join(resolve('/ws'), 'config.mockingbird'));
+  });
+
+  it('falls back to /workspaces when nothing is set', () => {
+    expect(resolveConfigPath()).toBe(join(resolve('/workspaces'), 'config.mockingbird'));
   });
 });

@@ -1,5 +1,5 @@
-import { readFile, writeFile, mkdir, rename } from 'fs/promises';
-import { dirname } from 'path';
+import { readFile, writeFile, mkdir, rename, access } from 'fs/promises';
+import { dirname, resolve, join } from 'path';
 
 export interface SavedProjectLayer {
   sitecoreJsonPath: string;
@@ -56,4 +56,31 @@ export async function writeConfig(filePath: string, config: MockingbirdConfig): 
   const json = JSON.stringify(config, null, 2) + '\n';
   await writeFile(tmp, json, 'utf-8');
   await rename(tmp, filePath);
+}
+
+/**
+ * Create an empty config.mockingbird at the workspace root if it does not yet
+ * exist. Idempotent. Called from server bootstrap so a fresh `docker compose up`
+ * leaves a visible, committable file rather than an invisible default served
+ * only out of memory until the first project is opened.
+ */
+export async function ensureConfigExists(filePath: string): Promise<void> {
+  try {
+    await access(filePath);
+    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+  await writeConfig(filePath, { version: 1, projects: {} });
+}
+
+/**
+ * Resolve the path to config.mockingbird from environment. Honors
+ * `MOCKINGBIRD_CONFIG_PATH` (explicit override) first, otherwise joins
+ * `config.mockingbird` onto the workspace root.
+ */
+export function resolveConfigPath(): string {
+  if (process.env.MOCKINGBIRD_CONFIG_PATH) return resolve(process.env.MOCKINGBIRD_CONFIG_PATH);
+  const workspace = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+  return join(resolve(workspace), 'config.mockingbird');
 }
