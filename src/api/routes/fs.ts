@@ -46,9 +46,9 @@ const HIDDEN_ENTRIES = new Set(['.git', '.vscode', '.DS_Store', '.idea', 'node_m
  * parse) are silently omitted.
  */
 export function registerFsRoutes(app: FastifyInstance): void {
-  // Initialize workspace env var with backward-compat fallback (mirrors src/api/index.ts)
-  process.env.MOCKINGBIRD_WORKSPACE ??= process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
-  const workspaceRoot = resolve(process.env.MOCKINGBIRD_WORKSPACE ?? '/workspaces');
+  const workspaceRoot = resolve(
+    process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces',
+  );
 
   app.get<{ Querystring: { path?: string; includeFiles?: string } }>(
     '/api/fs/list',

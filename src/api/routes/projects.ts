@@ -39,9 +39,9 @@ function resolveWorkspacePath(workspaceRoot: string, requested: string): string 
 }
 
 export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): void {
-  // Initialize workspace env var with backward-compat fallback (mirrors src/api/index.ts)
-  process.env.MOCKINGBIRD_WORKSPACE ??= process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
-  const workspaceRoot = resolve(process.env.MOCKINGBIRD_WORKSPACE ?? '/workspaces');
+  const workspaceRoot = resolve(
+    process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces',
+  );
 
   /**
    * Opens a workspace by activating the given layers. Each layer's
