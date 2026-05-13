@@ -1,6 +1,6 @@
 {
   "name": "mockingbird",
-  "version": "1.0.6.7",
+  "version": "1.0.7.0",
   "description": "Lightweight YAML-backed CM shim for SitecoreAI - serves a Layout Service / GraphQL endpoint to headless rendering hosts.",
   "type": "module",
   "scripts": {
