@@ -137,47 +137,6 @@ describe('FolderBrowser', () => {
     expect(screen.getByRole('button', { name: /^select$/i })).toBeDisabled();
   });
 
-  it('shows the "Use sitecore.json from this folder" shortcut when current path contains a sitecore.json', async () => {
-    restoreFetch = setupFetchMock(() => ({
-      path: '/some-project',
-      entries: [
-        { name: 'items', path: '/some-project/items', isDirectory: true, hasSitecoreJson: false, kind: 'directory' },
-        {
-          name: 'sitecore.json',
-          path: '/some-project/sitecore.json',
-          isDirectory: false,
-          hasSitecoreJson: false,
-          kind: 'config-file',
-          moduleCount: 3,
-          pushOpsSummary: 'CreateAndUpdate',
-        },
-      ],
-    }));
-    const onFilePick = vi.fn();
-    wrap(<FolderBrowser open onClose={() => {}} onFilePick={onFilePick} />);
-    await waitFor(() => screen.getByText('sitecore.json'));
-    const shortcut = screen.getByRole('button', { name: /use sitecore\.json from this folder/i });
-    expect(shortcut).toBeEnabled();
-    fireEvent.click(shortcut);
-    expect(onFilePick).toHaveBeenCalledWith(
-      '/some-project/sitecore.json',
-      3,
-      'CreateAndUpdate',
-    );
-  });
-
-  it('hides the shortcut when the current folder has no sitecore.json', async () => {
-    restoreFetch = setupFetchMock(() => ({
-      path: '/',
-      entries: [
-        { name: 'repo-a', path: '/repo-a', isDirectory: true, hasSitecoreJson: true, kind: 'directory' },
-      ],
-    }));
-    wrap(<FolderBrowser open onClose={() => {}} onFilePick={() => {}} />);
-    await waitFor(() => screen.getByText('repo-a'));
-    expect(screen.queryByRole('button', { name: /use sitecore\.json from this folder/i })).not.toBeInTheDocument();
-  });
-
   it('navigates into a child folder on click and updates the header path', async () => {
     let lastPath = '';
     restoreFetch = setupFetchMock((url) => {

@@ -31,8 +31,7 @@ function parentPathOf(path: string): string | null {
  * Folder + file picker. Walks the workspace mount via /api/fs/list?includeFiles=true.
  * Directories are clickable to navigate; config-file rows (JSON files matching the
  * SCS root-config shape) are single-click-to-highlight. A "Select" footer button
- * commits the highlighted file. A "Use sitecore.json from this folder" shortcut
- * activates when the current folder itself contains a sitecore.json file.
+ * commits the highlighted file.
  */
 export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps) {
   const [currentPath, setCurrentPath] = useState('/');
@@ -41,10 +40,6 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
     includeFiles: true,
   });
   const parent = parentPathOf(currentPath);
-
-  const sitecoreJsonAtRoot = data?.entries.find(
-    (e): e is FsConfigFileEntry => e.kind === 'config-file' && e.name === 'sitecore.json',
-  );
 
   const goUp = () => {
     if (parent !== null) {
@@ -172,16 +167,6 @@ export function FolderBrowser({ open, onClose, onFilePick }: FolderBrowserProps)
           <Button variant="outline" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          {sitecoreJsonAtRoot && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onFilePick(sitecoreJsonAtRoot.path, sitecoreJsonAtRoot.moduleCount, sitecoreJsonAtRoot.pushOpsSummary)}
-            >
-              <Icon path={mdiFileCode} className="size-3 mr-1" />
-              Use sitecore.json from this folder
-            </Button>
-          )}
           <Button
             size="sm"
             disabled={selectedFile === null}
