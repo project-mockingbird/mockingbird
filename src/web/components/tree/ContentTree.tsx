@@ -239,7 +239,12 @@ function ContentTreeNode({
   const needsLazyLoad = expanded && node.hasChildren && !node.children;
   const { data: lazyChildren, isLoading } = useChildren(needsLazyLoad ? node.id : null, database);
 
-  const children = node.children ?? lazyChildren ?? [];
+  const rawChildren = node.children ?? lazyChildren ?? [];
+  const children = rawChildren.filter((c) => {
+    const winner = c.provenance?.winnerLayer;
+    if (!winner) return true;
+    return layerVisibility[winner] !== false;
+  });
 
   // Context menu state
   const createItem = useCreateItem();
@@ -1289,22 +1294,15 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
     return m;
   }, [status?.layers, layerVisibility]);
 
+  // Top-level layer filter: hide root-level nodes whose winnerLayer is toggled
+  // off. Per-level filtering for inline and lazy-loaded children is handled
+  // inside ContentTreeNode at render time.
   const visibleByLayerTree = useMemo(() => {
     if (!filteredTree) return filteredTree;
-    function filterByLayer(node: TreeNode): TreeNode | null {
+    return filteredTree.filter((node) => {
       const winner = node.provenance?.winnerLayer;
-      const allowSelf = !winner || layerVisMap[winner] !== false;
-      // Lazy-load case: children not yet fetched. Preserve undefined so
-      // useChildren fires on expand. Filter applies only to nodes whose
-      // children are inline in the initial tree response.
-      if (node.children === undefined) {
-        return allowSelf ? node : null;
-      }
-      const children = node.children.map(filterByLayer).filter(Boolean) as TreeNode[];
-      if (!allowSelf && children.length === 0) return null;
-      return { ...node, children };
-    }
-    return filteredTree.map(filterByLayer).filter(Boolean) as TreeNode[];
+      return !winner || layerVisMap[winner] !== false;
+    });
   }, [filteredTree, layerVisMap]);
 
   const collapseAll = useCallback(() => {
