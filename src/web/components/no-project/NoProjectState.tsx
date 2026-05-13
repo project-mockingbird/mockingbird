@@ -64,7 +64,7 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
         setRestoreError(err instanceof Error ? err.message : 'Could not restore last session.');
       }
     })();
-  }, [prefs, lastSession, openProject]);
+  }, [prefs, lastSession, openProject.mutate]);
 
   const handleOpenFromRecent = (entry: RecentEntry) => {
     (async () => {
@@ -72,15 +72,19 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
         const res = await fetch(
           `/api/profiles/${encodeURIComponent(entry.projectHash)}/${encodeURIComponent(entry.profileName)}`,
         );
-        if (!res.ok) return;
+        if (!res.ok) {
+          setRestoreError(`Profile "${entry.profileName}" could not be opened.`);
+          return;
+        }
         const { profile } = await res.json();
+        setRestoreError(null);
         openProject.mutate({
           layers: profile.layers,
           projectName: profile.projectName,
           profileName: profile.name,
         });
-      } catch {
-        // Failures are surfaced via the openProject mutation error path elsewhere.
+      } catch (err) {
+        setRestoreError(err instanceof Error ? err.message : 'Could not open profile.');
       }
     })();
   };

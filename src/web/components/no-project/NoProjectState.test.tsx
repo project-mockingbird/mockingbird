@@ -102,4 +102,28 @@ describe('NoProjectState', () => {
     await waitFor(() => expect(openCalls.length).toBeGreaterThan(0));
     expect(openCalls[0]).toMatchObject({ profileName: 'dev', projectName: 'demo' });
   });
+
+  it('shows an error message when auto-restore profile fetch returns 404', async () => {
+    fetchStub.mockImplementation(async (input: RequestInfo) => {
+      const url = String(input);
+      if (url.includes('/api/prefs')) {
+        return new Response(JSON.stringify({ autoRestoreLastSession: true }), { status: 200 });
+      }
+      if (url.includes('/api/projects/last-session')) {
+        return new Response(JSON.stringify({ projectHash: 'h1', profileName: 'dev' }), { status: 200 });
+      }
+      if (url.includes('/api/profiles/h1/dev')) {
+        return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+      }
+      if (url.includes('/api/projects/recent')) {
+        return new Response(JSON.stringify({ entries: [] }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    });
+
+    renderWithClient(<NoProjectState />);
+    await waitFor(() =>
+      expect(screen.getByText(/last session profile is missing/i)).toBeInTheDocument(),
+    );
+  });
 });
