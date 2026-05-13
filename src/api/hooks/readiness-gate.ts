@@ -10,6 +10,12 @@ export function registerReadinessGate(app: FastifyInstance, readiness: Readiness
     // Admin tooling is observable-during-indexing on purpose: the Logs
     // page is most useful precisely while the engine is warming up.
     if (url.startsWith('/api/admin/')) return;
+    // State-mount routes: respond regardless of engine state so the web client
+    // can fetch prefs + last-session before any project is loaded (auto-restore).
+    if (url === '/api/prefs') return;
+    if (url === '/api/profiles' || url.startsWith('/api/profiles/')) return;
+    if (url === '/api/projects/recent') return;
+    if (url === '/api/projects/last-session') return;
     if (readiness.isReady() || readiness.state === 'no-project') return;
     if (readiness.state === 'error') {
       reply.code(503).send({

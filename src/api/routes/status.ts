@@ -3,6 +3,7 @@ import type { Engine } from '../../engine/index.js';
 import type { SessionManager } from '../../spe/host/session-manager.js';
 import { getPhaseTimings } from '../../engine/index-timing.js';
 import { layersWithEffectiveCount } from './projects.js';
+import { getActiveProfile } from '../session-state.js';
 
 // Default URL scheme for the "Open in editor" buttons in QuickInfo and the
 // Raw YAML tab. VS Code understands `vscode://file/<absolute-path>`, accepts
@@ -39,6 +40,7 @@ export function registerStatusRoute(
       speError: speSnap?.error ?? null,
       speStartedAt: speSnap?.startedAt ?? null,
       speReadyAt: speSnap?.readyAt ?? null,
+      activeProfile: getActiveProfile(),
     };
   });
 }

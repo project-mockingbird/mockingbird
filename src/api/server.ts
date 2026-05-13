@@ -16,6 +16,7 @@ import { registerProjectsRoutes } from './routes/projects.js';
 import { registerProfilesRoutes } from './routes/profiles.js';
 import { SessionManager } from '../spe/host/session-manager.js';
 import { registerSpeRoutes } from './routes/spe.js';
+import { registerPrefsRoutes } from './routes/prefs.js';
 import { serverLogBuffer } from './logging/buffers.js';
 import { createPinoBridge } from './logging/pino-bridge.js';
 
@@ -110,6 +111,7 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   registerFsRoutes(app);
   registerProjectsRoutes(app, engine);
   registerProfilesRoutes(app);
+  registerPrefsRoutes(app);
 
   // Import and register routes (will be added incrementally)
   const { registerTreeRoutes } = await import('./routes/tree.js');

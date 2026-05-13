@@ -37,6 +37,7 @@ export interface EngineStatus {
   speStartedAt?: number | null;
   speReadyAt?: number | null;
   taco?: boolean;
+  activeProfile?: { projectHash: string; profileName: string } | null;
 }
 
 export function useEngineStatus() {
