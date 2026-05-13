@@ -94,7 +94,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
 
   return (
     <aside className="w-72 border-l bg-card flex flex-col h-full shrink-0">
-      <div className="px-3 py-2 border-b flex items-start justify-between gap-2">
+      <div className="px-3 py-2 border-b flex items-center justify-between gap-2 h-9 overflow-hidden">
         <div className="min-w-0">
           <div className="font-semibold text-sm">{projectLabel}</div>
           <div className="font-mono text-[10px] text-muted-foreground truncate" title={projectPath}>
@@ -106,7 +106,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           size="sm"
           onClick={toggleCollapsed}
           aria-label="Collapse sidebar"
-          className="p-0 size-6 shrink-0 mt-0.5"
+          className="p-0 size-6 shrink-0"
         >
           <Icon path={mdiChevronRight} className="size-4" />
         </Button>
