@@ -9,7 +9,7 @@ describe('<ProvenanceBar>', () => {
   const colors = { authoring: '#22c55e', content: '#3b82f6', ootb: '#cbd5e1' };
   const allVisible = { authoring: true, content: true, ootb: true };
 
-  it('renders one 6px stripe per contributing layer', () => {
+  it('renders one stripe per contributing layer', () => {
     const { container } = render(
       <ProvenanceBar
         provenance={{ winnerLayer: 'content', contributingLayers: ['authoring', 'content'] }}
@@ -31,7 +31,7 @@ describe('<ProvenanceBar>', () => {
     expect(container.querySelectorAll('[data-prov-stripe]').length).toBe(1);
   });
 
-  it('renders empty (zero stripes) when all contributors are off', () => {
+  it('renders null when all contributors are off', () => {
     const { container } = render(
       <ProvenanceBar
         provenance={{ winnerLayer: 'content', contributingLayers: ['authoring', 'content'] }}
@@ -39,7 +39,8 @@ describe('<ProvenanceBar>', () => {
         layerVisibility={{ authoring: false, content: false, ootb: true }}
       />,
     );
-    expect(container.querySelectorAll('[data-prov-stripe]').length).toBe(0);
+    // Component returns null - the container holds no child nodes
+    expect(container.firstChild).toBeNull();
   });
 
   it('renders the winner as the rightmost stripe (last in DOM order)', () => {
@@ -54,7 +55,7 @@ describe('<ProvenanceBar>', () => {
     expect(stripes[stripes.length - 1].dataset.layerName).toBe('content');
   });
 
-  it('each stripe is 6px wide', () => {
+  it('single-layer stripe is 4px wide', () => {
     const { container } = render(
       <ProvenanceBar
         provenance={{ winnerLayer: 'authoring', contributingLayers: ['authoring'] }}
@@ -63,7 +64,37 @@ describe('<ProvenanceBar>', () => {
       />,
     );
     const stripe = container.querySelector<HTMLElement>('[data-prov-stripe]')!;
-    expect(stripe.style.width).toBe('6px');
+    expect(stripe.style.width).toBe('4px');
+  });
+
+  it('single-layer stripe has 8px margin-right', () => {
+    const { container } = render(
+      <ProvenanceBar
+        provenance={{ winnerLayer: 'authoring', contributingLayers: ['authoring'] }}
+        layerColors={colors}
+        layerVisibility={allVisible}
+      />,
+    );
+    const stripe = container.querySelector<HTMLElement>('[data-prov-stripe]')!;
+    expect(stripe.style.marginRight).toBe('8px');
+  });
+
+  it('multi-layer container is 8px wide with 3px sub-stripes', () => {
+    const { container } = render(
+      <ProvenanceBar
+        provenance={{ winnerLayer: 'content', contributingLayers: ['authoring', 'content'] }}
+        layerColors={colors}
+        layerVisibility={allVisible}
+      />,
+    );
+    // Outer wrapper (no data-prov-stripe) should be 8px wide
+    const wrapper = container.querySelector<HTMLElement>('span:not([data-prov-stripe])')!;
+    expect(wrapper.style.width).toBe('8px');
+    // Each sub-stripe should be 3px wide
+    const stripes = container.querySelectorAll<HTMLElement>('[data-prov-stripe]');
+    for (const s of Array.from(stripes)) {
+      expect(s.style.width).toBe('3px');
+    }
   });
 
   it('OOTB items render a single grey stripe', () => {

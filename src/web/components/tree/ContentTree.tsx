@@ -752,7 +752,7 @@ function ContentTreeNode({
   );
 
   const rowClassName = cn(
-    'relative group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
+    'group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
     'focus:outline-none',
     isFocused && 'ring-1 ring-ring ring-inset',
     isSelected && 'bg-accent font-medium',
