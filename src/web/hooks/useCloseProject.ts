@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLayerState } from '@/state/layerState';
 import { workspaceStore } from '@/state/workspaceStore';
-import { useProjectsStore } from '@/state/projectsStore';
+import { setSetting } from '@/settings/store';
 
 interface CloseResponse {
   state: string;
@@ -31,7 +31,7 @@ export function useCloseProject() {
     onSuccess: () => {
       resetLayers();
       workspaceStore.reset();
-      useProjectsStore.setState({ lastOpenedHash: null });
+      setSetting('session.lastOpenedHash', null);
       qc.invalidateQueries({ queryKey: ['status'] });
       qc.invalidateQueries({ queryKey: ['tree'] });
     },

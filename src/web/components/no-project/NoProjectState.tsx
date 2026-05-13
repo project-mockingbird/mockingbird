@@ -7,6 +7,7 @@ import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
 import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore, type SavedProject } from '@/state/projectsStore';
+import { useSettings } from '@/settings/SettingsProvider';
 
 interface NoProjectStateProps {
   onOpenProject?: () => void;
@@ -15,15 +16,17 @@ interface NoProjectStateProps {
 /**
  * Empty-state placeholder rendered by ContentTree.tsx when /api/status reports
  * state: 'no-project'. Owns the chooser dialog + wizard. State (saved projects,
- * last session, auto-restore prefs) lives in localStorage via projectsStore.
+ * last session, auto-restore prefs) lives server-side via projectsStore + settings.
  */
 export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
+  const { settings, setSetting } = useSettings();
+  const lastOpenedHash = settings['session.lastOpenedHash'];
+  const autoRestore = settings['session.autoRestore'];
+
   const projectsMap = useProjectsStore((s) => s.projects);
-  const lastOpenedHash = useProjectsStore((s) => s.lastOpenedHash);
-  const autoRestore = useProjectsStore((s) => s.prefs.autoRestore);
   const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
   const openProject = useOpenProject();
   const hasSavedProjects = Object.keys(projectsMap).length > 0;
@@ -43,12 +46,15 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
     openProject.mutate(
       { layers: project.layers, projectName: project.name },
       {
-        onSuccess: () => touchLastOpened(project.hash),
+        onSuccess: () => {
+          touchLastOpened(project.hash);
+          setSetting('session.lastOpenedHash', project.hash);
+        },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not restore last project.'),
       },
     );
-  }, [autoRestore, lastOpenedHash, openProject, touchLastOpened]);
+  }, [autoRestore, lastOpenedHash, openProject, setSetting, touchLastOpened]);
 
   const handleOpenSaved = (project: SavedProject) => {
     setRestoreError(null);
@@ -56,7 +62,10 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
     openProject.mutate(
       { layers: project.layers, projectName: project.name },
       {
-        onSuccess: () => touchLastOpened(project.hash),
+        onSuccess: () => {
+          touchLastOpened(project.hash);
+          setSetting('session.lastOpenedHash', project.hash);
+        },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not open project.'),
       },

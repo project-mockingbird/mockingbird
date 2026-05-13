@@ -24,6 +24,7 @@ import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore } from '@/state/projectsStore';
+import { ProjectsStoreHydrator } from '@/state/projectsStoreHydrator';
 import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
 import { ConfirmDiscardWorkspaceDialog } from '@/components/workspace/ConfirmDiscardWorkspaceDialog';
 import { toast } from 'sonner';
@@ -77,7 +78,7 @@ function ContentTreePage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const close = useCloseProject();
   const openProject = useOpenProject();
-  const currentProjectHash = useProjectsStore((s) => s.lastOpenedHash);
+  const currentProjectHash = settings['session.lastOpenedHash'];
   const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
   const discardGate = useConfirmDiscardWorkspace();
 
@@ -92,7 +93,12 @@ function ContentTreePage() {
         onSuccess: () => {
           openProject.mutate(
             { layers: project.layers, projectName: project.name },
-            { onSuccess: () => touchLastOpened(project.hash) },
+            {
+              onSuccess: () => {
+                touchLastOpened(project.hash);
+                setSetting('session.lastOpenedHash', project.hash);
+              },
+            },
           );
         },
       });
@@ -125,6 +131,7 @@ function ContentTreePage() {
 
   return (
     <div className="flex h-screen flex-col">
+      <ProjectsStoreHydrator />
       <Header
         validationErrorCount={errorCount}
         onValidationClick={() => setValidationOpen(true)}

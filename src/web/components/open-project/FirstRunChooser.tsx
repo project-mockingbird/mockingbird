@@ -45,10 +45,9 @@ function ChoiceTile({ iconPath, title, description, onClick, disabled }: ChoiceT
   );
 }
 
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const deltaMs = Date.now() - then;
+function formatRelative(ms: number): string {
+  if (!ms || Number.isNaN(ms)) return '';
+  const deltaMs = Date.now() - ms;
   const mins = Math.floor(deltaMs / 60_000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins} min ago`;
@@ -71,7 +70,7 @@ export function FirstRunChooser({
 
   const projects = Object.values(projectsMap)
     .filter((p) => p.hash !== currentProjectHash)
-    .sort((a, b) => (b.lastOpenedAt > a.lastOpenedAt ? 1 : -1));
+    .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
   const hasSaved = projects.length > 0;
 
   return (

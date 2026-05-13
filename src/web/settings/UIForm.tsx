@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { useSettings } from './SettingsProvider';
 import { validateTheme, type ThemeValue } from './schema';
-import { useProjectsStore } from '@/state/projectsStore';
 import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -14,8 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 export function UIForm() {
   const { settings, setSetting } = useSettings();
   const { theme, setTheme } = useTheme();
-  const autoRestore = useProjectsStore((s) => s.prefs.autoRestore);
-  const setAutoRestore = useProjectsStore((s) => s.setAutoRestore);
+  const autoRestore = settings['session.autoRestore'];
 
   // next-themes returns undefined during SSR/first render; gate UI until mounted.
   const [mounted, setMounted] = useState(false);
@@ -128,7 +126,7 @@ export function UIForm() {
           <Switch
             id="auto-restore"
             checked={autoRestore}
-            onCheckedChange={(v) => setAutoRestore(v)}
+            onCheckedChange={(v) => setSetting('session.autoRestore', v)}
           />
         </Field>
         <FieldDescription>

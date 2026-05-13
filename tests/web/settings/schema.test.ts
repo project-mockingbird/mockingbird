@@ -9,6 +9,8 @@ describe('SETTINGS_DEFAULTS', () => {
       'versioning.trimKeepCount': 5,
       'versioning.trimWarnThreshold': 15,
       'layout.treePanelSize': 20,
+      'session.autoRestore': true,
+      'session.lastOpenedHash': null,
     });
   });
 });

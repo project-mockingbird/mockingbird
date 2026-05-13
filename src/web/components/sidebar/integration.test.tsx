@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { resetLayerState } from '@/state/layerState';
 import { ProjectSidebar } from './ProjectSidebar';
+import { SettingsProvider } from '@/settings/SettingsProvider';
 
 describe('ProjectSidebar -> Switch/Close handlers (smoke)', () => {
   beforeEach(() => resetLayerState());
@@ -12,19 +13,21 @@ describe('ProjectSidebar -> Switch/Close handlers (smoke)', () => {
     const onClose = vi.fn();
     const qc = new QueryClient();
     render(
-      <QueryClientProvider client={qc}>
-        <ProjectSidebar
-          status={{
-            state: 'ready',
-            layers: [
-              { name: 'a', sitecoreJsonPath: '/w/a/sitecore.json', color: '#22c55e', effectiveCount: 1 },
-              { name: 'ootb', effectiveCount: 1 },
-            ],
-          }}
-          onSwitch={() => {}}
-          onClose={onClose}
-        />
-      </QueryClientProvider>,
+      <SettingsProvider>
+        <QueryClientProvider client={qc}>
+          <ProjectSidebar
+            status={{
+              state: 'ready',
+              layers: [
+                { name: 'a', sitecoreJsonPath: '/w/a/sitecore.json', color: '#22c55e', effectiveCount: 1 },
+                { name: 'ootb', effectiveCount: 1 },
+              ],
+            }}
+            onSwitch={() => {}}
+            onClose={onClose}
+          />
+        </QueryClientProvider>
+      </SettingsProvider>,
     );
     fireEvent.click(screen.getByRole('button', { name: /project actions/i }));
     fireEvent.click(screen.getByRole('button', { name: /close project/i }));
@@ -35,19 +38,21 @@ describe('ProjectSidebar -> Switch/Close handlers (smoke)', () => {
     const onSwitch = vi.fn();
     const qc = new QueryClient();
     render(
-      <QueryClientProvider client={qc}>
-        <ProjectSidebar
-          status={{
-            state: 'ready',
-            layers: [
-              { name: 'a', sitecoreJsonPath: '/w/a/sitecore.json', color: '#22c55e', effectiveCount: 1 },
-              { name: 'ootb', effectiveCount: 1 },
-            ],
-          }}
-          onSwitch={onSwitch}
-          onClose={() => {}}
-        />
-      </QueryClientProvider>,
+      <SettingsProvider>
+        <QueryClientProvider client={qc}>
+          <ProjectSidebar
+            status={{
+              state: 'ready',
+              layers: [
+                { name: 'a', sitecoreJsonPath: '/w/a/sitecore.json', color: '#22c55e', effectiveCount: 1 },
+                { name: 'ootb', effectiveCount: 1 },
+              ],
+            }}
+            onSwitch={onSwitch}
+            onClose={() => {}}
+          />
+        </QueryClientProvider>
+      </SettingsProvider>,
     );
     fireEvent.click(screen.getByRole('button', { name: /project actions/i }));
     fireEvent.click(screen.getByRole('button', { name: /open another project/i }));

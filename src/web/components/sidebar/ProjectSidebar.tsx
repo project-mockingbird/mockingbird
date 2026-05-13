@@ -12,6 +12,7 @@ import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { EditableLayerName } from './EditableLayerName';
 import { useProjectsStore } from '@/state/projectsStore';
+import { useSettings } from '@/settings/SettingsProvider';
 
 interface SidebarLayer {
   name: string;
@@ -57,8 +58,9 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
 
+  const { settings } = useSettings();
+  const lastOpenedHash = settings['session.lastOpenedHash'];
   const projects = useProjectsStore((s) => s.projects);
-  const lastOpenedHash = useProjectsStore((s) => s.lastOpenedHash);
   const renameProject = useProjectsStore((s) => s.rename);
 
   useEffect(() => {

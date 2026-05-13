@@ -5,6 +5,18 @@ import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NoProjectState } from './NoProjectState';
 import { useProjectsStore } from '@/state/projectsStore';
+import { SettingsProvider } from '@/settings/SettingsProvider';
+import * as store from '@/settings/store';
+
+// Provide a complete localStorage stub so store.ts can call removeItem / setItem
+// in the jsdom environment (jsdom's localStorage may not fully implement the interface).
+let _mem: Record<string, string> = {};
+vi.stubGlobal('localStorage', {
+  getItem: (k: string) => _mem[k] ?? null,
+  setItem: (k: string, v: string) => { _mem[k] = v; },
+  removeItem: (k: string) => { delete _mem[k]; },
+  clear: () => { _mem = {}; },
+});
 
 function makeClient() {
   return new QueryClient({
@@ -15,9 +27,13 @@ function makeClient() {
   });
 }
 
-function renderWithClient(ui: React.ReactNode) {
+function renderWithProviders(ui: React.ReactNode) {
   const qc = makeClient();
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return render(
+    <SettingsProvider>
+      <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+    </SettingsProvider>,
+  );
 }
 
 let fetchStub: ReturnType<typeof vi.fn>;
@@ -26,17 +42,19 @@ const originalFetch = global.fetch;
 beforeEach(() => {
   fetchStub = vi.fn(async () => new Response('{}', { status: 200 }));
   global.fetch = fetchStub as unknown as typeof fetch;
-  useProjectsStore.setState({ projects: {}, lastOpenedHash: null, prefs: { autoRestore: true } });
+  useProjectsStore.setState({ projects: {}, hydrated: true });
+  store.reset();
 });
 
 afterEach(() => {
   global.fetch = originalFetch;
   vi.restoreAllMocks();
+  store.reset();
 });
 
 describe('NoProjectState', () => {
   it('renders the headline and helper copy', () => {
-    renderWithClient(<NoProjectState onOpenProject={() => {}} />);
+    renderWithProviders(<NoProjectState onOpenProject={() => {}} />);
     expect(screen.getByText('No project loaded')).toBeInTheDocument();
     expect(
       screen.getByText(/point mockingbird at a folder with sitecore\.json/i),
@@ -45,12 +63,12 @@ describe('NoProjectState', () => {
 
   it('fires onOpenProject when the primary CTA is clicked', () => {
     const onOpen = vi.fn();
-    renderWithClient(<NoProjectState onOpenProject={onOpen} />);
+    renderWithProviders(<NoProjectState onOpenProject={onOpen} />);
     fireEvent.click(screen.getByRole('button', { name: /get started/i }));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it('auto-restores when autoRestore is true and lastOpenedHash is set in localStorage', async () => {
+  it('auto-restores when autoRestore is true and lastOpenedHash is set in settings', async () => {
     const openCalls: unknown[] = [];
     fetchStub.mockImplementation(async (input: RequestInfo, init?: RequestInit) => {
       const url = String(input);
@@ -67,15 +85,16 @@ describe('NoProjectState', () => {
           hash: 'h1',
           name: 'demo',
           layers: [{ sitecoreJsonPath: '/sitecore.json', name: 'core', color: '#3b82f6' }],
-          createdAt: 'T0',
-          lastOpenedAt: 'T0',
+          createdAt: 0,
+          lastOpenedAt: 0,
         },
       },
-      lastOpenedHash: 'h1',
-      prefs: { autoRestore: true },
+      hydrated: true,
     });
+    store.setSetting('session.autoRestore', true);
+    store.setSetting('session.lastOpenedHash', 'h1');
 
-    renderWithClient(<NoProjectState />);
+    renderWithProviders(<NoProjectState />);
     await waitFor(() => expect(openCalls.length).toBeGreaterThan(0));
     expect(openCalls[0]).toMatchObject({ projectName: 'demo' });
   });
@@ -97,15 +116,16 @@ describe('NoProjectState', () => {
           hash: 'h1',
           name: 'demo',
           layers: [{ sitecoreJsonPath: '/sitecore.json', name: 'core', color: '#3b82f6' }],
-          createdAt: 'T0',
-          lastOpenedAt: 'T0',
+          createdAt: 0,
+          lastOpenedAt: 0,
         },
       },
-      lastOpenedHash: 'h1',
-      prefs: { autoRestore: false },
+      hydrated: true,
     });
+    store.setSetting('session.autoRestore', false);
+    store.setSetting('session.lastOpenedHash', 'h1');
 
-    renderWithClient(<NoProjectState />);
+    renderWithProviders(<NoProjectState />);
     // Give effects a chance to fire.
     await new Promise((r) => setTimeout(r, 20));
     expect(openCalls).toHaveLength(0);

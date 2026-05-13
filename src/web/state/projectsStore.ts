@@ -10,133 +10,68 @@ export interface SavedProject {
   hash: string;
   name: string;
   layers: SavedProjectLayer[];
-  createdAt: string;
-  lastOpenedAt: string;
+  /** Unix ms. The legacy localStorage shape used ISO strings; the migration step
+   *  in projectsStoreHydrator converts them. */
+  createdAt: number;
+  lastOpenedAt: number;
 }
 
-export interface ProjectsPrefs {
-  autoRestore: boolean;
-}
-
-interface PersistedState {
+interface ProjectsStateShape {
   projects: Record<string, SavedProject>;
-  lastOpenedHash: string | null;
-  prefs: ProjectsPrefs;
-}
-
-interface ProjectsStateShape extends PersistedState {
+  hydrated: boolean;
   list(): SavedProject[];
   get(hash: string): SavedProject | null;
+  /** Replace the whole projects map (used by the hydrator). */
+  setAll(projects: Record<string, SavedProject>): void;
   upsert(project: SavedProject): void;
   remove(hash: string): void;
   rename(hash: string, newName: string): void;
   touchLastOpened(hash: string): void;
-  setAutoRestore(value: boolean): void;
   reset(): void;
-}
-
-const STORAGE_KEY = 'mockingbird.projects';
-
-const DEFAULT_STATE: PersistedState = {
-  projects: {},
-  lastOpenedHash: null,
-  prefs: { autoRestore: true },
-};
-
-function loadFromStorage(): PersistedState {
-  try {
-    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_STATE;
-    const parsed = JSON.parse(raw);
-    return {
-      projects: parsed.projects ?? {},
-      lastOpenedHash: parsed.lastOpenedHash ?? null,
-      prefs: { autoRestore: parsed.prefs?.autoRestore ?? true },
-    };
-  } catch {
-    return DEFAULT_STATE;
-  }
-}
-
-function saveToStorage(state: PersistedState): void {
-  try {
-    globalThis.localStorage?.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        projects: state.projects,
-        lastOpenedHash: state.lastOpenedHash,
-        prefs: state.prefs,
-      }),
-    );
-  } catch {
-    // ignore storage errors (private mode, quota, missing localStorage)
-  }
+  /** Set by the hydrator after the initial GET completes (or fails). */
+  markHydrated(): void;
 }
 
 export const useProjectsStore = create<ProjectsStateShape>((set, get) => ({
-  ...loadFromStorage(),
+  projects: {},
+  hydrated: false,
 
-  list: () => {
-    const all = Object.values(get().projects);
-    return all.sort((a, b) => (b.lastOpenedAt > a.lastOpenedAt ? 1 : -1));
-  },
+  list: () => Object.values(get().projects).sort((a, b) => b.lastOpenedAt - a.lastOpenedAt),
 
   get: (hash) => get().projects[hash] ?? null,
 
+  setAll: (projects) => set({ projects }),
+
   upsert: (project) =>
-    set((s) => ({
-      projects: { ...s.projects, [project.hash]: project },
-    })),
+    set((s) => ({ projects: { ...s.projects, [project.hash]: project } })),
 
   remove: (hash) =>
     set((s) => {
       const next = { ...s.projects };
       delete next[hash];
-      const lastOpenedHash = s.lastOpenedHash === hash ? null : s.lastOpenedHash;
-      return { projects: next, lastOpenedHash };
+      return { projects: next };
     }),
 
   rename: (hash, newName) =>
     set((s) => {
       const existing = s.projects[hash];
       if (!existing) return s;
-      return {
-        projects: {
-          ...s.projects,
-          [hash]: { ...existing, name: newName },
-        },
-      };
+      return { projects: { ...s.projects, [hash]: { ...existing, name: newName } } };
     }),
 
   touchLastOpened: (hash) =>
     set((s) => {
       const existing = s.projects[hash];
-      if (!existing) return { lastOpenedHash: hash };
+      if (!existing) return s;
       return {
-        lastOpenedHash: hash,
-        projects: {
-          ...s.projects,
-          [hash]: { ...existing, lastOpenedAt: new Date().toISOString() },
-        },
+        projects: { ...s.projects, [hash]: { ...existing, lastOpenedAt: Date.now() } },
       };
     }),
 
-  setAutoRestore: (value) =>
-    set((s) => ({ prefs: { ...s.prefs, autoRestore: value } })),
-
-  reset: () => set({ ...DEFAULT_STATE }),
+  reset: () => set({ projects: {} }),
+  markHydrated: () => set({ hydrated: true }),
 }));
 
-// Persist on every change.
-useProjectsStore.subscribe((state) =>
-  saveToStorage({
-    projects: state.projects,
-    lastOpenedHash: state.lastOpenedHash,
-    prefs: state.prefs,
-  }),
-);
-
-/** Test helper - resets the store between tests. */
 export function resetProjectsStore(): void {
-  useProjectsStore.getState().reset();
+  useProjectsStore.setState({ projects: {}, hydrated: false });
 }

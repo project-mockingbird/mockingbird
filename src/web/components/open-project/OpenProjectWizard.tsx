@@ -9,6 +9,7 @@ import { deriveName } from './layer-name';
 import { deriveProjectName } from './project-name';
 import { computeProjectHash } from '@/state/project-hash';
 import { useProjectsStore } from '@/state/projectsStore';
+import { setSetting } from '@/settings/store';
 
 interface OpenProjectWizardProps {
   open: boolean;
@@ -92,7 +93,7 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
       await openProject.mutateAsync({ layers, projectName });
       const paths = layers.map((l) => l.sitecoreJsonPath);
       const hash = await computeProjectHash(paths);
-      const now = new Date().toISOString();
+      const nowMs = Date.now();
       const existing = useProjectsStore.getState().get(hash);
       upsert({
         hash,
@@ -102,10 +103,11 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
           name: l.name,
           color: l.color ?? '#888888',
         })),
-        createdAt: existing?.createdAt ?? now,
-        lastOpenedAt: now,
+        createdAt: existing?.createdAt ?? nowMs,
+        lastOpenedAt: nowMs,
       });
       touchLastOpened(hash);
+      setSetting('session.lastOpenedHash', hash);
       toast.success('Project opened.');
       reset();
       onClose();

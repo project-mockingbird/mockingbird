@@ -6,6 +6,7 @@ import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectSidebar } from './ProjectSidebar';
 import { resetLayerState } from '@/state/layerState';
+import { SettingsProvider } from '@/settings/SettingsProvider';
 
 // Provide a minimal localStorage stub for jsdom environments that may not have it
 const localStorageStub = (() => {
@@ -21,7 +22,11 @@ Object.defineProperty(window, 'localStorage', { value: localStorageStub });
 
 function renderWithClient(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return render(
+    <SettingsProvider>
+      <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+    </SettingsProvider>,
+  );
 }
 
 const statusReady = {
