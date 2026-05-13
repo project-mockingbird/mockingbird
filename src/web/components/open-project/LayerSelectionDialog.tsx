@@ -136,7 +136,7 @@ export function LayerSelectionDialog({
     >
       <DialogContent size="md">
         <DialogHeader>
-          <DialogTitle>Select layers</DialogTitle>
+          <DialogTitle>Select Content Layers</DialogTitle>
         </DialogHeader>
         {onProjectNameChange !== undefined && (
           <div className="flex flex-col gap-1">
