@@ -26,6 +26,7 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   const lastOpenedHash = settings['session.lastOpenedHash'];
   const autoRestore = settings['session.autoRestore'];
 
+  const hydrated = useProjectsStore((s) => s.hydrated);
   const projectsMap = useProjectsStore((s) => s.projects);
   const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
   const openProject = useOpenProject();
@@ -37,6 +38,7 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   // Auto-restore on mount: fires once when the pref is on AND there is a last
   // opened project in localStorage.
   useEffect(() => {
+    if (!hydrated) return;            // wait until the store knows what projects exist
     if (restoreAttempted.current) return;
     if (!autoRestore) return;
     if (!lastOpenedHash) return;
@@ -54,7 +56,7 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
           setRestoreError(err instanceof Error ? err.message : 'Could not restore last project.'),
       },
     );
-  }, [autoRestore, lastOpenedHash, openProject, setSetting, touchLastOpened]);
+  }, [hydrated, autoRestore, lastOpenedHash, openProject, setSetting, touchLastOpened]);
 
   const handleOpenSaved = (project: SavedProject) => {
     setRestoreError(null);

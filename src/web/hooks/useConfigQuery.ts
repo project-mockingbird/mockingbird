@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import type { SavedProject } from '@/state/projectsStore';
 
 export interface MockingbirdConfig {
@@ -33,12 +33,8 @@ export function useConfigQuery() {
 }
 
 export function useConfigMutation() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: putConfig,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
-    },
   });
 }
 
