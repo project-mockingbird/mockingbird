@@ -24,7 +24,7 @@ interface LayerSelectionDialogProps {
   candidates: ReadonlyArray<ScsConfigCandidate>;
   onClose: () => void;
   onConfirm: (layers: OpenProjectLayer[]) => void;
-  /** When provided, an "Add another layer" footer button appears that re-opens the FolderBrowser. */
+  /** When provided, an "Add Layer" footer button appears that re-opens the FolderBrowser. */
   onAddAnother?: () => void;
   /**
    * Seed the row state on first mount. When omitted, state is derived from
@@ -255,7 +255,7 @@ export function LayerSelectionDialog({
               onClick={onAddAnother}
               disabled={isPending}
             >
-              Add another layer
+              Add Layer
             </Button>
           )}
           <Button size="sm" onClick={handleConfirm} disabled={!canSubmit}>

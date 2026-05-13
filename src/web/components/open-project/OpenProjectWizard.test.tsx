@@ -87,7 +87,7 @@ describe('OpenProjectWizard', () => {
     expect(screen.getByText('sitecore.json')).toBeInTheDocument();
   });
 
-  it('"Add another layer" returns to the folder step preserving picked layers', async () => {
+  it('"Add Layer" returns to the folder step preserving picked layers', async () => {
     restoreFetch = setupFetchMock((_method, url) => {
       if (url.includes('/api/fs/list')) {
         return {
@@ -109,8 +109,8 @@ describe('OpenProjectWizard', () => {
     });
     wrap(<OpenProjectWizard open onClose={() => {}} />);
     await pickFile('sitecore.json');
-    await waitFor(() => screen.getByRole('button', { name: /add another layer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /add another layer/i }));
+    await waitFor(() => screen.getByRole('button', { name: /add layer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add layer/i }));
     await waitFor(() => screen.getByTestId('folder-browser-path'));
     expect(screen.getByTestId('folder-browser-path')).toHaveTextContent('/');
   });
@@ -137,8 +137,8 @@ describe('OpenProjectWizard', () => {
     });
     wrap(<OpenProjectWizard open onClose={() => {}} />);
     await pickFile('sitecore.json');
-    await waitFor(() => screen.getByRole('button', { name: /add another layer/i }));
-    fireEvent.click(screen.getByRole('button', { name: /add another layer/i }));
+    await waitFor(() => screen.getByRole('button', { name: /add layer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add layer/i }));
     await waitFor(() => screen.getByTestId('folder-browser-path'));
     // Highlight and select the same file again
     fireEvent.click(screen.getByText('sitecore.json'));

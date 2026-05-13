@@ -122,7 +122,7 @@ describe('LayerSelectionDialog', () => {
     expect(screen.getByText(/overlaps another candidate/i)).toBeInTheDocument();
   });
 
-  it('renders "Add another layer" button when onAddAnother is provided', () => {
+  it('renders "Add Layer" button when onAddAnother is provided', () => {
     render(
       <LayerSelectionDialog
         open
@@ -133,10 +133,10 @@ describe('LayerSelectionDialog', () => {
         onAddAnother={() => {}}
       />,
     );
-    expect(screen.getByRole('button', { name: /add another layer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add layer/i })).toBeInTheDocument();
   });
 
-  it('does not render "Add another layer" button when onAddAnother is omitted', () => {
+  it('does not render "Add Layer" button when onAddAnother is omitted', () => {
     render(
       <LayerSelectionDialog
         open
@@ -146,7 +146,7 @@ describe('LayerSelectionDialog', () => {
         onConfirm={() => {}}
       />,
     );
-    expect(screen.queryByRole('button', { name: /add another layer/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add layer/i })).not.toBeInTheDocument();
   });
 
   it('fires onAddAnother when the button is clicked', () => {
@@ -161,7 +161,7 @@ describe('LayerSelectionDialog', () => {
         onAddAnother={onAddAnother}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /add another layer/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add layer/i }));
     expect(onAddAnother).toHaveBeenCalledTimes(1);
   });
 
