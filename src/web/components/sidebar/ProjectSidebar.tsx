@@ -24,7 +24,7 @@ interface ProjectSidebarProps {
   onClose: () => void;
 }
 
-const OOTB_GREY = '#9ca3af';
+const OOTB_GREY = '#cbd5e1';
 const STORAGE_KEY = 'mockingbird.sidebar.collapsed';
 
 function readCollapsed(): boolean {

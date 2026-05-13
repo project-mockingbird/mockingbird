@@ -1294,7 +1294,7 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
   const layerOverrides = useLayerState((s) => s.overrides);
 
   const layerColorsByName = useMemo(() => {
-    const m: Record<string, string> = { ootb: '#9ca3af' };
+    const m: Record<string, string> = { ootb: '#cbd5e1' };
     for (const l of status?.layers ?? []) {
       if (l.name === 'ootb') continue;
       m[l.name] = (layerOverrides[l.name]?.color ?? l.color ?? '#888888') as string;

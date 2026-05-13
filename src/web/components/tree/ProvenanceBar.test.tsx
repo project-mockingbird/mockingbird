@@ -6,10 +6,10 @@ import { render } from '@testing-library/react';
 import { ProvenanceBar } from './ProvenanceBar';
 
 describe('<ProvenanceBar>', () => {
-  const colors = { authoring: '#22c55e', content: '#3b82f6', ootb: '#9ca3af' };
+  const colors = { authoring: '#22c55e', content: '#3b82f6', ootb: '#cbd5e1' };
   const allVisible = { authoring: true, content: true, ootb: true };
 
-  it('renders one 4px stripe per contributing layer', () => {
+  it('renders one 6px stripe per contributing layer', () => {
     const { container } = render(
       <ProvenanceBar
         provenance={{ winnerLayer: 'content', contributingLayers: ['authoring', 'content'] }}
@@ -54,6 +54,18 @@ describe('<ProvenanceBar>', () => {
     expect(stripes[stripes.length - 1].dataset.layerName).toBe('content');
   });
 
+  it('each stripe is 6px wide', () => {
+    const { container } = render(
+      <ProvenanceBar
+        provenance={{ winnerLayer: 'authoring', contributingLayers: ['authoring'] }}
+        layerColors={colors}
+        layerVisibility={allVisible}
+      />,
+    );
+    const stripe = container.querySelector<HTMLElement>('[data-prov-stripe]')!;
+    expect(stripe.style.width).toBe('6px');
+  });
+
   it('OOTB items render a single grey stripe', () => {
     const { container } = render(
       <ProvenanceBar
@@ -64,6 +76,6 @@ describe('<ProvenanceBar>', () => {
     );
     const stripes = container.querySelectorAll<HTMLElement>('[data-prov-stripe]');
     expect(stripes.length).toBe(1);
-    expect(stripes[0].style.backgroundColor).toBe('rgb(156, 163, 175)');
+    expect(stripes[0].style.backgroundColor).toBe('rgb(203, 213, 225)');
   });
 });

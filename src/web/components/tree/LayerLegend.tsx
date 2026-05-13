@@ -28,7 +28,7 @@ export function LayerLegend({ layers, layerVisibility }: LayerLegendProps) {
         </span>
       ))}
       <span data-legend-pill data-layer-name="ootb" className="inline-flex items-center gap-1">
-        <span className="inline-block size-2.5 rounded-sm bg-muted-foreground" />
+        <span className="inline-block size-2.5 rounded-sm" style={{ backgroundColor: '#cbd5e1' }} />
         OOTB
       </span>
     </div>

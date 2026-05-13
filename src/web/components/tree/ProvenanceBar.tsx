@@ -6,7 +6,7 @@ interface ProvenanceBarProps {
 
 /**
  * Thin per-row stripe stack showing layer attribution. Each visible
- * contributing layer renders as a 4px-wide colored stripe. Order: weakest
+ * contributing layer renders as a 6px-wide colored stripe. Order: weakest
  * left, winner right. OOTB items render a single grey stripe.
  */
 export function ProvenanceBar({ provenance, layerColors, layerVisibility }: ProvenanceBarProps) {
@@ -23,7 +23,7 @@ export function ProvenanceBar({ provenance, layerColors, layerVisibility }: Prov
           key={`${name}-${i}`}
           data-prov-stripe
           data-layer-name={name}
-          style={{ backgroundColor: layerColors[name] ?? '#888888', width: 4 }}
+          style={{ backgroundColor: layerColors[name] ?? '#888888', width: 6 }}
         />
       ))}
     </div>
