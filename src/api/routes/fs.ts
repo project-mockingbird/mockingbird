@@ -34,7 +34,7 @@ const HIDDEN_ENTRIES = new Set(['.git', '.vscode', '.DS_Store', '.idea', 'node_m
 
 /**
  * Filesystem browser endpoint. Lists immediate children of a workspace-relative
- * path. Path-jailed to MOCKINGBIRD_WORKSPACE_ROOT (default: /workspaces) so the
+ * path. Path-jailed to MOCKINGBIRD_WORKSPACE (default: /workspaces) so the
  * web UI cannot escape into host system directories via ../ or absolute paths.
  *
  * Directory entries include a hasSitecoreJson flag for the first-run wizard
@@ -46,7 +46,9 @@ const HIDDEN_ENTRIES = new Set(['.git', '.vscode', '.DS_Store', '.idea', 'node_m
  * parse) are silently omitted.
  */
 export function registerFsRoutes(app: FastifyInstance): void {
-  const workspaceRoot = resolve(process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces');
+  // Initialize workspace env var with backward-compat fallback (mirrors src/api/index.ts)
+  process.env.MOCKINGBIRD_WORKSPACE ??= process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+  const workspaceRoot = resolve(process.env.MOCKINGBIRD_WORKSPACE ?? '/workspaces');
 
   app.get<{ Querystring: { path?: string; includeFiles?: string } }>(
     '/api/fs/list',

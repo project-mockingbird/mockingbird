@@ -6,6 +6,9 @@ process.env.HOST ??= process.env.MOCKINGBIRD_HOST;
 process.env.REGISTRY_PATH ??= './data/registry.json.gz';
 process.env.MOCKINGBIRD_CACHE_PATH ??= './data/cache';
 process.env.INDEX_CACHE_PATH ??= resolve(process.env.MOCKINGBIRD_CACHE_PATH, 'index.json.gz');
+// Container-internal workspace mount path. Replaces MOCKINGBIRD_WORKSPACE_ROOT
+// (kept as a one-cycle deprecation alias). All routes read MOCKINGBIRD_WORKSPACE.
+process.env.MOCKINGBIRD_WORKSPACE ??= process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? '127.0.0.1';
