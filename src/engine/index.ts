@@ -1096,21 +1096,60 @@ export class Engine {
       return;
     }
 
-    // Multi-layer path: scan each layer separately, merge by push-ops precedence.
+    // Multi-layer path: read each layer's per-layer cache (or scan cold),
+    // then merge by push-ops precedence. Each layer's gzipped cache lives at
+    // `deriveCachePath(indexCachePath, layer.sitecoreJsonPath)`, the same
+    // file the single-layer path writes when the layer is opened on its own.
+    // Per-layer cache files are SHARED across multi-layer projects that use
+    // the same layer - opening A+B and later A+C both reuse the layer A cache.
     this.readiness.reset();
 
     const pushOpsByItemId = new Map<string, AllowedPushOperations | undefined>();
     const contributorsByItemId = new Map<string, string[]>(); // weakest -> strongest
+    const layerCacheWrites: Promise<void>[] = [];
 
     for (const layer of layers) {
       const layerRoot = dirname(layer.sitecoreJsonPath);
+      const layerCachePath = deriveCachePath(this.options.indexCachePath, layer.sitecoreJsonPath);
+      const layerCacheRoots: CacheRoot[] = [{ rootDir: layerRoot, additional: false }];
+
       const layerModules = await discoverModules(layerRoot).catch(() => []);
       this.modules.push(...layerModules);
 
-      const partialTree = await scanDirectory(layerRoot, {
-        label: `scan:${layer.name}`,
-        onProgress: (scanned, total) => this.readiness.markProgress(scanned, total),
-      });
+      let partialTree: ItemTree | null = null;
+      if (layerCachePath) {
+        const cached = await loadCachedTree(layerCacheRoots, layerCachePath);
+        if (cached) {
+          partialTree = cached.tree;
+          this.readiness.markProgress(cached.entryCount, cached.entryCount);
+          // Fire-and-forget signature verify; delete stale cache so the next
+          // open of this layer re-scans cold.
+          void cached.verifyPromise.then(async (match) => {
+            if (!match) {
+              await deleteStaleCache(layerCachePath);
+            }
+          });
+        }
+      }
+
+      let scanStats: Map<string, { mtimeMs: number; size: number }> | undefined;
+      if (!partialTree) {
+        scanStats = new Map();
+        partialTree = await scanDirectory(layerRoot, {
+          label: `scan:${layer.name}`,
+          onProgress: (scanned, total) => this.readiness.markProgress(scanned, total),
+          statCollector: scanStats,
+        });
+        // Background cache write so multi-layer open isn't blocked on gzip.
+        if (layerCachePath) {
+          const writePromise = writeCachedTree(layerCacheRoots, partialTree, layerCachePath, scanStats).catch(
+            (err) => {
+              console.error(`  [index] background cache write failed for layer ${layer.name}:`, err);
+            },
+          );
+          layerCacheWrites.push(writePromise);
+        }
+      }
 
       for (const node of partialTree.getAllNodes()) {
         const incomingPushOps = this._findCoveringPushOps(node.item.path, layerModules);
@@ -1147,6 +1186,11 @@ export class Engine {
     // Compute per-layer effective counts from the final provenance map.
     for (const { winnerLayer } of this._itemProvenance.values()) {
       this._layerStats.set(winnerLayer, (this._layerStats.get(winnerLayer) ?? 0) + 1);
+    }
+
+    // Aggregate any pending per-layer cache writes so close() can drain them.
+    if (layerCacheWrites.length > 0) {
+      this._cacheWritePromise = Promise.all(layerCacheWrites).then(() => undefined);
     }
 
     this.readiness.markReady();
