@@ -44,3 +44,8 @@ serialization/
 src/spe/provider-csharp/**/bin/
 src/spe/provider-csharp/**/obj/
 .mockingbird/
+# config.mockingbird at the repo root is a dev/smoke artifact when this repo is
+# used as its own workspace mount. In normal user projects the file is meant
+# to be committed (team-shared project registry), but for mockingbird-the-tool
+# we keep it untracked so smoke sessions don't pollute git.
+config.mockingbird
