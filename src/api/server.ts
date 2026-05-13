@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import fastifyStatic from '@fastify/static';
 import { multistream } from 'pino';
 import { Engine } from '../engine/index.js';
+import { ensureWorkspaceLayout } from '../engine/workspace-bootstrap.js';
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
 import { registerReadinessGate } from './hooks/readiness-gate.js';
@@ -57,6 +58,14 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   });
 
   await engine.startInit();
+
+  // Ensure workspace cache directory and .gitignore are set up. This is
+  // idempotent and runs once at server startup. Non-fatal if it fails
+  // (e.g., read-only workspace), so we log the error and continue.
+  const workspaceRoot = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+  await ensureWorkspaceLayout(workspaceRoot).catch((err) => {
+    console.warn('[workspace] bootstrap failed (non-fatal):', err);
+  });
 
   // CORS: default policy allows ONLY same-origin (no Origin header at all,
   // which is what same-origin browser requests look like, plus non-browser
