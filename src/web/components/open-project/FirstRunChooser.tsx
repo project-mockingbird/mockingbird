@@ -67,6 +67,7 @@ export function FirstRunChooser({
   const projectsMap = useProjectsStore((s) => s.projects);
   const remove = useProjectsStore((s) => s.remove);
   const [view, setView] = useState<'choose' | 'list'>('choose');
+  const [confirmRemoveHash, setConfirmRemoveHash] = useState<string | null>(null);
 
   const projects = Object.values(projectsMap)
     .filter((p) => p.hash !== currentProjectHash)
@@ -79,6 +80,7 @@ export function FirstRunChooser({
       onOpenChange={(o) => {
         if (!o) {
           setView('choose');
+          setConfirmRemoveHash(null);
           onClose();
         }
       }}
@@ -115,47 +117,79 @@ export function FirstRunChooser({
         ) : (
           <div className="flex flex-col gap-3">
             <ul className="divide-y border rounded">
-              {projects.map((p) => (
-                <li
-                  key={p.hash}
-                  className="group flex items-center gap-2 p-2 text-sm"
-                >
-                  <div className="flex gap-0.5 shrink-0">
-                    {p.layers.slice(0, 4).map((l, i) => (
-                      <span
-                        key={i}
-                        className="inline-block size-2 rounded-full"
-                        style={{ background: l.color }}
-                        aria-hidden
-                      />
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setView('choose');
-                      onOpenExisting(p);
-                    }}
-                    className="flex-1 flex items-center gap-2 text-left hover:bg-accent rounded px-1"
+              {projects.map((p) => {
+                const isConfirming = confirmRemoveHash === p.hash;
+                return (
+                  <li
+                    key={p.hash}
+                    className="group flex items-center gap-2 p-2 text-sm"
                   >
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {p.layers.length} layer{p.layers.length === 1 ? '' : 's'}
-                    </span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {formatRelative(p.lastOpenedAt)}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => remove(p.hash)}
-                    aria-label={`Remove ${p.name}`}
-                    className="opacity-0 group-hover:opacity-100 hover:bg-accent rounded p-1"
-                  >
-                    <Icon path={mdiClose} className="size-3" />
-                  </button>
-                </li>
-              ))}
+                    <div className="flex gap-0.5 shrink-0">
+                      {p.layers.slice(0, 4).map((l, i) => (
+                        <span
+                          key={i}
+                          className="inline-block size-2 rounded-full"
+                          style={{ background: l.color }}
+                          aria-hidden
+                        />
+                      ))}
+                    </div>
+                    {isConfirming ? (
+                      <div className="flex-1 flex items-center gap-2 px-1">
+                        <span className="text-sm">
+                          Remove <span className="font-medium">{p.name}</span> from the list?
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            remove(p.hash);
+                            setConfirmRemoveHash(null);
+                          }}
+                          aria-label={`Confirm remove ${p.name}`}
+                          className="ml-auto rounded border border-danger-400 px-2 py-0.5 text-xs text-danger-400 hover:bg-danger-bg"
+                        >
+                          Remove
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemoveHash(null)}
+                          aria-label={`Cancel remove ${p.name}`}
+                          className="rounded border px-2 py-0.5 text-xs hover:bg-accent"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setView('choose');
+                            onOpenExisting(p);
+                          }}
+                          className="flex-1 flex items-center gap-2 text-left hover:bg-accent rounded px-1"
+                        >
+                          <span className="font-medium">{p.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {p.layers.length} layer{p.layers.length === 1 ? '' : 's'}
+                          </span>
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            {formatRelative(p.lastOpenedAt)}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemoveHash(p.hash)}
+                          aria-label={`Remove ${p.name}`}
+                          className="opacity-0 group-hover:opacity-100 hover:bg-accent rounded p-1"
+                        >
+                          <Icon path={mdiClose} className="size-3" />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             <button
               type="button"
