@@ -26,6 +26,11 @@ services:
       SCS_CONTENT_SITECORE_JSON: /scs-content/sitecore.json
       MOCKINGBIRD_CACHE_PATH: /data/cache
       INDEX_CACHE_PATH: /data/cache/index.json.gz
+      # New in 1.0.9.0: workspace-rooted config. The head-app compose keeps the
+      # named cache volume for backward compat; the workspace var is informational
+      # for routes that path-jail to it.
+      MOCKINGBIRD_WORKSPACE: /scs
+      MOCKINGBIRD_CONFIG_PATH: /data/config.mockingbird
     volumes:
       # Host SCS project root (the directory containing sitecore.json) - the
       # same tree `dotnet sitecore ser pull` writes into. Modules listed in
