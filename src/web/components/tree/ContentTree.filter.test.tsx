@@ -25,7 +25,6 @@ vi.mock('@/hooks/useEngineStatus', () => ({
         { name: 'b', color: '#3b82f6', effectiveCount: 1 },
         { name: 'ootb', effectiveCount: 1 },
       ],
-      registryItemCount: 1,
     },
     isLoading: false,
   }),

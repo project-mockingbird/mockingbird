@@ -139,7 +139,6 @@ function ContentTreePage() {
                 color: l.color,
                 effectiveCount: l.effectiveCount ?? 0,
               })),
-              registryItemCount: 0,
               projectName: status.projectName ?? null,
             }}
             onSwitch={handleSwitch}

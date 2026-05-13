@@ -23,7 +23,6 @@ interface SidebarLayer {
 interface SidebarStatus {
   state: 'ready' | 'no-project' | 'indexing' | 'error' | 'init' | 'initializing';
   layers: SidebarLayer[];
-  registryItemCount?: number;
   projectName?: string | null;
 }
 
@@ -80,7 +79,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   if (userLayers.length === 0) return null;
 
   const ootbCount =
-    status.layers.find((l) => l.name === 'ootb')?.effectiveCount ?? status.registryItemCount ?? 0;
+    status.layers.find((l) => l.name === 'ootb')?.effectiveCount ?? 0;
 
   const firstPath = userLayers[0]?.sitecoreJsonPath ?? '';
   const projectPath = firstPath.replace(/\/[^/]+\/[^/]+$/, '');

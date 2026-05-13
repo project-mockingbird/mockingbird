@@ -20,7 +20,6 @@ describe('ProjectSidebar -> Switch/Close handlers (smoke)', () => {
               { name: 'a', sitecoreJsonPath: '/w/a/sitecore.json', color: '#22c55e', effectiveCount: 1 },
               { name: 'ootb', effectiveCount: 1 },
             ],
-            registryItemCount: 1,
           }}
           onSwitch={() => {}}
           onClose={onClose}
@@ -44,7 +43,6 @@ describe('ProjectSidebar -> Switch/Close handlers (smoke)', () => {
               { name: 'a', sitecoreJsonPath: '/w/a/sitecore.json', color: '#22c55e', effectiveCount: 1 },
               { name: 'ootb', effectiveCount: 1 },
             ],
-            registryItemCount: 1,
           }}
           onSwitch={onSwitch}
           onClose={() => {}}

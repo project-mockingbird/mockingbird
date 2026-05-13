@@ -31,10 +31,9 @@ const statusReady = {
     { name: 'content', sitecoreJsonPath: '/workspaces/p/content/sitecore.json', color: '#3b82f6', effectiveCount: 1234 },
     { name: 'ootb', effectiveCount: 22613 },
   ],
-  registryItemCount: 22613,
 };
 
-const statusNoProject = { state: 'no-project' as const, layers: [], registryItemCount: 22613 };
+const statusNoProject = { state: 'no-project' as const, layers: [] };
 
 beforeEach(() => {
   resetLayerState();
