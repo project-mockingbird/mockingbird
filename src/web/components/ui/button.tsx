@@ -76,7 +76,7 @@ const buttonVariants = cva(
         variant: "default",
         colorScheme: "danger",
         class:
-          "bg-danger text-inverse-text hover:bg-danger-hover active:bg-danger-active",
+          "!bg-transparent border-2 border-danger-400 text-danger-400 hover:bg-danger-bg active:bg-danger-bg-active",
       },
       {
         variant: "default",

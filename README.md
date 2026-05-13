@@ -47,52 +47,54 @@ A few worth calling out:
 
 ## Quick start
 
-```yaml
-# docker-compose.yml
-services:
-  mockingbird:
-    image: projectmockingbird/mockingbird:latest
-    ports:
-      - "3333:3333"
-    environment:
-      PORT: 3333
-      # Sitecore path of your site's start item - synthetic-fallback site root.
-      SITE_ROOT_PATH: ${SITE_ROOT_PATH}
-      # Container-side paths to the bind-mounted SCS project(s).
-      SCS_SITECORE_JSON: /scs/sitecore.json
-      SCS_CONTENT_SITECORE_JSON: /scs-content/sitecore.json
-      MOCKINGBIRD_CACHE_PATH: /data/cache
-      INDEX_CACHE_PATH: /data/cache/index.json.gz
-    volumes:
-      # Host SCS project root (the dir containing sitecore.json) - the same
-      # tree `dotnet sitecore ser pull` writes into. Modules in sitecore.json
-      # resolve relative to this dir.
-      - ${SCS_ROOT}:/scs
-      # Optional second SCS project root for content-item YAMLs (pages,
-      # datasources, media metadata).
-      - ${SCS_CONTENT_ROOT}:/scs-content
-      # Engine-internal parsed-item index cache - writable; safe to delete, rebuilds on next boot.
-      - ${MOCKINGBIRD_CACHE_PATH}:/data/cache
-```
-
-Alongside, a matching `.env`:
-
-```
-# docker-compose.yml interpolates these; there are no compose-side fallbacks,
-# so each must be set.
-SITE_ROOT_PATH=/sitecore/content/your-tenant/your-site/Home
-SCS_ROOT=./
-SCS_CONTENT_ROOT=./content
-MOCKINGBIRD_CACHE_PATH=./data/cache
-```
-
-```
+```bash
 docker compose up -d
 ```
 
-To redirect Mockingbird at a different SCS tree, just edit `SCS_ROOT` in `.env` - no `docker-compose.yml` edits required.
+Mockingbird boots with the OOTB Sitecore registry loaded but no serialized items. Open `http://localhost:3333` and the first-run wizard walks the workspace mount to discover `sitecore.json` files for project selection.
 
-> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, pin to a specific tag (e.g. `1.0.0.0`) so a Hub republish doesn't move the floor.
+By default the compose mounts the directory you ran it from (`./`) at `/workspaces` inside the container. To point at a broader directory so the wizard can browse multiple repos, set `MOCKINGBIRD_WORKSPACE_HOST` in `.env`:
+
+```
+MOCKINGBIRD_WORKSPACE_HOST=C:/projects   # Windows
+MOCKINGBIRD_WORKSPACE_HOST=~/code         # macOS / Linux
+```
+
+> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, pin to a specific tag (e.g. `1.0.9.0`) so a Hub republish doesn't move the floor.
+
+## Project registry: `config.mockingbird`
+
+Mockingbird stores the saved-projects list in a workspace-local file:
+
+    ./config.mockingbird
+
+This file lives at the workspace root, alongside `sitecore.json`. **Commit it.**
+Anyone who clones the repo and runs mockingbird gets the team's saved projects
+in the "Open existing project" wizard for free - no per-developer setup needed.
+
+The file is plain JSON. Mockingbird reads it on startup via `GET /api/config`
+and writes it back via `PUT /api/config` whenever the project list changes.
+
+### Cache: `.mockingbird/cache/`
+
+Engine cache artifacts live under `.mockingbird/cache/` in the workspace mount.
+On first cache write, mockingbird:
+- creates `.mockingbird/cache/.gitkeep`
+- appends `.mockingbird/` to root `.gitignore` (idempotent)
+
+This is purely transient state. Safe to delete; rebuilds on next open. The
+cache used to live in a named docker volume (`mockingbird-cache`); 1.0.9.0
+moves it to the workspace mount so there's exactly one volume declaration.
+If upgrading from <=1.0.8.x, you can reclaim the orphaned volume:
+
+    docker volume rm mockingbird-cache
+
+### Per-user preferences (auto-restore, theme, etc.)
+
+Some settings are per-user, per-browser and stay in browser localStorage:
+auto-restore-last-project, theme, sidebar collapsed, panel sizes. These are
+intentionally NOT in `config.mockingbird` since they don't make sense to share
+across the team.
 
 ## Endpoints
 
@@ -114,7 +116,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 ```json
 {
-  "state": "initializing" | "ready" | "error",
+  "state": "initializing" | "ready" | "error" | "no-project",
   "progress": { "scanned": 0, "total": 0 },
   "error": null,
   "itemCount": 0,
@@ -125,7 +127,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 | Field | Meaning |
 |---|---|
-| `state` | `initializing` while parsing, `ready` once the tree is queryable, `error` on a fatal init failure |
+| `state` | `initializing` while parsing, `ready` once the tree is queryable, `error` on a fatal init failure, `no-project` when booted without a workspace (Open Repository mode) |
 | `progress` | Live scan counter; populated during `initializing` |
 | `error` | Error message string when `state` is `error`, otherwise `null` |
 | `itemCount` | Total parsed-tree items once `state` is `ready` (zero before) |
@@ -145,8 +147,8 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 - **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, pin to a specific version (`1.0.0.0` at the time of writing).
 - **Commit serialized YAML alongside the code that depends on it.** Author items in Mockingbird, let the file watcher emit clean YAML, and PR the YAML alongside the React / Next.js changes that consume it. Reviewers see the item changes in the diff.
-- **One `sitecore.json` per repo.** The engine reads `sitecore.json` from `SCS_ROOT` and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. Multi-repo setups can mount a second `sitecore.json` via `SCS_CONTENT_ROOT` for content items that live outside the main repo.
-- **Treat the cache as disposable.** `data/cache/index.json.gz` is a derived artifact; it rebuilds from your YAML on the next boot. Safe to delete at any time, safe to gitignore, safe to skip backing up.
+- **One `sitecore.json` per project.** The engine reads `sitecore.json` from each project root the wizard registers and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. Multi-layer setups (e.g. a tenant template layer + a content layer) live as separate `sitecore.json` files under the workspace mount; the wizard registers them as layers of one project.
+- **Treat the cache as disposable.** `.mockingbird/cache/index-*.json.gz` are derived artifacts; they rebuild from your YAML on the next boot. Safe to delete at any time, gitignored by default, safe to skip backing up.
 - **Use the Package Builder to ship a slice upstream.** Browse to a subtree, right-click `Add to Package`, check out, and the resulting `.zip` installs in a real Sitecore CM via the standard Package Installer. Useful for promoting a developer's locally-authored items to a UAT instance without serializing through the upstream pipeline.
 
 ## Pitfalls
@@ -253,49 +255,50 @@ A `master:` PSDrive mounts the content tree; `$item["FieldName"]` indexer reads 
 
 ## Volumes
 
-| Mount | Purpose |
+A single bind mount: `${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces`.
+
+Everything mockingbird needs lives under that mount:
+
+| Path under workspace | Purpose |
 |---|---|
-| `sitecore.json` | SCS root config (the same file `dotnet sitecore` uses) |
-| `serialization/` | Dev-authored templates, renderings, layouts, branch templates, placeholder settings. Committed to your repo, baked into IAR for deployment |
-| `content/` | Optional second SCS root for content-item YAMLs that aren't in the repo |
-| `data/cache/` | Engine-internal parsed-item index. Safe to delete; rebuilds on next boot |
+| `sitecore.json` | SCS root config (the same file `dotnet sitecore` uses) - one per project; the wizard discovers them at runtime |
+| `config.mockingbird` | Team-shared project registry. Commit it - new devs cloning the repo get the project list for free |
+| `.mockingbird/cache/` | Engine-internal parsed-item index. Gitignored. Safe to delete; rebuilds on next boot |
 
 The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mockingbird image for full support - no extra mount needed.
 
-Add `:ro` to the first three mounts if you're using Mockingbird as a read-only layout service (rendering-host only, no authoring via the Web UI or CLI).
-
 ## Environment variables
 
-`.env` feeds host paths and per-instance settings into the container via `docker-compose.yml` interpolation; the container itself reads its config from environment variables set under `environment:` in compose.
+`.env` feeds host paths and engine knobs into the container via `docker-compose.yml` interpolation. All have defaults in the compose; only set what you need to override.
 
-### Container runtime (set via `environment:` in compose)
+### Set in `.env`
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `PORT` | HTTP listen port | `3000` |
-| `HOST` | Bind address | `127.0.0.1` |
-| `MOCKINGBIRD_ROOT` | Root data dir inside container | `/app/data` *(baked)* |
-| `REGISTRY_PATH` | IAR registry path | `/app/data/registry.json.gz` *(baked)* |
+| `MOCKINGBIRD_WORKSPACE_HOST` | Host path bound to `/workspaces` in the container. The first-run wizard walks this mount to discover `sitecore.json` files. | `./` |
+| `MOCKINGBIRD_PORT` | Host port mockingbird binds (loopback-only). Container always listens on 3333 internally. | `3333` |
+| `COMPOSE_PROJECT_NAME` | Override the docker container name. | `mockingbird` |
 | `SITE_ROOT_PATH` | Synthetic-fallback site root for single-site dev. When real Site Grouping items exist in the content tree, requests resolve via `?site=` query param > `Host:` header > this fallback. Mirrors Sitecore's `<site name="website" hostName="*"/>` default-site role. | *(empty - hostname routing only)* |
-| `SCS_SITECORE_JSON` | Path to your project's `sitecore.json`. Modules listed inside it resolve relative to its own dir (matches `dotnet sitecore ser pull`). | `/scs/sitecore.json` *(in compose)* |
-| `SCS_CONTENT_SITECORE_JSON` | Optional second `sitecore.json` for a separate content tree. | *(empty)* |
-| `MOCKINGBIRD_CACHE_PATH` | Engine-internal cache directory. | `/data/cache` *(in compose)* |
-| `INDEX_CACHE_PATH` | Persistent cache file path | *(disabled if unset)* |
+| `MOCKINGBIRD_ALLOWED_ORIGINS` | Comma-separated origins (scheme://host[:port]) allowed for cross-origin `/api/*` requests. Empty = same-origin only. | *(empty)* |
+| `MOCKINGBIRD_WS_ALLOWED_ORIGINS` | Same shape, for WebSocket upgrades on `/ws`. | *(empty)* |
+| `MOCKINGBIRD_GRAPHQL_QUERY_DEPTH` | Max GraphQL query depth before mercurius rejects. | `20` |
+| `MOCKINGBIRD_SPE_SESSION_TTL_MIN` | Per-session TTL for PowerShell scripting sessions, in minutes. | `30` |
+| `MOCKINGBIRD_SPE_MAX_SESSIONS` | Concurrent PowerShell session cap; beyond this, new sessions return 429. | `8` |
 
-### Host interpolation (set in `.env` - `docker-compose.yml` has no fallbacks, so each must be set)
+### Container-internal (hardcoded in compose)
 
-| Variable | Purpose | Typical value |
+| Variable | Value | Why |
 |---|---|---|
-| `SCS_ROOT` | Host path of the dir containing `sitecore.json`. Bound to `/scs` in the container. | `./` |
-| `SCS_CONTENT_ROOT` | Host path of an optional second SCS project root. Bound to `/scs-content`. If you don't have a second tree, point at any existing directory (e.g. `./content`). | `./content` |
-| `MOCKINGBIRD_CACHE_PATH` | Host path bound to `/data/cache`. | `./data/cache` |
-| `SITE_ROOT_PATH` | Synthetic-fallback site root (passed straight through). | `/sitecore/content/<tenant>/<site>/Home` |
+| `MOCKINGBIRD_WORKSPACE` | `/workspaces` | Container path the host workspace is bind-mounted at. (Replaces `MOCKINGBIRD_WORKSPACE_ROOT`; old name still supported in 1.0.9.x as an alias.) |
+| `MOCKINGBIRD_CONFIG_PATH` | `${MOCKINGBIRD_WORKSPACE}/config.mockingbird` | Where the project registry lives. |
+| `INDEX_CACHE_PATH` | `${MOCKINGBIRD_WORKSPACE}/.mockingbird/cache/index.json.gz` | Persistent engine cache. |
+| `HOST` | `0.0.0.0` | The container's listener address; the host-side `127.0.0.1:` prefix on the port mapping is what scopes external reach. |
 
 ## Troubleshooting
 
 **`503 indexing in progress` on every `/api/*` request just after startup.** Expected - the engine is parsing YAML in the background. Check `/api/status` (ungated) for `progress.scanned/total`. On a slow Windows bind-mount with a large content tree this can take 5+ minutes; rebuilds with a warm `INDEX_CACHE_PATH` finish in ~60s.
 
-**Linux container can't write to bind-mounted dirs (`EACCES` on `data/cache`, `serialization`, `content`).** The container runs as `node` (uid/gid 1000). Make the host-side bind targets writable by uid 1000: `sudo chown -R 1000:1000 ./data/cache ./serialization ./content`. On Docker Desktop (Windows / Mac), uid mapping is transparent and this rarely surfaces.
+**Linux container can't write to the bind-mounted workspace (`EACCES` on `.mockingbird/cache/`).** The container runs as `node` (uid/gid 1000). Make the host workspace writable by uid 1000: `sudo chown -R 1000:1000 ./.mockingbird` (or the whole workspace if you want full read/write). On Docker Desktop (Windows / Mac), uid mapping is transparent and this rarely surfaces.
 
 **Browser fetches to `/api/*` blocked with CORS errors.** Mockingbird defaults to same-origin only. If your head app's dev server is on a different origin (e.g. head app on `:3000`, Mockingbird on `:3333`), add the head-app origin to `MOCKINGBIRD_ALLOWED_ORIGINS`. Server-side fetches (Next.js route handlers, `getStaticProps`, build-time queries) bypass the browser CORS check and are unaffected.
 
@@ -360,7 +363,7 @@ npx vitest run
 # Typecheck (API side - the gate Docker enforces; src/web has its own Vite build)
 npx tsc --noEmit -p tsconfig.json --rootDir src
 
-# Run the API without Docker (set SCS_SITECORE_JSON in .env to your project's sitecore.json)
+# Run the API without Docker (set MOCKINGBIRD_WORKSPACE to your workspace root)
 npm run api
 
 # Run the CLI without Docker

@@ -86,7 +86,11 @@ ENV REGISTRY_PATH=/app/data/registry.json.gz
 # registry, so giving `node` ownership lets the engine write the cache.
 # Bind-mounted host paths still need to be readable/writable by uid 1000
 # on the host.
-RUN chown -R node:node /app
+#
+# Also pre-create /data/cache as node:node so when docker mounts an empty
+# named volume there at runtime, the volume inherits node ownership and
+# the engine can write per-layer cache files into it.
+RUN mkdir -p /data/cache && chown -R node:node /app /data
 USER node
 
 # Documentation port matching the typical MOCKINGBIRD_PORT=3333 set by

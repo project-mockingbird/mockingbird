@@ -18,6 +18,15 @@ import { useEngineStatus } from '@/hooks/useEngineStatus';
 import { WorkspaceShell } from '@/components/workspace/WorkspaceShell';
 import { CartPane, readPersistedCartPaneOpen } from '@/components/package/CartPane';
 import { CheckoutDialog } from '@/components/package/CheckoutDialog';
+import { ProjectSidebar } from '@/components/sidebar/ProjectSidebar';
+import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
+import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
+import { useCloseProject } from '@/hooks/useCloseProject';
+import { useOpenProject } from '@/hooks/useOpenProject';
+import { useProjectsStore } from '@/state/projectsStore';
+import { ProjectsStoreHydrator } from '@/state/projectsStoreHydrator';
+import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
+import { ConfirmDiscardWorkspaceDialog } from '@/components/workspace/ConfirmDiscardWorkspaceDialog';
 import { toast } from 'sonner';
 
 // IsePage pulls Monaco (~3.5 MB) and xterm into its dependency tree. Loading
@@ -64,14 +73,57 @@ function ContentTreePage() {
     [setSetting, settings],
   );
 
+  const { data: status } = useEngineStatus();
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const close = useCloseProject();
+  const openProject = useOpenProject();
+  const currentProjectHash = settings['session.lastOpenedHash'];
+  const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
+  const discardGate = useConfirmDiscardWorkspace();
+
+  const handleSwitch = () => setChooserOpen(true);
+  const handleClose = () => {
+    discardGate.request('close', () => close.mutate());
+  };
+  const handleOpenSaved = (project: { hash: string; name: string; layers: Array<{ sitecoreJsonPath: string; name: string; color: string }> }) => {
+    const proceed = () => {
+      setChooserOpen(false);
+      close.mutate(undefined, {
+        onSuccess: () => {
+          openProject.mutate(
+            { layers: project.layers, projectName: project.name },
+            {
+              onSuccess: () => {
+                touchLastOpened(project.hash);
+                setSetting('session.lastOpenedHash', project.hash);
+              },
+            },
+          );
+        },
+      });
+    };
+    discardGate.request('switch', proceed);
+  };
+
   const { data: validation } = useQuery({
     queryKey: ['validation'],
-    queryFn: async () =>
-      (await fetch('/api/validate', {
+    // The readiness middleware returns 503 for /api/* during the brief window
+    // when the engine is transitioning state (open-project, indexing). Without
+    // the res.ok guard, .json() would parse the 503 body ({status, progress})
+    // and React Query would cache it as the validation result, breaking any
+    // consumer that expects an `errors` array. Throw on non-OK so the query
+    // enters error state and consumers keep the previous good value (or
+    // remain undefined until a real response arrives).
+    queryFn: async () => {
+      const res = await fetch('/api/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
-      })).json(),
+      });
+      if (!res.ok) throw new Error(`validate ${res.status}`);
+      return res.json();
+    },
     refetchInterval: 30_000,
   });
   const errorCount =
@@ -79,17 +131,60 @@ function ContentTreePage() {
 
   return (
     <div className="flex h-screen flex-col">
+      <ProjectsStoreHydrator />
       <Header
         validationErrorCount={errorCount}
         onValidationClick={() => setValidationOpen(true)}
         onCartToggle={() => setCartPaneOpen((o) => !o)}
       />
-      <WorkspaceShell
-        validationOpen={validationOpen}
-        setValidationOpen={setValidationOpen}
-        persistedSize={persistedSize}
-        onTreePanelResize={onTreePanelResize}
+      <div className="flex flex-1 min-h-0">
+        <WorkspaceShell
+          validationOpen={validationOpen}
+          setValidationOpen={setValidationOpen}
+          persistedSize={persistedSize}
+          onTreePanelResize={onTreePanelResize}
+        />
+        {status?.state === 'ready' && status.layers && status.layers.length > 0 && (
+          <ProjectSidebar
+            status={{
+              state: status.state,
+              layers: status.layers.map((l) => ({
+                name: l.name,
+                sitecoreJsonPath: l.sitecoreJsonPath,
+                color: l.color,
+                effectiveCount: l.effectiveCount ?? 0,
+              })),
+              projectName: status.projectName ?? null,
+            }}
+            onSwitch={handleSwitch}
+            onClose={handleClose}
+          />
+        )}
+      </div>
+      <FirstRunChooser
+        open={chooserOpen}
+        onClose={() => setChooserOpen(false)}
+        onCreateNew={() => {
+          setChooserOpen(false);
+          setWizardOpen(true);
+        }}
+        onOpenExisting={handleOpenSaved}
+        currentProjectHash={currentProjectHash}
       />
+      {wizardOpen && (
+        <OpenProjectWizard
+          open
+          onClose={() => setWizardOpen(false)}
+          initialMode="switch"
+        />
+      )}
+      <ConfirmDiscardWorkspaceDialog
+        action={discardGate.pendingAction}
+        dirtyCount={discardGate.pendingDirtyCount}
+        onConfirm={discardGate.onConfirm}
+        onCancel={discardGate.onCancel}
+      />
+
       <StatusBar database={database} onDatabaseChange={setDatabase} />
       <CartPane
         open={cartPaneOpen}

@@ -4,6 +4,8 @@ export const SETTINGS_DEFAULTS = {
   'versioning.trimKeepCount': 5,
   'versioning.trimWarnThreshold': 15,
   'layout.treePanelSize': 20,
+  'session.autoRestore': true,
+  'session.lastOpenedHash': null as string | null,
 } as const;
 
 export type Settings = {
@@ -12,6 +14,8 @@ export type Settings = {
   'versioning.trimKeepCount': number;
   'versioning.trimWarnThreshold': number;
   'layout.treePanelSize': number;
+  'session.autoRestore': boolean;
+  'session.lastOpenedHash': string | null;
 };
 
 export type SettingsKey = keyof Settings;
@@ -53,6 +57,14 @@ export const VALIDATORS: { [K in SettingsKey]: Validator<K> } = {
     if (typeof v !== 'number' || v < 10 || v > 60) {
       throw new Error('must be a number between 10 and 60');
     }
+    return v;
+  },
+  'session.autoRestore': (v) => {
+    if (typeof v !== 'boolean') throw new Error('must be true or false');
+    return v;
+  },
+  'session.lastOpenedHash': (v) => {
+    if (v !== null && typeof v !== 'string') throw new Error('must be a string or null');
     return v;
   },
 };

@@ -7,6 +7,11 @@ export interface DescendantItem {
   hasChildren: boolean;
 }
 
+export interface ItemProvenance {
+  winnerLayer: string;
+  contributingLayers: string[];
+}
+
 export interface TreeNode {
   id: string;
   name: string;
@@ -26,6 +31,8 @@ export interface TreeNode {
   /** Host-translated YAML path; only present for serialized items. */
   filePath?: string;
   autoExpand?: boolean;
+  /** Layer attribution for this node; present when layers feature is active. */
+  provenance?: ItemProvenance;
   children?: TreeNode[];
 }
 

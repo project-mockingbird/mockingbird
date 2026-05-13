@@ -1,40 +1,43 @@
+# Mockingbird compose template.
+#
+# Mounts the host workspace directory at /workspaces inside the container.
+# All mockingbird state (project registry + engine cache) lives UNDER that
+# mount, so there is exactly one volume declaration.
+#
+# Default mount: ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
+#   override MOCKINGBIRD_WORKSPACE_HOST in .env to point at a broader directory
+#   (e.g. C:/projects on Windows, ~/code on macOS/Linux) if your repos live
+#   elsewhere.
+#
+# On disk under the workspace root:
+#   config.mockingbird      - team-shared project registry (commit this)
+#   .mockingbird/cache/     - engine cache (auto-gitignored)
 services:
   mockingbird:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: projectmockingbird/mockingbird:1.0.1.4
-    container_name: ${COMPOSE_PROJECT_NAME}
+    image: projectmockingbird/mockingbird:1.0.9.0
+    container_name: ${COMPOSE_PROJECT_NAME:-mockingbird}
     ports:
       # Bind to loopback only so a developer on a coffee-shop / hostile LAN
       # doesn't accidentally expose mockingbird to the network. Drop the
-      # 127.0.0.1 prefix to publish to all host interfaces (e.g. when testing
-      # from another device on a trusted LAN).
-      - "127.0.0.1:${MOCKINGBIRD_PORT}:${MOCKINGBIRD_PORT}"
+      # 127.0.0.1 prefix to publish to all host interfaces.
+      - "127.0.0.1:${MOCKINGBIRD_PORT:-3333}:3333"
     environment:
-      PORT: ${MOCKINGBIRD_PORT}
-      # Container HOST must be 0.0.0.0 so docker's port forwarder can reach
-      # the listening process from outside the container. The host-side
-      # binding above is what scopes external reach.
+      PORT: 3333
       HOST: 0.0.0.0
-      # Sitecore path of your site's start item - all routes resolve relative to this.
-      SITE_ROOT_PATH: ${SITE_ROOT_PATH}
-      # Container-side paths. The engine reads sitecore.json here and
-      # resolves modules relative to its own location, matching `dotnet
-      # sitecore ser pull` semantics.
-      SCS_SITECORE_JSON: /scs/sitecore.json
-      SCS_CONTENT_SITECORE_JSON: /scs-content/sitecore.json
-      MOCKINGBIRD_CACHE_PATH: /data/cache
-      INDEX_CACHE_PATH: /data/cache/index.json.gz
+      MOCKINGBIRD_WORKSPACE: /workspaces
+      MOCKINGBIRD_CONFIG_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/config.mockingbird
+      INDEX_CACHE_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/.mockingbird/cache/index.json.gz
+      # Optional Layout Service synthetic-fallback site root. Empty by default;
+      # set per-project at runtime via the wizard, or pin globally via .env.
+      SITE_ROOT_PATH: ${SITE_ROOT_PATH:-}
+      # Security knobs - empty defaults to same-origin only.
+      MOCKINGBIRD_ALLOWED_ORIGINS: ${MOCKINGBIRD_ALLOWED_ORIGINS:-}
+      MOCKINGBIRD_WS_ALLOWED_ORIGINS: ${MOCKINGBIRD_WS_ALLOWED_ORIGINS:-}
+      MOCKINGBIRD_GRAPHQL_QUERY_DEPTH: ${MOCKINGBIRD_GRAPHQL_QUERY_DEPTH:-20}
+      # PowerShell scripting (SPE) tuning.
+      MOCKINGBIRD_SPE_SESSION_TTL_MIN: ${MOCKINGBIRD_SPE_SESSION_TTL_MIN:-30}
+      MOCKINGBIRD_SPE_MAX_SESSIONS: ${MOCKINGBIRD_SPE_MAX_SESSIONS:-8}
+      TACO: 1
     volumes:
-      # Host SCS project root (the directory containing sitecore.json) - the
-      # same tree `dotnet sitecore ser pull` writes into. Modules listed in
-      # sitecore.json resolve relative to this dir.
-      - ${SCS_ROOT}:/scs
-      # Optional second SCS project root for content-item YAMLs (pages,
-      # datasources, media metadata) that aren't committed to the repo. Leave
-      # SCS_CONTENT_ROOT unset to skip.
-      - ${SCS_CONTENT_ROOT}:/scs-content
-      # Engine-internal parsed-item index cache - writable; safe to delete, rebuilds on next boot.
-      - ${MOCKINGBIRD_CACHE_PATH}:/data/cache
+      - ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
     restart: unless-stopped

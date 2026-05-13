@@ -7,10 +7,14 @@ import { fileURLToPath } from 'url';
 import fastifyStatic from '@fastify/static';
 import { multistream } from 'pino';
 import { Engine } from '../engine/index.js';
+import { ensureWorkspaceLayout } from '../engine/workspace-bootstrap.js';
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
 import { registerReadinessGate } from './hooks/readiness-gate.js';
 import { registerStatusRoute } from './routes/status.js';
+import { registerFsRoutes } from './routes/fs.js';
+import { registerProjectsRoutes } from './routes/projects.js';
+import { registerConfigRoutes } from './routes/config.js';
 import { SessionManager } from '../spe/host/session-manager.js';
 import { registerSpeRoutes } from './routes/spe.js';
 import { serverLogBuffer } from './logging/buffers.js';
@@ -19,7 +23,10 @@ import { createPinoBridge } from './logging/pino-bridge.js';
 export interface ServerOptions {
   port?: number;
   host?: string;
-  rootDir: string;
+  /** Workspace root containing sitecore.json. When omitted, server boots in
+   *  no-project mode (watch disabled; serialized items not loaded). The OOTB
+   *  registry still loads when registryPath is supplied. */
+  rootDir?: string;
   contentPaths?: string[];
   registryPath?: string;
   indexCachePath?: string;
@@ -44,13 +51,21 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   const engine = new Engine({
     rootDir: opts.rootDir,
     contentPaths: opts.contentPaths,
-    watch: true,
+    watch: opts.rootDir !== undefined,
     registryPath: opts.registryPath,
     indexCachePath: opts.indexCachePath,
     onItemChange: (event) => notifyItemChange(engine, event),
   });
 
   await engine.startInit();
+
+  // Ensure workspace cache directory and .gitignore are set up. This is
+  // idempotent and runs once at server startup. Non-fatal if it fails
+  // (e.g., read-only workspace), so we log the error and continue.
+  const workspaceRoot = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+  await ensureWorkspaceLayout(workspaceRoot).catch((err) => {
+    console.warn('[workspace] bootstrap failed (non-fatal):', err);
+  });
 
   // CORS: default policy allows ONLY same-origin (no Origin header at all,
   // which is what same-origin browser requests look like, plus non-browser
@@ -101,6 +116,9 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
 
   registerReadinessGate(app, engine.readiness);
   registerStatusRoute(app, engine, speManager);
+  registerFsRoutes(app);
+  registerProjectsRoutes(app, engine);
+  registerConfigRoutes(app);
 
   // Import and register routes (will be added incrementally)
   const { registerTreeRoutes } = await import('./routes/tree.js');

@@ -43,6 +43,7 @@ import { useCopyItem } from '@/hooks/useCopyItem';
 import { useMoveItem } from '@/hooks/useMoveItem';
 import { useRefreshItem } from '@/hooks/useRefreshItem';
 import { useRenameItem } from '@/hooks/useRenameItem';
+import { NoProjectState } from '@/components/no-project/NoProjectState';
 import { InsertItemDialog } from './InsertItemDialog';
 import { HeadlessSiteCollectionDialog } from './HeadlessSiteCollectionDialog';
 import { ScaffoldConfirmDialog, type CoverageGap } from './ScaffoldConfirmDialog';
@@ -64,6 +65,9 @@ import {
 import { useNodeExpansion } from '@/state/useNodeExpansion';
 import { useTabId } from '@/state/tabContext';
 import { workspaceStore } from '@/state/workspaceStore';
+import { useLayerState } from '@/state/layerState';
+import { ProvenanceBar } from './ProvenanceBar';
+import { LayerLegend } from './LayerLegend';
 import { containingFolder } from '@/lib/folder-path';
 import { pickNeighborAfterDelete } from '@/lib/delete-neighbor';
 import { toast } from 'sonner';
@@ -163,6 +167,8 @@ interface ContentTreeNodeProps {
   validationErrors: Set<string>;
   database: string;
   autoExpandIds: Set<string>;
+  layerColors?: Record<string, string>;
+  layerVisibility?: Record<string, boolean>;
 }
 
 function ContentTreeNode({
@@ -175,6 +181,8 @@ function ContentTreeNode({
   validationErrors,
   database,
   autoExpandIds,
+  layerColors = {},
+  layerVisibility = {},
 }: ContentTreeNodeProps) {
   const { isExpanded: expanded, setExpanded } = useNodeExpansion(node.id, node.autoExpand ?? false);
   const isSelected = node.id === selectedId;
@@ -231,7 +239,12 @@ function ContentTreeNode({
   const needsLazyLoad = expanded && node.hasChildren && !node.children;
   const { data: lazyChildren, isLoading } = useChildren(needsLazyLoad ? node.id : null, database);
 
-  const children = node.children ?? lazyChildren ?? [];
+  const rawChildren = node.children ?? lazyChildren ?? [];
+  const children = rawChildren.filter((c) => {
+    const winner = c.provenance?.winnerLayer;
+    if (!winner) return true;
+    return layerVisibility[winner] !== false;
+  });
 
   // Context menu state
   const createItem = useCreateItem();
@@ -681,85 +694,106 @@ function ContentTreeNode({
       : []),
   ];
 
+  // Shared row inner content used in both provenance and non-provenance branches.
+  const rowInner = (
+    <>
+      {node.hasChildren ? (
+        <button
+          tabIndex={-1}
+          onClick={handleToggle}
+          className="p-0.5 hover:bg-muted rounded-sm"
+          aria-label={expanded ? 'Collapse' : 'Expand'}
+        >
+          {isLoading ? (
+            <Icon
+              path={mdiLoading}
+              className="h-3 w-3 animate-spin"
+            />
+          ) : (
+            <Icon
+              path={mdiChevronRight}
+              className={cn(
+                'h-3 w-3 transition-transform',
+                expanded && 'rotate-90',
+              )}
+            />
+          )}
+        </button>
+      ) : (
+        <span className="w-4" />
+      )}
+      <Icon
+        path={iconPath}
+        className={cn(
+          'h-3.5 w-3.5 shrink-0',
+          isRegistry
+            ? 'text-muted-foreground/50'
+            : 'text-muted-foreground',
+        )}
+      />
+      <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
+        {node.name}
+      </span>
+      <div className="ml-auto flex items-center gap-1">
+        {hasError && (
+          <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
+        )}
+        <RowActionIcons
+          isRegistry={isRegistry}
+          onInsert={() => setIconInsertDialogOpen(true)}
+          onDuplicate={() => setDuplicateDialogOpen(true)}
+          onRefresh={handleRefresh}
+          onDelete={handleDelete}
+          isRefreshing={refreshItemMutation.isPending}
+        />
+      </div>
+    </>
+  );
+
+  const rowClassName = cn(
+    'group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
+    'focus:outline-none',
+    isFocused && 'ring-1 ring-ring ring-inset',
+    isSelected && 'bg-accent font-medium',
+    isRegistry
+      ? 'text-muted-foreground hover:bg-accent/50'
+      : 'hover:bg-accent',
+  );
+
+  const rowProps = {
+    ...kbNav.getRowProps({
+      id: node.id,
+      level: depth,
+      isParent: !!node.hasChildren,
+      isExpanded: expanded,
+    }),
+    className: rowClassName,
+    style: { paddingLeft: `${depth * 16 + 16}px` },
+    onClick: () => {
+      kbNav.setFocusedId(node.id);
+      onSelect(node.id);
+    },
+  };
+
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div>
-            <div
-              ref={rowRef}
-              {...kbNav.getRowProps({
-                id: node.id,
-                level: depth,
-                isParent: !!node.hasChildren,
-                isExpanded: expanded,
-              })}
-              className={cn(
-                'group flex h-6 items-center gap-1 cursor-pointer px-1 text-sm rounded-sm',
-                'focus:outline-none',
-                isFocused && 'ring-1 ring-ring ring-inset',
-                isSelected && 'bg-accent font-medium',
-                isRegistry
-                  ? 'text-muted-foreground hover:bg-accent/50'
-                  : 'hover:bg-accent',
-              )}
-              style={{ paddingLeft: `${depth * 16 + 4}px` }}
-              onClick={() => {
-                kbNav.setFocusedId(node.id);
-                onSelect(node.id);
-              }}
-            >
-              {node.hasChildren ? (
-                <button
-                  tabIndex={-1}
-                  onClick={handleToggle}
-                  className="p-0.5 hover:bg-muted rounded-sm"
-                  aria-label={expanded ? 'Collapse' : 'Expand'}
-                >
-                  {isLoading ? (
-                    <Icon
-                      path={mdiLoading}
-                      className="h-3 w-3 animate-spin"
-                    />
-                  ) : (
-                    <Icon
-                      path={mdiChevronRight}
-                      className={cn(
-                        'h-3 w-3 transition-transform',
-                        expanded && 'rotate-90',
-                      )}
-                    />
-                  )}
-                </button>
-              ) : (
-                <span className="w-4" />
-              )}
-              <Icon
-                path={iconPath}
-                className={cn(
-                  'h-3.5 w-3.5 shrink-0',
-                  isRegistry
-                    ? 'text-muted-foreground/50'
-                    : 'text-muted-foreground',
-                )}
-              />
-              <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
-                {node.name}
-              </span>
-              <div className="ml-auto flex items-center gap-1">
-                {hasError && (
-                  <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
-                )}
-                <RowActionIcons
-                  isRegistry={isRegistry}
-                  onInsert={() => setIconInsertDialogOpen(true)}
-                  onDuplicate={() => setDuplicateDialogOpen(true)}
-                  onRefresh={handleRefresh}
-                  onDelete={handleDelete}
-                  isRefreshing={refreshItemMutation.isPending}
+            {node.provenance ? (
+              <div ref={rowRef} {...rowProps}>
+                <ProvenanceBar
+                  provenance={node.provenance}
+                  layerColors={layerColors}
+                  layerVisibility={layerVisibility}
                 />
+                {rowInner}
               </div>
-            </div>
+            ) : (
+              <div ref={rowRef} {...rowProps}>
+                {rowInner}
+              </div>
+            )}
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -1129,6 +1163,8 @@ function ContentTreeNode({
               validationErrors={validationErrors}
               database={database}
               autoExpandIds={autoExpandIds}
+              layerColors={layerColors}
+              layerVisibility={layerVisibility}
             />
           ))}
         </div>
@@ -1177,7 +1213,10 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
   );
 
   const errorItemIds = useMemo(() => {
-    if (!validation) return new Set<string>();
+    // Belt-and-braces: even if the validation query is fixed, defend against
+    // a malformed shape sneaking in via cache, stale state, or a future caller
+    // that doesn't validate. `errors` must be an array for filter() to work.
+    if (!validation || !Array.isArray(validation.errors)) return new Set<string>();
     return new Set(
       validation.errors.filter((e) => e.itemId).map((e) => e.itemId!),
     );
@@ -1234,10 +1273,46 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
       .filter(Boolean) as TreeNode[];
   }, [tree, search]);
 
+  const layerVisibility = useLayerState((s) => s.visibility);
+  const layerOverrides = useLayerState((s) => s.overrides);
+
+  const layerColorsByName = useMemo(() => {
+    const m: Record<string, string> = { ootb: '#cbd5e1' };
+    for (const l of status?.layers ?? []) {
+      if (l.name === 'ootb') continue;
+      m[l.name] = (layerOverrides[l.name]?.color ?? l.color ?? '#888888') as string;
+    }
+    return m;
+  }, [status?.layers, layerOverrides]);
+
+  const layerVisMap = useMemo(() => {
+    const m: Record<string, boolean> = { ootb: true };
+    for (const l of status?.layers ?? []) {
+      if (l.name === 'ootb') continue;
+      m[l.name] = layerVisibility[l.name] !== false;
+    }
+    return m;
+  }, [status?.layers, layerVisibility]);
+
+  // Top-level layer filter: hide root-level nodes whose winnerLayer is toggled
+  // off. Per-level filtering for inline and lazy-loaded children is handled
+  // inside ContentTreeNode at render time.
+  const visibleByLayerTree = useMemo(() => {
+    if (!filteredTree) return filteredTree;
+    return filteredTree.filter((node) => {
+      const winner = node.provenance?.winnerLayer;
+      return !winner || layerVisMap[winner] !== false;
+    });
+  }, [filteredTree, layerVisMap]);
+
   const collapseAll = useCallback(() => {
     workspaceStore.patchTab(tabId, { expandedNodes: new Map() });
     setCollapseKey((k) => k + 1);
   }, [tabId]);
+
+  if (status?.state === 'no-project') {
+    return <NoProjectState />;
+  }
 
   if (status?.state !== 'ready' || isLoading) {
     const indexing = (status?.state as string) === 'indexing';
@@ -1313,7 +1388,7 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
         aria-label="Content tree"
       >
         <TreeKeyboardNavProvider value={kbNav}>
-          {filteredTree?.map((node) => (
+          {visibleByLayerTree?.map((node) => (
             <ContentTreeNode
               key={`${node.id}-${collapseKey}`}
               node={node}
@@ -1325,10 +1400,19 @@ export function ContentTree({ selectedId, onSelect, database }: ContentTreeProps
               validationErrors={errorItemIds}
               database={database}
               autoExpandIds={autoExpandIds}
+              layerColors={layerColorsByName}
+              layerVisibility={layerVisMap}
             />
           ))}
         </TreeKeyboardNavProvider>
       </div>
+      <LayerLegend
+        layers={(status?.layers ?? []).filter((l) => l.name !== 'ootb').map((l) => ({
+          name: layerOverrides[l.name]?.name ?? l.name,
+          color: layerOverrides[l.name]?.color ?? l.color ?? '#888888',
+        }))}
+        layerVisibility={layerVisMap}
+      />
     </div>
   );
 }

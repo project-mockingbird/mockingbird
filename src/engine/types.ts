@@ -1,3 +1,5 @@
+export type { LayerSpec, AllowedPushOperations } from './layer-spec.js';
+
 /** A single field entry in SCS YAML (used in SharedFields, Language Fields, and Version Fields). */
 export interface ScsField {
   /** Field definition GUID (lowercase, no braces). */
@@ -136,8 +138,11 @@ export interface ItemChangeEvent {
 
 /** Options for the engine's public API. */
 export interface EngineOptions {
-  /** Root directory containing sitecore.json and serialized items. */
-  rootDir: string;
+  /** Root directory containing sitecore.json and serialized items. When omitted,
+   *  engine boots in 'no-project' mode: registry loads but no serialized items
+   *  are indexed. Used for the Open Repository mode's first-run state.
+   */
+  rootDir?: string;
   /** Additional roots with their own sitecore.json to merge into the tree. */
   contentPaths?: string[];
   /** Whether to watch for file changes. Default: false. */
@@ -191,4 +196,21 @@ export interface RegistryData {
   source: string;
   extractedAt: string;
   items: RegistryItem[];
+}
+
+/**
+ * Per-item attribution computed during the layer merge at openWorkspace time.
+ * Returned from Engine.getItemProvenance(). The sentinel string 'ootb' is used
+ * for registry-only items; openWorkspace rejects user layers named 'ootb' to
+ * keep this sentinel collision-free.
+ */
+export interface ItemProvenance {
+  /** Layer name whose version is currently rendered, or 'ootb' for registry-only items. */
+  winnerLayer: string;
+  /**
+   * Every layer that has an entry for this item ID, sorted weakest -> strongest
+   * by SCS allowedPushOperations. Single-element array in single-layer mode.
+   * For 'ootb' items, the single-element array `['ootb']`.
+   */
+  contributingLayers: string[];
 }

@@ -58,3 +58,51 @@ describe('GET /api/status', () => {
   });
 
 });
+
+describe('GET /api/status (no-project boot)', () => {
+  it('reports state: no-project when server boots without rootDir', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.state).toBe('no-project');
+    expect(body.itemCount).toBe(0);
+  });
+
+  it('does not load registry when booted without rootDir and no registryPath', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+    expect(body.registryLoaded).toBe(false);
+  });
+
+  it('loads the registry in no-project mode when registryPath is supplied', async () => {
+    const created = await createServer({
+      registryPath: resolve(__dirname, '../../../data/registry.json.gz'),
+    });
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+    expect(body.state).toBe('no-project');
+    expect(body.registryLoaded).toBe(true);
+  });
+
+  it('reports layers as empty array in no-project mode', async () => {
+    const created = await createServer({});
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/status' });
+    const body = res.json();
+    expect(Array.isArray(body.layers)).toBe(true);
+    expect(body.layers.length).toBe(0);
+  });
+});

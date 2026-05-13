@@ -1,5 +1,6 @@
 import { mkdir, writeFile, stat, rm } from 'fs/promises';
 import { resolve, dirname, sep } from 'path';
+import { createHash } from 'crypto';
 import { scanDirectory, scanAdditionalRoot } from './scanner.js';
 import { ItemTree } from './tree.js';
 import { Registry } from './registry.js';
@@ -18,13 +19,40 @@ import {
   STANDARD_TEMPLATE_ID,
   FIELD_IDS,
 } from './constants.js';
-import type { EngineOptions, ItemNode, ModuleConfig, ScsItem, ValidationResult } from './types.js';
+import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, ValidationResult } from './types.js';
+import { comparePushOps, pushOpStrength, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
 import type { MutationPlan } from './mutation-plan.js';
 import { insertItem as insertItemImpl, type InsertItemArgs, type InsertItemResult } from './insert-item.js';
 import { resolveChildFilePath } from './child-file-path.js';
 import { ReadinessState } from './readiness.js';
 import { startPhase } from './index-timing.js';
 import { loadPublishDateOverrides } from './layout/publish-dates.js';
+
+/**
+ * Derives a per-workspace cache path from a base cache path and a stable
+ * workspace identity string (the primary sitecoreJsonPath). Injects a 12-char
+ * sha1 hex prefix before the `.json.gz` extension so each project gets its
+ * own cache file without touching the base path shape.
+ *
+ * Example:
+ *   base       = "/data/cache/index.json.gz"
+ *   workspaceKey = "/workspaces/proj/sitecore.json"
+ *   result     = "/data/cache/index-<12hexchars>.json.gz"
+ *
+ * Returns undefined when basePath is undefined (cache disabled).
+ */
+function deriveCachePath(basePath: string | undefined, workspaceKey: string): string | undefined {
+  if (!basePath) return undefined;
+  const hash = createHash('sha1').update(workspaceKey).digest('hex').slice(0, 12);
+  const lastDot = basePath.lastIndexOf('.json.gz');
+  if (lastDot < 0) {
+    // Unexpected extension shape - append hash before the last dot.
+    const dotIdx = basePath.lastIndexOf('.');
+    if (dotIdx < 0) return `${basePath}-${hash}`;
+    return `${basePath.slice(0, dotIdx)}-${hash}${basePath.slice(dotIdx)}`;
+  }
+  return `${basePath.slice(0, lastDot)}-${hash}.json.gz`;
+}
 
 export class Engine {
   private options: EngineOptions;
@@ -64,6 +92,10 @@ export class Engine {
   private _watcherReady: Promise<void> = Promise.resolve();
   // Cached for the close-time cache rewrite so we don't re-run discoverModules on shutdown.
   private _cacheRoots: CacheRoot[] = [];
+  private _layers: LayerSpec[] = [];
+  private _itemProvenance: Map<string, { winnerLayer: string; contributingLayers: string[] }> = new Map();
+  private _layerStats: Map<string, number> = new Map();
+  private _projectName: string | null = null;
 
   constructor(options: EngineOptions) {
     this.options = options;
@@ -85,7 +117,9 @@ export class Engine {
     this._initStarted = true;
 
     const modulesTimer = startPhase('discoverModules (rootDir)');
-    this.modules = await discoverModules(this.options.rootDir).catch(() => []);
+    this.modules = this.options.rootDir
+      ? await discoverModules(this.options.rootDir).catch(() => [])
+      : [];
     modulesTimer.end({ modules: this.modules.length });
 
     if (this.options.registryPath) {
@@ -120,6 +154,11 @@ export class Engine {
 
   private async indexInBackground(): Promise<void> {
     const totalTimer = startPhase('indexInBackground TOTAL');
+    if (!this.options.rootDir) {
+      totalTimer.end({ items: 0, ready: 'no-project' });
+      this.readiness.markNoProject();
+      return;
+    }
     let staleVerifyPromise: Promise<boolean> | null = null;
     try {
       const onProgress = (scanned: number, total: number) =>
@@ -359,7 +398,7 @@ export class Engine {
       if (this._closed) return;
 
       if (this.options.watch) {
-        const watchPaths = [this.options.rootDir, ...(this.options.contentPaths ?? [])];
+        const watchPaths = [this.options.rootDir!, ...(this.options.contentPaths ?? [])];
         // Tracks last-processed mtime per path. Docker Desktop (Windows / WSL2) gRPC FUSE bind mounts surface phantom polling events for the same underlying mtime as metadata resyncs; without this dedupe one save fires the watcher pipeline several times.
         const lastProcessedMtime = new Map<string, number>();
         this.watcher = new FileWatcher(watchPaths, async (event) => {
@@ -487,6 +526,7 @@ export class Engine {
    * see the new includes immediately.
    */
   async reloadModules(): Promise<void> {
+    if (!this.options.rootDir) return;
     this.modules = await discoverModules(this.options.rootDir).catch(() => []);
   }
 
@@ -496,7 +536,7 @@ export class Engine {
   }
 
   /** Workspace root directory (the dir holding `sitecore.json`). */
-  getRootDir(): string {
+  getRootDir(): string | undefined {
     return this.options.rootDir;
   }
 
@@ -963,6 +1003,286 @@ export class Engine {
     }
   }
 
+  /**
+   * Closes the currently-open workspace, returning the engine to 'no-project'
+   * state. Tears down the file watcher (if any) and clears the in-memory tree.
+   * The OOTB registry stays loaded.
+   *
+   * Safe to call from no-project state (no-op).
+   */
+  async closeWorkspace(): Promise<void> {
+    if (this.readiness.state === 'no-project') return;
+    if (this.watcher) {
+      await this.watcher.close();
+      this.watcher = null;
+    }
+    if (this._cacheWritePromise) {
+      try { await this._cacheWritePromise; } catch { /* swallow - tear-down */ }
+      this._cacheWritePromise = null;
+    }
+    this.tree = new ItemTree();
+    this.modules = [];
+    this._cacheRoots = [];
+    this._layers = [];
+    this._itemProvenance.clear();
+    this._layerStats.clear();
+    this._projectName = null;
+    this.readiness.reset();
+    this.readiness.markNoProject();
+  }
+
+  /**
+   * Opens a workspace with N layers (each a sitecore.json reference). Tears
+   * down any currently-open workspace first. An empty layer list loads the
+   * registry (if configured) and returns the engine to 'no-project' state.
+   *
+   * The reserved layer name 'ootb' (case-insensitive) is rejected - it is the
+   * sentinel used in provenance shapes for registry-substrate items.
+   *
+   * Single-layer mode delegates to startInit (file watcher + cache work as
+   * usual). Multi-layer mode runs a custom scan-and-merge that resolves
+   * per-item precedence via SCS allowedPushOperations strength. The file
+   * watcher is disabled in multi-layer mode (re-open to pick up changes);
+   * the engine cache also does not write in multi-layer mode for the same
+   * reason.
+   */
+  async openWorkspace(layers: LayerSpec[], options?: { projectName?: string }): Promise<void> {
+    // Reject 'ootb' as a user layer name (case-insensitive). The sentinel is
+    // reserved for the registry substrate in provenance shapes. Validated
+    // BEFORE closeWorkspace so a bad call does not tear down an open workspace.
+    for (const layer of layers) {
+      if (layer.name.toLowerCase() === 'ootb') {
+        throw new Error(`Layer name 'ootb' is reserved; received layer with name "${layer.name}"`);
+      }
+    }
+
+    await this.closeWorkspace();
+
+    this._projectName = options?.projectName ?? null;
+    this._layers = layers.slice();
+
+    if (layers.length === 0) {
+      // Load the registry so callers can query ootb items even without a workspace.
+      await this._ensureRegistryLoaded();
+      return;
+    }
+
+    if (layers.length === 1) {
+      // Single-layer path: existing battle-tested flow via startInit.
+      const primary = layers[0];
+      // Derive a per-workspace cache path so multiple projects each keep
+      // their own cache. Multi-layer mode does not use the cache (same as
+      // before); only single-layer mode benefits from this derivation.
+      const perProjectCachePath = deriveCachePath(this.options.indexCachePath, primary.sitecoreJsonPath);
+      this.options = {
+        ...this.options,
+        rootDir: dirname(primary.sitecoreJsonPath),
+        indexCachePath: perProjectCachePath,
+      };
+      this._initStarted = false;
+      this.readiness.reset();
+      await this.startInit();
+      await this.readiness.ready();
+      // Eager provenance fill: every tree node attributes to the single layer.
+      let nodeCount = 0;
+      for (const node of this.tree.getAllNodes()) {
+        this._itemProvenance.set(node.item.id, {
+          winnerLayer: primary.name,
+          contributingLayers: [primary.name],
+        });
+        nodeCount++;
+      }
+      this._layerStats.set(primary.name, nodeCount);
+      return;
+    }
+
+    // Multi-layer path: read each layer's per-layer cache (or scan cold),
+    // then merge by push-ops precedence. Each layer's gzipped cache lives at
+    // `deriveCachePath(indexCachePath, layer.sitecoreJsonPath)`, the same
+    // file the single-layer path writes when the layer is opened on its own.
+    // Per-layer cache files are SHARED across multi-layer projects that use
+    // the same layer - opening A+B and later A+C both reuse the layer A cache.
+    this.readiness.reset();
+
+    const pushOpsByItemId = new Map<string, AllowedPushOperations | undefined>();
+    // Contributors are gathered in scan order with their per-include pushOps, then
+    // sorted weakest -> strongest at storage time so the winner (strongest) is
+    // always last regardless of scan order.
+    const contributorsByItemId = new Map<
+      string,
+      Array<{ name: string; ops: AllowedPushOperations | undefined }>
+    >();
+    const layerCacheWrites: Promise<void>[] = [];
+
+    for (const layer of layers) {
+      const layerRoot = dirname(layer.sitecoreJsonPath);
+      const layerCachePath = deriveCachePath(this.options.indexCachePath, layer.sitecoreJsonPath);
+      const layerCacheRoots: CacheRoot[] = [{ rootDir: layerRoot, additional: false }];
+
+      const layerModules = await discoverModules(layerRoot).catch(() => []);
+      this.modules.push(...layerModules);
+
+      let partialTree: ItemTree | null = null;
+      if (layerCachePath) {
+        const cached = await loadCachedTree(layerCacheRoots, layerCachePath);
+        if (cached) {
+          partialTree = cached.tree;
+          this.readiness.markProgress(cached.entryCount, cached.entryCount);
+          // Fire-and-forget signature verify; delete stale cache so the next
+          // open of this layer re-scans cold.
+          void cached.verifyPromise.then(async (match) => {
+            if (!match) {
+              await deleteStaleCache(layerCachePath);
+            }
+          });
+        }
+      }
+
+      let scanStats: Map<string, { mtimeMs: number; size: number }> | undefined;
+      if (!partialTree) {
+        scanStats = new Map();
+        partialTree = await scanDirectory(layerRoot, {
+          label: `scan:${layer.name}`,
+          onProgress: (scanned, total) => this.readiness.markProgress(scanned, total),
+          statCollector: scanStats,
+        });
+        // Background cache write so multi-layer open isn't blocked on gzip.
+        if (layerCachePath) {
+          const writePromise = writeCachedTree(layerCacheRoots, partialTree, layerCachePath, scanStats).catch(
+            (err) => {
+              console.error(`  [index] background cache write failed for layer ${layer.name}:`, err);
+            },
+          );
+          layerCacheWrites.push(writePromise);
+        }
+      }
+
+      for (const node of partialTree.getAllNodes()) {
+        const incomingPushOps = this._findCoveringPushOps(node.item.path, layerModules);
+        const existingPushOps = pushOpsByItemId.get(node.item.id);
+        const isFirstSighting = !this.tree.getById(node.item.id);
+
+        // Track contributing layer (every layer that has the item ID) alongside its
+        // per-include pushOps for this item, so the array can be sorted by strength
+        // before exposure.
+        let contributors = contributorsByItemId.get(node.item.id);
+        if (!contributors) {
+          contributors = [];
+          contributorsByItemId.set(node.item.id, contributors);
+        }
+        contributors.push({ name: layer.name, ops: incomingPushOps });
+
+        const sortedNames = [...contributors]
+          .sort((a, b) => pushOpStrength(a.ops) - pushOpStrength(b.ops))
+          .map((c) => c.name);
+
+        if (isFirstSighting || comparePushOps(incomingPushOps, existingPushOps) > 0) {
+          this.tree.addItem(node.item, node.filePath, node.module);
+          pushOpsByItemId.set(node.item.id, incomingPushOps);
+          this._itemProvenance.set(node.item.id, {
+            winnerLayer: layer.name,
+            contributingLayers: sortedNames,
+          });
+        } else {
+          // Still update contributingLayers on the existing provenance entry.
+          const existing = this._itemProvenance.get(node.item.id);
+          if (existing) {
+            existing.contributingLayers = sortedNames;
+          }
+        }
+      }
+    }
+
+    // Compute per-layer effective counts from the final provenance map.
+    for (const { winnerLayer } of this._itemProvenance.values()) {
+      this._layerStats.set(winnerLayer, (this._layerStats.get(winnerLayer) ?? 0) + 1);
+    }
+
+    // Aggregate any pending per-layer cache writes so close() can drain them.
+    if (layerCacheWrites.length > 0) {
+      this._cacheWritePromise = Promise.all(layerCacheWrites).then(() => undefined);
+    }
+
+    this.readiness.markReady();
+  }
+
+  /**
+   * Loads the registry from options.registryPath if it is not already loaded.
+   * No-op if registryPath is not configured or registry is already populated.
+   */
+  private async _ensureRegistryLoaded(): Promise<void> {
+    if (this.registry || !this.options.registryPath) return;
+    this.registry = new Registry();
+    try {
+      if (this.options.registryPath.endsWith('.gz')) {
+        await this.registry.loadFromGzip(this.options.registryPath);
+      } else {
+        await this.registry.loadFromJson(this.options.registryPath);
+      }
+    } catch {
+      this.registry = null;
+    }
+  }
+
+  /**
+   * Returns the allowedPushOperations value from the ModuleInclude that
+   * covers the given Sitecore item path. Walks the supplied modules' includes
+   * and picks the first include whose `path` is a prefix of the item path.
+   * Returns undefined if no covering include is found.
+   */
+  private _findCoveringPushOps(
+    itemPath: string,
+    modules: ModuleConfig[],
+  ): AllowedPushOperations | undefined {
+    for (const module of modules) {
+      for (const include of module.items.includes) {
+        if (itemPath === include.path || itemPath.startsWith(include.path + '/')) {
+          return include.allowedPushOperations;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /** Returns the layer set that was last opened via openWorkspace. */
+  getLayers(): readonly LayerSpec[] {
+    return this._layers;
+  }
+
+  /** Returns the project name set when opening the workspace, or null if not provided. */
+  getProjectName(): string | null {
+    return this._projectName;
+  }
+
+  /**
+   * Returns provenance for the given item ID, or null if the item is not in
+   * the current tree and not in the registry. OOTB-only items return the
+   * synthetic shape `{ winnerLayer: 'ootb', contributingLayers: ['ootb'] }`.
+   */
+  getItemProvenance(itemId: string): ItemProvenance | null {
+    const tracked = this._itemProvenance.get(itemId);
+    if (tracked) return { winnerLayer: tracked.winnerLayer, contributingLayers: [...tracked.contributingLayers] };
+    if (this.registry?.getById(itemId)) {
+      return { winnerLayer: 'ootb', contributingLayers: ['ootb'] };
+    }
+    return null;
+  }
+
+  /**
+   * Returns the effective-item count per user layer (items where that layer
+   * wins after precedence merge) plus a synthetic 'ootb' entry with the
+   * registry size.
+   */
+  getLayerStats(): Array<{ name: string; effectiveCount: number }> {
+    const result: Array<{ name: string; effectiveCount: number }> = [];
+    for (const layer of this._layers) {
+      result.push({ name: layer.name, effectiveCount: this._layerStats.get(layer.name) ?? 0 });
+    }
+    const registrySize = this.registry?.size ?? 0;
+    if (registrySize > 0) result.push({ name: 'ootb', effectiveCount: registrySize });
+    return result;
+  }
+
   async writeItemFile(item: ScsItem): Promise<string> {
     const itemName = item.path.split('/').pop()!;
     const filePath = this.resolveFilePath(item.path, itemName);
@@ -1072,6 +1392,9 @@ export class Engine {
   }
 
   resolveFilePath(itemSitecorePath: string, itemName: string): string {
+    if (!this.options.rootDir) {
+      throw new Error('resolveFilePath is not available in no-project mode');
+    }
     const normalizedItem = itemSitecorePath.toLowerCase();
     for (const mod of this.modules) {
       const modDir = dirname(mod.filePath);

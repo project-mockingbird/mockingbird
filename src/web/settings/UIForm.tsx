@@ -13,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 export function UIForm() {
   const { settings, setSetting } = useSettings();
   const { theme, setTheme } = useTheme();
+  const autoRestore = settings['session.autoRestore'];
 
   // next-themes returns undefined during SSR/first render; gate UI until mounted.
   const [mounted, setMounted] = useState(false);
@@ -114,6 +115,23 @@ export function UIForm() {
           />
           <FieldDescription>The trim warning appears when an item has at least this many versions in a language.</FieldDescription>
         </Field>
+      </section>
+
+      <Separator />
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold">Open Repository</h3>
+        <Field orientation="horizontal">
+          <FieldLabel htmlFor="auto-restore">Auto-restore last project on page load</FieldLabel>
+          <Switch
+            id="auto-restore"
+            checked={autoRestore}
+            onCheckedChange={(v) => setSetting('session.autoRestore', v)}
+          />
+        </Field>
+        <FieldDescription>
+          When on, mockingbird re-opens your last project when you reload the app. State lives in localStorage; closing a project clears the pointer.
+        </FieldDescription>
       </section>
     </div>
   );

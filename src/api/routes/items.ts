@@ -25,18 +25,38 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     const { path } = request.query as { path?: string };
     if (!path) return reply.status(400).send({ error: 'Missing "path" query parameter', statusCode: 400 });
     const node = engine.getItemByPath(path);
-    if (node) return serializeItemNode(node, engine);
+    if (node) {
+      const detail = serializeItemNode(node, engine);
+      const provenance = engine.getItemProvenance(node.item.id);
+      if (provenance) (detail as Record<string, unknown>).provenance = provenance;
+      return detail;
+    }
     const registryItem = engine.getRegistryItemByPath(path);
-    if (registryItem) return buildRegistryItemDetail(registryItem, engine);
+    if (registryItem) {
+      const detail = buildRegistryItemDetail(registryItem, engine);
+      const provenance = engine.getItemProvenance(registryItem.id);
+      if (provenance) (detail as Record<string, unknown>).provenance = provenance;
+      return detail;
+    }
     return reply.status(404).send({ error: `Item not found: ${path}`, statusCode: 404 });
   });
 
   app.get('/api/items/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const node = engine.getItemById(id);
-    if (node) return serializeItemNode(node, engine);
+    if (node) {
+      const detail = serializeItemNode(node, engine);
+      const provenance = engine.getItemProvenance(node.item.id);
+      if (provenance) (detail as Record<string, unknown>).provenance = provenance;
+      return detail;
+    }
     const registryItem = engine.getRegistryItem(id);
-    if (registryItem) return buildRegistryItemDetail(registryItem, engine);
+    if (registryItem) {
+      const detail = buildRegistryItemDetail(registryItem, engine);
+      const provenance = engine.getItemProvenance(registryItem.id);
+      if (provenance) (detail as Record<string, unknown>).provenance = provenance;
+      return detail;
+    }
     return reply.status(404).send({ error: `Item not found: ${id}`, statusCode: 404 });
   });
 

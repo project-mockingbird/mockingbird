@@ -1,10 +1,27 @@
 import { useQuery } from '@tanstack/react-query';
 
+/**
+ * Per-layer summary as surfaced via `/api/status.layers`. Mirrors the engine's
+ * LayerSpec but with required `color` documented as optional (engine returns
+ * undefined when the API consumer didn't pass one). The wizard auto-assigns
+ * colors at open time so post-open status snapshots usually carry one.
+ */
+export interface LayerSummary {
+  sitecoreJsonPath?: string;
+  name: string;
+  color?: string;
+  /** Item count attributed to this layer by the engine. Included on all layers
+   * returned from /api/status when state is 'ready'. */
+  effectiveCount?: number;
+}
+
 export interface EngineStatus {
-  state: 'initializing' | 'ready' | 'error';
+  state: 'initializing' | 'no-project' | 'indexing' | 'ready' | 'error';
   progress: { scanned: number; total: number } | null;
   error: string | null;
   itemCount?: number;
+  layers?: LayerSummary[];
+  projectName?: string | null;
   registryLoaded?: boolean;
   /**
    * URL template used by the "Open in editor" buttons in QuickInfo and the

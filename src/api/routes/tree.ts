@@ -58,6 +58,7 @@ interface TreeNodeResponse {
   /** Host-translated path to the YAML on disk; only present for serialized items. */
   filePath?: string;
   autoExpand?: boolean;
+  provenance?: { winnerLayer: string; contributingLayers: string[] };
   children?: TreeNodeResponse[];
 }
 
@@ -197,6 +198,9 @@ function buildRegistryNode(item: RegistryItem, engine: Engine, maxDepth: number,
     node.children = getMergedChildren(item.id, engine, maxDepth, currentDepth + 1, database);
   }
 
+  const prov = engine.getItemProvenance(item.id);
+  if (prov) node.provenance = prov;
+
   return node;
 }
 
@@ -228,6 +232,9 @@ function buildSerializedSubtree(node: ItemNode, engine: Engine, maxDepth: number
   if (currentDepth < maxDepth && hasChildren) {
     result.children = getMergedChildren(node.item.id, engine, maxDepth, currentDepth + 1, database);
   }
+
+  const prov = engine.getItemProvenance(node.item.id);
+  if (prov) result.provenance = prov;
 
   return result;
 }

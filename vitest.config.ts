@@ -13,13 +13,19 @@ export default defineConfig({
       '@tanstack/react-query': fileURLToPath(
         new URL('./src/web/node_modules/@tanstack/react-query', import.meta.url),
       ),
+      // zustand lives only in src/web/node_modules. Pin it explicitly so all
+      // imports (including zustand/react.js) resolve to the same copy and
+      // share the same React instance that react-dom uses.
+      'zustand': fileURLToPath(
+        new URL('./src/web/node_modules/zustand', import.meta.url),
+      ),
     },
     // Force a single React copy across the test runner. The web bundle has
     // its own node_modules under src/web; without dedupe (combined with
     // the prededupe-react script run by `npm test`), transitive radix-ui
     // imports resolve a nested react copy alongside the root install ->
     // "Invalid hook call" inside any rendered Dialog.
-    dedupe: ['react', 'react-dom'],
+    dedupe: ['react', 'react-dom', 'zustand'],
   },
   test: {
     globals: true,

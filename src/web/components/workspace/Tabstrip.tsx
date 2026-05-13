@@ -40,7 +40,7 @@ export function Tabstrip({ tabs, paneIndex, onAdd }: TabstripProps) {
     <div
       role="tablist"
       onKeyDown={handleKeyDown}
-      className="flex items-stretch border-b border-border bg-muted/30 text-sm overflow-x-auto"
+      className="flex items-stretch border-b border-border bg-muted/30 text-sm overflow-x-auto h-9"
     >
       {tabs.map((tab) => (
         <TabItem
