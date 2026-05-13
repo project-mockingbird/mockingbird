@@ -113,7 +113,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-          Layers
+          Content Layers
         </div>
         {userLayers.map((layer) => {
           const override = overrides[layer.name] ?? {};
