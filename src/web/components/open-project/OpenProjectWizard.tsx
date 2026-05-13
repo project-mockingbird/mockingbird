@@ -36,6 +36,7 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
   const [rows, setRows] = useState<LayerRowState[]>([]);
   const [projectName, setProjectName] = useState<string>('project');
   const [userEditedProjectName, setUserEditedProjectName] = useState<boolean>(false);
+  const [profileName, setProfileName] = useState<string | undefined>(undefined);
   const openProject = useOpenProject();
 
   const reset = () => {
@@ -43,6 +44,7 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
     setRows([]);
     setProjectName('project');
     setUserEditedProjectName(false);
+    setProfileName(undefined);
     openProject.reset();
   };
 
@@ -87,7 +89,7 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
     layers: { sitecoreJsonPath: string; name: string; color?: string }[],
   ) => {
     try {
-      await openProject.mutateAsync({ layers, projectName });
+      await openProject.mutateAsync({ layers, projectName, profileName });
       toast.success('Project opened.');
       reset();
       onClose();
@@ -122,6 +124,7 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
         }}
       onClose={handleClose}
       onConfirm={handleLayersConfirm}
+      onConfirmProfile={setProfileName}
       onAddAnother={handleAddAnother}
       isPending={openProject.isPending}
       serverError={openProject.error?.message ?? null}

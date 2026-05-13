@@ -194,7 +194,7 @@ describe('LayerSelectionDialog', () => {
       />,
     );
     await user.click(screen.getByText('p'));
-    const input = screen.getByRole('textbox');
+    const input = screen.getAllByRole('textbox')[0];
     await user.clear(input);
     await user.type(input, 'primary{Enter}');
     await user.click(screen.getByRole('button', { name: /open project/i }));
@@ -246,7 +246,7 @@ describe('LayerSelectionDialog', () => {
       />,
     );
     await user.click(screen.getByText('authoring'));
-    const input = screen.getByRole('textbox');
+    const input = screen.getAllByRole('textbox')[0];
     await user.clear(input);
     await user.type(input, 'renamed{Enter}');
     expect(onRowsChange).toHaveBeenCalled();
@@ -317,12 +317,76 @@ describe('LayerSelectionDialog', () => {
       />,
     );
     await user.click(screen.getByText('layer'));
-    const input = screen.getByRole('textbox');
+    const input = screen.getAllByRole('textbox')[0];
     await user.clear(input);
     await user.type(input, 'workspace-root{Enter}');
     await user.click(screen.getByRole('button', { name: /open project/i }));
     expect(onConfirm).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ name: 'workspace-root' })]),
     );
+  });
+
+  it('renders the save-as-profile input', () => {
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText(/save as profile/i)).toBeInTheDocument();
+  });
+
+  it('forwards the typed profile name via onConfirmProfile', () => {
+    const onConfirmProfile = vi.fn();
+    const onConfirm = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={onConfirm}
+        onConfirmProfile={onConfirmProfile}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/save as profile/i), { target: { value: 'dev' } });
+    fireEvent.click(screen.getByRole('button', { name: /open project/i }));
+    expect(onConfirmProfile).toHaveBeenCalledWith('dev');
+  });
+
+  it('treats whitespace-only input as undefined', () => {
+    const onConfirmProfile = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+        onConfirmProfile={onConfirmProfile}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/save as profile/i), { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: /open project/i }));
+    expect(onConfirmProfile).toHaveBeenCalledWith(undefined);
+  });
+
+  it('emits onConfirmProfile only when onConfirmProfile is provided', () => {
+    // Without onConfirmProfile prop, no crash; onConfirm still fires.
+    const onConfirm = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={onConfirm}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /open project/i }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });
