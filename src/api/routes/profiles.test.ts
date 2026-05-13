@@ -108,4 +108,21 @@ describe('profiles routes', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toMatch(/invalid profile layer/);
   });
+
+  it('GET /api/profiles/:projectHash/:name returns a single profile', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/profiles',
+      payload: { projectHash: 'abc', name: 'dev', projectName: 'demo', layers: [{ sitecoreJsonPath: '/x', name: 'c', color: '#000' }] },
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/profiles/abc/dev' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().profile.name).toBe('dev');
+    expect(res.json().profile.layers).toHaveLength(1);
+  });
+
+  it('GET /api/profiles/:projectHash/:name returns 404 when missing', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/profiles/abc/missing' });
+    expect(res.statusCode).toBe(404);
+  });
 });

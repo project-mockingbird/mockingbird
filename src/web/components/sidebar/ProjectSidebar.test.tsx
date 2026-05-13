@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectSidebar } from './ProjectSidebar';
 import { resetLayerState } from '@/state/layerState';
 
@@ -17,6 +18,11 @@ const localStorageStub = (() => {
   };
 })();
 Object.defineProperty(window, 'localStorage', { value: localStorageStub });
+
+function renderWithClient(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+}
 
 const statusReady = {
   state: 'ready' as const,
@@ -37,14 +43,14 @@ beforeEach(() => {
 
 describe('<ProjectSidebar>', () => {
   it('renders nothing when state is no-project', () => {
-    const { container } = render(
+    const { container } = renderWithClient(
       <ProjectSidebar status={statusNoProject} onSwitch={() => {}} onClose={() => {}} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it('renders one row per user layer + an OOTB substrate row', () => {
-    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
     expect(screen.getByText('authoring')).toBeInTheDocument();
     expect(screen.getByText('content')).toBeInTheDocument();
     expect(screen.getByText(/OOTB/)).toBeInTheDocument();
@@ -54,7 +60,7 @@ describe('<ProjectSidebar>', () => {
   it('Switch button calls onSwitch', async () => {
     const onSwitch = vi.fn();
     const user = userEvent.setup();
-    render(<ProjectSidebar status={statusReady} onSwitch={onSwitch} onClose={() => {}} />);
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={onSwitch} onClose={() => {}} />);
     await user.click(screen.getByRole('button', { name: /switch/i }));
     expect(onSwitch).toHaveBeenCalled();
   });
@@ -62,14 +68,14 @@ describe('<ProjectSidebar>', () => {
   it('Close button calls onClose', async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
-    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={onClose} />);
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={onClose} />);
     await user.click(screen.getByRole('button', { name: /close/i }));
     expect(onClose).toHaveBeenCalled();
   });
 
   it('collapse button hides layer rows and shows an expand button', async () => {
     const user = userEvent.setup();
-    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
     // Layer rows are visible initially
     expect(screen.getByText('authoring')).toBeInTheDocument();
     // Click the collapse button
@@ -83,7 +89,7 @@ describe('<ProjectSidebar>', () => {
 
   it('expand button restores sidebar content after collapse', async () => {
     const user = userEvent.setup();
-    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
     await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
     await user.click(screen.getByRole('button', { name: /expand sidebar/i }));
     expect(screen.getByText('authoring')).toBeInTheDocument();
@@ -92,19 +98,19 @@ describe('<ProjectSidebar>', () => {
 
   it('persists collapsed state to localStorage', async () => {
     const user = userEvent.setup();
-    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
     await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
     expect(localStorageStub.getItem('mockingbird.sidebar.collapsed')).toBe('true');
   });
 
   it('uses status.projectName for the header label when provided', () => {
     const statusWithName = { ...statusReady, projectName: 'my-workspace' };
-    render(<ProjectSidebar status={statusWithName} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(<ProjectSidebar status={statusWithName} onSwitch={() => {}} onClose={() => {}} />);
     expect(screen.getByText('my-workspace')).toBeInTheDocument();
   });
 
   it('falls back to path-strip heuristic when status.projectName is absent', () => {
-    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
     // statusReady layers have paths like /workspaces/p/{layer}/sitecore.json
     // stripping two segments from authoring path -> /workspaces/p -> basename = "p"
     expect(screen.getByText('p')).toBeInTheDocument();

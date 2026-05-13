@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import {
   listProfiles,
+  readProfile,
   upsertProfile,
   deleteProfile,
   renameProfile,
@@ -70,6 +71,18 @@ export function registerProfilesRoutes(app: FastifyInstance): void {
       } catch (err) {
         reply.code(400).send({ error: err instanceof Error ? err.message : 'invalid name' });
       }
+    },
+  );
+
+  app.get<{ Params: { projectHash: string; name: string } }>(
+    '/api/profiles/:projectHash/:name',
+    async (req, reply) => {
+      const profile = await readProfile(req.params.projectHash, req.params.name);
+      if (!profile) {
+        reply.code(404).send({ error: 'not found' });
+        return;
+      }
+      reply.send({ profile });
     },
   );
 }

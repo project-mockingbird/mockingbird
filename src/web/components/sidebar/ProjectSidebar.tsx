@@ -4,6 +4,11 @@ import { Icon } from '@/lib/icon';
 import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight } from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
+import { ProfileDropdown } from './ProfileDropdown';
+import { useProfiles, useUpsertProfile } from '@/hooks/useProfiles';
+import { useEngineStatus } from '@/hooks/useEngineStatus';
+import { useCloseProject } from '@/hooks/useCloseProject';
+import { useOpenProject } from '@/hooks/useOpenProject';
 
 interface SidebarLayer {
   name: string;
@@ -73,6 +78,60 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
     });
   };
 
+  const engineStatus = useEngineStatus();
+  const activeProfile = engineStatus.data?.activeProfile ?? null;
+  const profilesQuery = useProfiles(activeProfile?.projectHash ?? null);
+  const profiles = profilesQuery.data?.profiles ?? [];
+
+  const openProject = useOpenProject();
+  const closeProject = useCloseProject();
+  const upsertProfile = useUpsertProfile();
+
+  const handleSave = () => {
+    if (!activeProfile) return;
+    upsertProfile.mutate({
+      projectHash: activeProfile.projectHash,
+      name: activeProfile.profileName,
+      projectName: status.projectName ?? 'project',
+      layers: userLayers.map((l) => ({
+        sitecoreJsonPath: l.sitecoreJsonPath ?? '',
+        name: l.name,
+        color: l.color ?? '#888888',
+      })),
+    });
+  };
+
+  const handleSaveAs = () => {
+    // Real wiring lands in Task 10 (SettingsPopover + ManageProfilesModal cycle includes a Save As prompt).
+  };
+
+  const handleSwitch = async (profileName: string) => {
+    if (!activeProfile) return;
+    try {
+      const res = await fetch(
+        `/api/profiles/${encodeURIComponent(activeProfile.projectHash)}/${encodeURIComponent(profileName)}`,
+      );
+      if (!res.ok) return;
+      const { profile } = await res.json();
+      await closeProject.mutateAsync();
+      await openProject.mutateAsync({
+        layers: profile.layers.map((l: { sitecoreJsonPath: string; name: string; color: string }) => ({
+          sitecoreJsonPath: l.sitecoreJsonPath,
+          name: l.name,
+          color: l.color,
+        })),
+        projectName: profile.projectName,
+        profileName: profile.name,
+      });
+    } catch {
+      // Toast layer (existing) surfaces fetch failures; no-op locally.
+    }
+  };
+
+  const handleManage = () => {
+    // Wired in Task 10.
+  };
+
   if (collapsed) {
     return (
       <aside
@@ -110,6 +169,19 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         >
           <Icon path={mdiChevronRight} className="size-4" />
         </Button>
+      </div>
+      <div className="px-3 py-2 border-b flex items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">Profile</span>
+        <div className="flex-1 min-w-0">
+          <ProfileDropdown
+            activeName={activeProfile?.profileName ?? null}
+            profiles={profiles}
+            onSave={handleSave}
+            onSaveAs={handleSaveAs}
+            onSwitch={handleSwitch}
+            onManage={handleManage}
+          />
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto">
         <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
