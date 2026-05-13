@@ -85,4 +85,32 @@ describe('Engine.openWorkspace() - single layer', () => {
     expect(engine.readiness.state).toBe('no-project');
     expect(engine.getLayers().length).toBe(0);
   });
+
+  it('getProjectName returns the name passed to openWorkspace', async () => {
+    engine = new Engine({ watch: false, registryPath: registryFixture });
+    await engine.openWorkspace(
+      [{ sitecoreJsonPath: join(fixture, 'sitecore.json'), name: 'default' }],
+      { projectName: 'my-project' },
+    );
+    expect(engine.getProjectName()).toBe('my-project');
+  });
+
+  it('getProjectName returns null when no projectName is passed', async () => {
+    engine = new Engine({ watch: false, registryPath: registryFixture });
+    await engine.openWorkspace([
+      { sitecoreJsonPath: join(fixture, 'sitecore.json'), name: 'default' },
+    ]);
+    expect(engine.getProjectName()).toBeNull();
+  });
+
+  it('getProjectName is cleared when closeWorkspace is called', async () => {
+    engine = new Engine({ watch: false, registryPath: registryFixture });
+    await engine.openWorkspace(
+      [{ sitecoreJsonPath: join(fixture, 'sitecore.json'), name: 'default' }],
+      { projectName: 'cleared-after-close' },
+    );
+    expect(engine.getProjectName()).toBe('cleared-after-close');
+    await engine.closeWorkspace();
+    expect(engine.getProjectName()).toBeNull();
+  });
 });

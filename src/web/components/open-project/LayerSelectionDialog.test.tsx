@@ -254,6 +254,56 @@ describe('LayerSelectionDialog', () => {
     expect(lastCall[0].name).toBe('renamed');
   });
 
+  it('renders project name input when onProjectNameChange is provided', () => {
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+        projectName="my-project"
+        onProjectNameChange={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText(/project name/i) as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe('my-project');
+  });
+
+  it('does not render project name input when onProjectNameChange is omitted', () => {
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+      />,
+    );
+    expect(screen.queryByLabelText(/project name/i)).not.toBeInTheDocument();
+  });
+
+  it('calls onProjectNameChange when the project name input changes', async () => {
+    const user = userEvent.setup();
+    const onProjectNameChange = vi.fn();
+    render(
+      <LayerSelectionDialog
+        open
+        rootPath="/workspaces/repo"
+        candidates={CANDIDATES}
+        onClose={() => {}}
+        onConfirm={() => {}}
+        projectName="initial"
+        onProjectNameChange={onProjectNameChange}
+      />,
+    );
+    const input = screen.getByLabelText(/project name/i);
+    await user.clear(input);
+    await user.type(input, 'renamed');
+    expect(onProjectNameChange).toHaveBeenCalled();
+  });
+
   it('renaming root-level "/sitecore.json" away from "layer" works (deriveName fix)', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();

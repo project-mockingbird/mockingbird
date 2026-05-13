@@ -16,6 +16,7 @@ interface SidebarStatus {
   state: 'ready' | 'no-project' | 'indexing' | 'error' | 'init' | 'initializing';
   layers: SidebarLayer[];
   registryItemCount?: number;
+  projectName?: string | null;
 }
 
 interface ProjectSidebarProps {
@@ -57,11 +58,12 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const ootbCount =
     status.layers.find((l) => l.name === 'ootb')?.effectiveCount ?? status.registryItemCount ?? 0;
 
-  // Compute a short project label - each layer sits at <project>/<layer>/sitecore.json,
-  // so strip two path segments to get the project root.
+  // Compute a short project label. Prefer the API-supplied projectName (set
+  // at open-project time). Fall back to the path-strip heuristic.
   const firstPath = userLayers[0]?.sitecoreJsonPath ?? '';
   const projectPath = firstPath.replace(/\/[^/]+\/[^/]+$/, '');
-  const projectLabel = projectPath.split('/').filter(Boolean).pop() ?? 'project';
+  const pathDerivedLabel = projectPath.split('/').filter(Boolean).pop() ?? 'project';
+  const projectLabel = (status.projectName?.trim() || null) ?? pathDerivedLabel;
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {

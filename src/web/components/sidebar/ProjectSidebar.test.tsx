@@ -96,4 +96,17 @@ describe('<ProjectSidebar>', () => {
     await user.click(screen.getByRole('button', { name: /collapse sidebar/i }));
     expect(localStorageStub.getItem('mockingbird.sidebar.collapsed')).toBe('true');
   });
+
+  it('uses status.projectName for the header label when provided', () => {
+    const statusWithName = { ...statusReady, projectName: 'my-workspace' };
+    render(<ProjectSidebar status={statusWithName} onSwitch={() => {}} onClose={() => {}} />);
+    expect(screen.getByText('my-workspace')).toBeInTheDocument();
+  });
+
+  it('falls back to path-strip heuristic when status.projectName is absent', () => {
+    render(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    // statusReady layers have paths like /workspaces/p/{layer}/sitecore.json
+    // stripping two segments from authoring path -> /workspaces/p -> basename = "p"
+    expect(screen.getByText('p')).toBeInTheDocument();
+  });
 });

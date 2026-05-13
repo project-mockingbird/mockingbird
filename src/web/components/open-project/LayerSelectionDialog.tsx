@@ -37,6 +37,10 @@ interface LayerSelectionDialogProps {
    * back up to a parent that owns the row state.
    */
   onRowsChange?: (rows: LayerRowState[]) => void;
+  /** Project name shown in the editable input above the layers list. */
+  projectName?: string;
+  /** Called whenever the project name input changes. */
+  onProjectNameChange?: (name: string) => void;
   isPending?: boolean;
   serverError?: string | null;
 }
@@ -66,6 +70,8 @@ export function LayerSelectionDialog({
   onAddAnother,
   initialRows,
   onRowsChange,
+  projectName,
+  onProjectNameChange,
   isPending = false,
   serverError = null,
 }: LayerSelectionDialogProps) {
@@ -128,10 +134,25 @@ export function LayerSelectionDialog({
         if (!o) onClose();
       }}
     >
-      <DialogContent size="xl">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Select layers</DialogTitle>
         </DialogHeader>
+        {onProjectNameChange !== undefined && (
+          <div className="flex flex-col gap-1">
+            <label htmlFor="project-name-input" className="text-xs font-medium">
+              Project name
+            </label>
+            <input
+              id="project-name-input"
+              type="text"
+              value={projectName ?? ''}
+              onChange={(e) => onProjectNameChange(e.target.value)}
+              className="rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              placeholder="project"
+            />
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">
           Discovered {candidates.length} sitecore.json file
           {candidates.length === 1 ? '' : 's'} under{' '}

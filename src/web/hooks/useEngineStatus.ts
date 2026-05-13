@@ -21,6 +21,7 @@ export interface EngineStatus {
   error: string | null;
   itemCount?: number;
   layers?: LayerSummary[];
+  projectName?: string | null;
   registryLoaded?: boolean;
   /**
    * URL template used by the "Open in editor" buttons in QuickInfo and the

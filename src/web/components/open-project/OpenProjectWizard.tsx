@@ -6,6 +6,7 @@ import type { LayerRowState } from './LayerSelectionDialog';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { assignLayerColor } from './layer-colors';
 import { deriveName } from './layer-name';
+import { deriveProjectName } from './project-name';
 
 interface OpenProjectWizardProps {
   open: boolean;
@@ -33,11 +34,13 @@ type Step = 'folder' | 'layers';
 export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: OpenProjectWizardProps) {
   const [step, setStep] = useState<Step>('folder');
   const [rows, setRows] = useState<LayerRowState[]>([]);
+  const [projectName, setProjectName] = useState<string>('project');
   const openProject = useOpenProject();
 
   const reset = () => {
     setStep('folder');
     setRows([]);
+    setProjectName('project');
     openProject.reset();
   };
 
@@ -55,15 +58,21 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
       toast.warning('That layer is already added.');
       return;
     }
-    setRows((prev) => [
-      ...prev,
-      {
-        candidate: { sitecoreJsonPath: filePath, moduleCount, pushOpsSummary },
-        checked: true,
-        color: assignLayerColor(prev.length),
-        name: deriveName(filePath),
-      },
-    ]);
+    setRows((prev) => {
+      const next = [
+        ...prev,
+        {
+          candidate: { sitecoreJsonPath: filePath, moduleCount, pushOpsSummary },
+          checked: true,
+          color: assignLayerColor(prev.length),
+          name: deriveName(filePath),
+        },
+      ];
+      // Re-derive the project name each time layers are added so it stays
+      // reasonable as the user builds up a multi-layer stack.
+      setProjectName(deriveProjectName(next.map((r) => r.candidate.sitecoreJsonPath)));
+      return next;
+    });
     setStep('layers');
   };
 
@@ -75,7 +84,7 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
     layers: { sitecoreJsonPath: string; name: string; color?: string }[],
   ) => {
     try {
-      await openProject.mutateAsync({ layers });
+      await openProject.mutateAsync({ layers, projectName });
       toast.success('Project opened.');
       reset();
       onClose();
@@ -103,6 +112,8 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
       candidates={rows.map((r) => r.candidate)}
       initialRows={rows}
       onRowsChange={setRows}
+      projectName={projectName}
+      onProjectNameChange={setProjectName}
       onClose={handleClose}
       onConfirm={handleLayersConfirm}
       onAddAnother={handleAddAnother}

@@ -68,6 +68,7 @@ export class Engine {
   private _layers: LayerSpec[] = [];
   private _itemProvenance: Map<string, { winnerLayer: string; contributingLayers: string[] }> = new Map();
   private _layerStats: Map<string, number> = new Map();
+  private _projectName: string | null = null;
 
   constructor(options: EngineOptions) {
     this.options = options;
@@ -998,6 +999,7 @@ export class Engine {
     this._layers = [];
     this._itemProvenance.clear();
     this._layerStats.clear();
+    this._projectName = null;
     this.readiness.reset();
     this.readiness.markNoProject();
   }
@@ -1017,7 +1019,7 @@ export class Engine {
    * the engine cache also does not write in multi-layer mode for the same
    * reason.
    */
-  async openWorkspace(layers: LayerSpec[]): Promise<void> {
+  async openWorkspace(layers: LayerSpec[], options?: { projectName?: string }): Promise<void> {
     // Reject 'ootb' as a user layer name (case-insensitive). The sentinel is
     // reserved for the registry substrate in provenance shapes. Validated
     // BEFORE closeWorkspace so a bad call does not tear down an open workspace.
@@ -1029,6 +1031,7 @@ export class Engine {
 
     await this.closeWorkspace();
 
+    this._projectName = options?.projectName ?? null;
     this._layers = layers.slice();
 
     if (layers.length === 0) {
@@ -1158,6 +1161,11 @@ export class Engine {
   /** Returns the layer set that was last opened via openWorkspace. */
   getLayers(): readonly LayerSpec[] {
     return this._layers;
+  }
+
+  /** Returns the project name set when opening the workspace, or null if not provided. */
+  getProjectName(): string | null {
+    return this._projectName;
   }
 
   /**

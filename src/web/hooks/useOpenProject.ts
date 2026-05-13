@@ -18,12 +18,12 @@ export interface OpenProjectResponse {
  */
 export function useOpenProject() {
   const qc = useQueryClient();
-  return useMutation<OpenProjectResponse, Error, { layers: OpenProjectLayer[] }>({
-    mutationFn: async ({ layers }) => {
+  return useMutation<OpenProjectResponse, Error, { layers: OpenProjectLayer[]; projectName?: string }>({
+    mutationFn: async ({ layers, projectName }) => {
       const res = await fetch('/api/projects/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ layers }),
+        body: JSON.stringify({ layers, ...(projectName !== undefined ? { projectName } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: res.statusText }));

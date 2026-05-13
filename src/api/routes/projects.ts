@@ -80,6 +80,7 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
         name?: string;
         color?: string;
       }>;
+      projectName?: string;
     };
   }>('/api/projects/open', async (req, reply) => {
     const layers = req.body?.layers;
@@ -106,8 +107,9 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       });
     }
 
+    const projectName = typeof req.body?.projectName === 'string' ? req.body.projectName : undefined;
     try {
-      await engine.openWorkspace(resolved);
+      await engine.openWorkspace(resolved, { projectName });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/'ootb' is reserved/.test(message)) {
