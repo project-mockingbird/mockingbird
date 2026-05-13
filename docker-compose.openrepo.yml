@@ -1,46 +1,30 @@
 # Reference compose for Open Repository mode.
 #
-# Use this compose template when you want to author against ANY repo on your
-# host machine without baking a specific workspace into the container at boot.
-# The web UI's first-run wizard handles project selection.
+# Mounts the host workspace directory at /workspaces inside the container.
+# All mockingbird state (project registry + engine cache) lives UNDER that
+# mount, so there is exactly one volume declaration.
 #
-# Default mounts:
-#   - ${MOCKINGBIRD_WORKSPACE_HOST:-./} -> /workspaces   broad host bind for project discovery
+# Default mount: ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
+#   override MOCKINGBIRD_WORKSPACE_HOST in .env to point at a broader directory
+#   (e.g. C:/projects on Windows, ~/code on macOS/Linux) if your repos live
+#   elsewhere.
 #
-# By default the directory containing this compose file (the repo root) is
-# mounted at /workspaces - zero shell setup required. Override
-# MOCKINGBIRD_WORKSPACE_HOST in .env to point at a broader directory if your
-# authoring repos live elsewhere (e.g. C:/projects, ~/code, $HOME).
-#
-# If you want a fixed workspace baked in (e.g. for head-app integrations),
-# use the env-var-driven docker-compose.yml instead.
+# On disk under the workspace root:
+#   config.mockingbird      - team-shared project registry (commit this)
+#   .mockingbird/cache/     - engine cache (auto-gitignored)
 services:
   mockingbird:
-    image: projectmockingbird/mockingbird:1.0.8.2
+    image: projectmockingbird/mockingbird:1.0.9.0
     container_name: mockingbird
     ports:
-      # Loopback-only by default - drop the 127.0.0.1 prefix to publish to all
-      # host interfaces.
       - "127.0.0.1:3333:3333"
     environment:
       PORT: 3333
       HOST: 0.0.0.0
-      MOCKINGBIRD_CACHE_PATH: /data/cache
-      INDEX_CACHE_PATH: /data/cache/index.json.gz
-      MOCKINGBIRD_WORKSPACE_ROOT: /workspaces
-      # SCS_SITECORE_JSON intentionally unset - the first-run wizard picks
-      # the workspace at runtime via /api/fs/list and /api/projects/open.
+      MOCKINGBIRD_WORKSPACE: /workspaces
+      MOCKINGBIRD_CONFIG_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/config.mockingbird
+      INDEX_CACHE_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/.mockingbird/cache/index.json.gz
       TACO: 1
     volumes:
-      # Workspace bind: everything you might want to author against has to be
-      # reachable under this mount. Default is the directory you ran compose
-      # from (the repo root). Override via MOCKINGBIRD_WORKSPACE_HOST in .env
-      # to widen (e.g. C:/projects on Windows, ~/code on macOS/Linux).
       - ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
-      # Cache volume: gzipped per-project index. Pure perf optimization;
-      # project config itself lives in the browser's localStorage.
-      - mockingbird-cache:/data/cache
     restart: unless-stopped
-
-volumes:
-  mockingbird-cache:
