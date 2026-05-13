@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/lib/icon';
 import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight } from '@mdi/js';
@@ -53,6 +54,13 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const { isVisible, setVisibility, rename, recolor, overrides } = useLayerState();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
 
+  const engineStatus = useEngineStatus();
+  const profilesQuery = useProfiles(engineStatus.data?.activeProfile?.projectHash ?? null);
+
+  const openProject = useOpenProject();
+  const closeProject = useCloseProject();
+  const upsertProfile = useUpsertProfile();
+
   if (status.state === 'no-project') return null;
   if (!status.layers || status.layers.length === 0) return null;
 
@@ -70,6 +78,9 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const pathDerivedLabel = projectPath.split('/').filter(Boolean).pop() ?? 'project';
   const projectLabel = (status.projectName?.trim() || null) ?? pathDerivedLabel;
 
+  const activeProfile = engineStatus.data?.activeProfile ?? null;
+  const profiles = profilesQuery.data?.profiles ?? [];
+
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
@@ -77,15 +88,6 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
       return next;
     });
   };
-
-  const engineStatus = useEngineStatus();
-  const activeProfile = engineStatus.data?.activeProfile ?? null;
-  const profilesQuery = useProfiles(activeProfile?.projectHash ?? null);
-  const profiles = profilesQuery.data?.profiles ?? [];
-
-  const openProject = useOpenProject();
-  const closeProject = useCloseProject();
-  const upsertProfile = useUpsertProfile();
 
   const handleSave = () => {
     if (!activeProfile) return;
@@ -123,8 +125,8 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         projectName: profile.projectName,
         profileName: profile.name,
       });
-    } catch {
-      // Toast layer (existing) surfaces fetch failures; no-op locally.
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to switch profile');
     }
   };
 
