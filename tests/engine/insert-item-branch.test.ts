@@ -63,6 +63,24 @@ describe('writeAtomic', () => {
     await expect(writeAtomic(items)).rejects.toThrow();
     expect(existsSync(join(dir, 'ok.yml'))).toBe(false);
   });
+
+  it('stages inside <workspace>/.mockingbird/staging/ when MOCKINGBIRD_WORKSPACE is set', async () => {
+    // Regression: a bind-mounted workspace lives on a different filesystem
+    // than the container's overlay /tmp; staging in /tmp then renaming into
+    // /workspaces fails with EXDEV. Staging under the workspace itself keeps
+    // the rename within a single filesystem.
+    const original = process.env.MOCKINGBIRD_WORKSPACE;
+    process.env.MOCKINGBIRD_WORKSPACE = dir;
+    try {
+      await writeAtomic([{ finalPath: join(dir, 'sub/final.yml'), contents: 'x' }]);
+      expect(readFileSync(join(dir, 'sub/final.yml'), 'utf-8')).toBe('x');
+      // Staging dir created under the workspace; cleaned up after the call.
+      expect(existsSync(join(dir, '.mockingbird/staging'))).toBe(true);
+    } finally {
+      if (original === undefined) delete process.env.MOCKINGBIRD_WORKSPACE;
+      else process.env.MOCKINGBIRD_WORKSPACE = original;
+    }
+  });
 });
 
 describe('Engine.insertItem (branch path)', () => {

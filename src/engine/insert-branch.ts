@@ -1,7 +1,7 @@
 import { mkdir, rename, rm, writeFile } from 'fs/promises';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import { tmpdir } from 'os';
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, mkdirSync } from 'fs';
 import { generateGuid } from './guid.js';
 import { serializeItem } from './serializer.js';
 import { expandItemTokens } from './layout/item-tokens.js';
@@ -99,6 +99,24 @@ export type AtomicWriteEntry = {
 };
 
 /**
+ * Pick a staging parent directory that lives on the same filesystem as the
+ * destinations. In container mode the workspace is a bind mount on a
+ * different device than the container's overlay `/tmp`, which makes a
+ * cross-FS `rename()` fail with EXDEV; staging under `<workspace>/.mockingbird/staging/`
+ * keeps the staged file and its final destination on a single device and
+ * preserves the atomic-rename guarantee.
+ *
+ * Falls back to `os.tmpdir()` only when no workspace env is configured -
+ * test environments use temp roots that are co-located on the OS tmp FS,
+ * so the old behavior remains correct there.
+ */
+function getStagingParent(): string {
+  const ws = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT;
+  if (ws) return resolve(ws, '.mockingbird', 'staging');
+  return tmpdir();
+}
+
+/**
  * Stage N writes into a temp directory, then rename each into its final
  * location. On any failure during staging, abort and clean the temp dir.
  * On a rare partial-rename failure (e.g. disk-full after some succeed),
@@ -111,7 +129,9 @@ export type AtomicWriteEntry = {
  * helper covers.
  */
 export async function writeAtomic(entries: readonly AtomicWriteEntry[]): Promise<void> {
-  const tempDir = mkdtempSync(join(tmpdir(), 'mockingbird-insert-branch-'));
+  const stagingParent = getStagingParent();
+  mkdirSync(stagingParent, { recursive: true });
+  const tempDir = mkdtempSync(join(stagingParent, 'mockingbird-insert-branch-'));
   const stagedFiles: { tempPath: string; finalPath: string }[] = [];
 
   try {
