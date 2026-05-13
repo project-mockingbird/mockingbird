@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { LAYER_COLOR_PALETTE } from '@/components/open-project/layer-colors';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface ColorSwatchProps {
   value: string;
@@ -9,26 +11,41 @@ interface ColorSwatchProps {
 }
 
 /**
- * Compact color square. Click cycles through LAYER_COLOR_PALETTE; an
- * off-palette value lands on palette[0] on first cycle. Reused by
+ * Compact color square. Click opens a palette picker popover; selecting a
+ * swatch fires onChange and closes the popover. Reused by
  * LayerSelectionDialog and LayerRow.
  */
 export function ColorSwatch({ value, onChange, disabled, className, ariaLabel }: ColorSwatchProps) {
-  const handleClick = () => {
-    if (disabled) return;
-    const idx = LAYER_COLOR_PALETTE.indexOf(value as (typeof LAYER_COLOR_PALETTE)[number]);
-    const nextIdx = idx < 0 ? 0 : (idx + 1) % LAYER_COLOR_PALETTE.length;
-    onChange(LAYER_COLOR_PALETTE[nextIdx]);
-  };
+  const [open, setOpen] = useState(false);
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={disabled}
-      style={{ backgroundColor: value }}
-      aria-label={ariaLabel ?? 'Cycle layer color'}
-      className={`size-4 rounded border shrink-0 disabled:cursor-not-allowed ${className ?? ''}`}
-    />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          style={{ backgroundColor: value }}
+          aria-label={ariaLabel ?? 'Pick layer color'}
+          className={`size-4 rounded border shrink-0 disabled:cursor-not-allowed ${className ?? ''}`}
+        />
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2">
+        <div className="grid grid-cols-4 gap-1">
+          {LAYER_COLOR_PALETTE.map((color) => (
+            <button
+              key={color}
+              type="button"
+              style={{ backgroundColor: color }}
+              aria-label={`Use color ${color}`}
+              className="size-6 rounded border hover:scale-110 transition-transform"
+              onClick={() => {
+                onChange(color);
+                setOpen(false);
+              }}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
