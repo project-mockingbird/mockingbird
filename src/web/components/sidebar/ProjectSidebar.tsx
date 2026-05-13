@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/lib/icon';
-import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight } from '@mdi/js';
+import { mdiFolderArrowRight, mdiClose, mdiChevronLeft, mdiChevronRight, mdiCog } from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { ProfileDropdown } from './ProfileDropdown';
-import { useProfiles, useUpsertProfile } from '@/hooks/useProfiles';
+import { useProfiles, useUpsertProfile, useDeleteProfile, useRenameProfile } from '@/hooks/useProfiles';
 import { useEngineStatus } from '@/hooks/useEngineStatus';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
+import { SettingsPopover } from './SettingsPopover';
+import { ManageProfilesModal } from './ManageProfilesModal';
+import { usePrefs, useUpdatePrefs } from '@/hooks/usePrefs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface SidebarLayer {
   name: string;
@@ -53,6 +57,9 @@ function writeCollapsed(value: boolean): void {
 export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProps) {
   const { isVisible, setVisibility, rename, recolor, overrides } = useLayerState();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [saveAsName, setSaveAsName] = useState<string | null>(null);
 
   const engineStatus = useEngineStatus();
   const profilesQuery = useProfiles(engineStatus.data?.activeProfile?.projectHash ?? null);
@@ -60,6 +67,10 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const openProject = useOpenProject();
   const closeProject = useCloseProject();
   const upsertProfile = useUpsertProfile();
+  const deleteProfile = useDeleteProfile();
+  const renameProfile = useRenameProfile();
+  const { data: prefs } = usePrefs();
+  const updatePrefs = useUpdatePrefs();
 
   if (status.state === 'no-project') return null;
   if (!status.layers || status.layers.length === 0) return null;
@@ -103,9 +114,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
     });
   };
 
-  const handleSaveAs = () => {
-    // Real wiring lands in Task 10 (SettingsPopover + ManageProfilesModal cycle includes a Save As prompt).
-  };
+  const handleSaveAs = () => setSaveAsName('');
 
   const handleSwitch = async (profileName: string) => {
     if (!activeProfile) return;
@@ -130,8 +139,27 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
     }
   };
 
-  const handleManage = () => {
-    // Wired in Task 10.
+  const handleManage = () => setManageOpen(true);
+
+  const handleSaveAsConfirm = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || !activeProfile) {
+      setSaveAsName(null);
+      return;
+    }
+    upsertProfile.mutate(
+      {
+        projectHash: activeProfile.projectHash,
+        name: trimmed,
+        projectName: status.projectName ?? 'project',
+        layers: userLayers.map((l) => ({
+          sitecoreJsonPath: l.sitecoreJsonPath ?? '',
+          name: l.name,
+          color: l.color ?? '#888888',
+        })),
+      },
+      { onSuccess: () => setSaveAsName(null) },
+    );
   };
 
   if (collapsed) {
@@ -165,6 +193,15 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setSettingsOpen((v) => !v)}
+          aria-label="Settings"
+          className="p-0 size-6 shrink-0"
+        >
+          <Icon path={mdiCog} className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={toggleCollapsed}
           aria-label="Collapse sidebar"
           className="p-0 size-6 shrink-0"
@@ -172,6 +209,14 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           <Icon path={mdiChevronRight} className="size-4" />
         </Button>
       </div>
+      {settingsOpen && (
+        <div className="px-3 pb-2 border-b">
+          <SettingsPopover
+            autoRestoreLastSession={prefs?.autoRestoreLastSession ?? false}
+            onChange={(patch) => updatePrefs.mutate(patch)}
+          />
+        </div>
+      )}
       <div className="px-3 py-2 border-b flex items-center gap-2">
         <span className="text-xs text-muted-foreground shrink-0">Profile</span>
         <div className="flex-1 min-w-0">
@@ -224,6 +269,43 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           <Icon path={mdiClose} className="size-4 mr-2" /> Close project
         </Button>
       </div>
+      <ManageProfilesModal
+        open={manageOpen}
+        profiles={profiles}
+        activeName={activeProfile?.profileName ?? null}
+        onClose={() => setManageOpen(false)}
+        onRename={(oldName, newName) =>
+          activeProfile && renameProfile.mutate({ projectHash: activeProfile.projectHash, oldName, newName })
+        }
+        onDelete={(name) =>
+          activeProfile && deleteProfile.mutate({ projectHash: activeProfile.projectHash, name })
+        }
+      />
+      {saveAsName !== null && (
+        <Dialog open={true} onOpenChange={(o) => { if (!o) setSaveAsName(null); }}>
+          <DialogContent size="sm">
+            <DialogHeader>
+              <DialogTitle>Save profile as</DialogTitle>
+            </DialogHeader>
+            <input
+              type="text"
+              value={saveAsName}
+              onChange={(e) => setSaveAsName(e.target.value)}
+              autoFocus
+              className="w-full rounded border bg-background px-2 py-1 text-sm"
+              placeholder="e.g. qa-review"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveAsConfirm(saveAsName);
+                if (e.key === 'Escape') setSaveAsName(null);
+              }}
+            />
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setSaveAsName(null)}>Cancel</Button>
+              <Button size="sm" onClick={() => handleSaveAsConfirm(saveAsName)}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </aside>
   );
 }
