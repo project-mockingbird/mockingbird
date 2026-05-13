@@ -107,4 +107,29 @@ describe('profile-store', () => {
     await expect(upsertProfile(HASH, makeProfile({ name: 'with/slash' }))).rejects.toThrow();
     await expect(upsertProfile(HASH, makeProfile({ name: '' }))).rejects.toThrow();
   });
+
+  it('listProfiles skips files with invalid names', async () => {
+    await upsertProfile(HASH, makeProfile({ name: 'dev' }));
+    // Drop a foreign file directly into the profiles dir.
+    const { writeFileSync } = await import('fs');
+    const profilesDir = join(dir, 'projects', HASH, 'profiles');
+    writeFileSync(join(profilesDir, 'tmp!backup.json'), '{}');
+    writeFileSync(join(profilesDir, 'not-a-profile.json'), '{}');
+    const result = await listProfiles(HASH);
+    // Only the valid profile is returned; the listing does not throw.
+    expect(result.map((p) => p.name)).toEqual(['dev']);
+  });
+
+  it('renameProfile throws when the target name already exists', async () => {
+    await upsertProfile(HASH, makeProfile({ name: 'dev' }));
+    await upsertProfile(HASH, makeProfile({ name: 'staging' }));
+    await expect(renameProfile(HASH, 'dev', 'staging')).rejects.toThrow(/profile already exists/);
+    // Both profiles still exist after the failed rename.
+    expect(await readProfile(HASH, 'dev')).not.toBeNull();
+    expect(await readProfile(HASH, 'staging')).not.toBeNull();
+  });
+
+  it('deleteProfile is idempotent (no throw on missing)', async () => {
+    await expect(deleteProfile(HASH, 'never-existed')).resolves.toBeUndefined();
+  });
 });

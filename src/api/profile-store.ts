@@ -50,6 +50,7 @@ export async function listProfiles(projectHash: string): Promise<ProfileSummary[
   for (const entry of entries) {
     if (!entry.endsWith('.json')) continue;
     const name = entry.slice(0, -'.json'.length);
+    if (!VALID_NAME.test(name)) continue;
     const profile = await readProfile(projectHash, name);
     if (!profile) continue;
     summaries.push({
@@ -94,6 +95,10 @@ export async function renameProfile(
   if (oldName === newName) return readProfile(projectHash, oldName);
   const existing = await readProfile(projectHash, oldName);
   if (!existing) return null;
+  const collision = await readProfile(projectHash, newName);
+  if (collision) {
+    throw new Error(`profile already exists: ${JSON.stringify(newName)}`);
+  }
   const renamed: Profile = { ...existing, name: newName, updatedAt: new Date().toISOString() };
   await writeJsonAtomic(getProfilePath(projectHash, newName), renamed);
   await deleteProfile(projectHash, oldName);
