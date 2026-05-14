@@ -27,6 +27,13 @@ interface ProjectsStateShape {
   remove(hash: string): void;
   rename(hash: string, newName: string): void;
   touchLastOpened(hash: string): void;
+  /**
+   * Atomically move a project entry from oldHash to newHash, replacing layers
+   * and updating lastOpenedAt. Preserves name and createdAt. Throws when
+   * oldHash does not exist or when newHash already has a different entry.
+   * When oldHash === newHash, updates layers + lastOpenedAt in place.
+   */
+  rekey(oldHash: string, newHash: string, nextLayers: SavedProjectLayer[], lastOpenedAt: number): void;
   reset(): void;
   /** Set by the hydrator after the initial GET completes (or fails). */
   markHydrated(): void;
@@ -66,6 +73,29 @@ export const useProjectsStore = create<ProjectsStateShape>((set, get) => ({
       return {
         projects: { ...s.projects, [hash]: { ...existing, lastOpenedAt: Date.now() } },
       };
+    }),
+
+  rekey: (oldHash, newHash, nextLayers, lastOpenedAt) =>
+    set((s) => {
+      const existing = s.projects[oldHash];
+      if (!existing) {
+        throw new Error(`rekey: project with hash "${oldHash}" not found`);
+      }
+      if (oldHash === newHash) {
+        return {
+          projects: {
+            ...s.projects,
+            [oldHash]: { ...existing, layers: nextLayers, lastOpenedAt },
+          },
+        };
+      }
+      if (s.projects[newHash]) {
+        throw new Error(`rekey: project with hash "${newHash}" already exists`);
+      }
+      const next = { ...s.projects };
+      delete next[oldHash];
+      next[newHash] = { ...existing, hash: newHash, layers: nextLayers, lastOpenedAt };
+      return { projects: next };
     }),
 
   reset: () => set({ projects: {} }),
