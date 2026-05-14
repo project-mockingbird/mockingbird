@@ -1,5 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import mercurius from 'mercurius';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    extendMockingbirdSchema?: () => void;
+  }
+}
 import { GraphQLJSON } from 'graphql-scalars';
 import type { Engine } from '../../engine/index.js';
 import type { ScsItem, ItemNode } from '../../engine/types.js';
@@ -760,18 +766,28 @@ export async function registerGraphQLRoutes(
     path: '/api/graphql',
   });
 
-  // Defer dynamic schema generation until indexing completes. `startInit`
-  // fires indexing as a non-awaited background task, so the tree is
-  // typically empty when `registerGraphQLRoutes` runs. The readiness gate
-  // 503s `/api/*` until ready, so no query hits the minimal BASE_SCHEMA
-  // between registration and this callback. Errors here are logged but
-  // non-fatal - the server falls back to the `Item`-only schema.
+  // Dynamic schema generation. Runs at most once per process lifetime, gated
+  // on a non-empty item tree. Mercurius's `extendSchema` is NOT idempotent
+  // (graphql-js throws on duplicate type definitions), so a `schemaExtended`
+  // flag suppresses re-runs once a populated tree has been seen.
   //
-  // Test harnesses that build a synthetic engine without a full
-  // `ReadinessState` (via `Object.create(Engine.prototype)`) don't have
-  // `engine.readiness` at all - fall through to running the extension
-  // synchronously so those tests see a complete schema.
+  // Trigger sites:
+  //   1. Boot via readiness.ready() - covers single-layer auto-restore where
+  //      the tree is populated before this callback fires.
+  //   2. Synchronous fallback at registration time - covers test harnesses
+  //      that build a synthetic engine via Object.create(Engine.prototype)
+  //      without a real ReadinessState.
+  //   3. app.extendMockingbirdSchema() decorator - called from
+  //      /api/projects/open after engine.openWorkspace() populates the tree.
+  //      Required because in the multi-layer / open-repo boot path, readiness
+  //      settles on 'no-project' before any project is loaded, and the
+  //      readiness.ready() promise fires only once with an empty tree.
+  //
+  // An empty-tree call does NOT flip the flag, so a later call after a
+  // project opens can still extend.
+  let schemaExtended = false;
   const runExtension = (): void => {
+    if (schemaExtended) return;
     try {
       const generated = generateSchemaFromRegistry(engine);
       if (generated.sdl.trim().length === 0) {
@@ -807,6 +823,7 @@ export async function registerGraphQLRoutes(
       }
       app.graphql.defineResolvers(perTypeResolvers);
 
+      schemaExtended = true;
       console.log(
         `[graphql] schema extended: ${generated.concreteTypeNames.length} concrete types, ` +
         `${generated.fieldResolverMap.size} distinct field names`,
@@ -815,6 +832,8 @@ export async function registerGraphQLRoutes(
       console.error('[graphql] schema extension failed:', err);
     }
   };
+
+  app.decorate('extendMockingbirdSchema', runExtension);
 
   const readiness = (engine as unknown as { readiness?: { ready?: () => Promise<void> } }).readiness;
   if (readiness?.ready) {
