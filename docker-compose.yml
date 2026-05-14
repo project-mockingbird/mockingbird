@@ -14,30 +14,21 @@
 #   .mockingbird/cache/     - engine cache (auto-gitignored)
 services:
   mockingbird:
-    image: projectmockingbird/mockingbird:1.0.10.1
-    container_name: ${COMPOSE_PROJECT_NAME:-mockingbird}
+    image: ${MOCKINGBIRD_IMAGE}
+    container_name: ${COMPOSE_PROJECT_NAME}
     ports:
       # Bind to loopback only so a developer on a coffee-shop / hostile LAN
       # doesn't accidentally expose mockingbird to the network. Drop the
       # 127.0.0.1 prefix to publish to all host interfaces.
-      - "127.0.0.1:${MOCKINGBIRD_PORT:-3333}:3333"
+      - "127.0.0.1:${MOCKINGBIRD_PORT}"
     environment:
-      PORT: 3333
-      HOST: 0.0.0.0
-      MOCKINGBIRD_WORKSPACE: /workspaces
-      MOCKINGBIRD_CONFIG_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/config.mockingbird
-      INDEX_CACHE_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/.mockingbird/cache/index.json.gz
+      PORT: ${MOCKINGBIRD_PORT}
+      HOST: ${MOCKINGBIRD_HOST}
+      MOCKINGBIRD_CONFIG_PATH: /workspaces/config.mockingbird
+      INDEX_CACHE_PATH: /workspaces/.mockingbird/cache/index.json.gz
       # Optional Layout Service synthetic-fallback site root. Empty by default;
       # set per-project at runtime via the wizard, or pin globally via .env.
-      SITE_ROOT_PATH: ${SITE_ROOT_PATH:-}
-      # Security knobs - empty defaults to same-origin only.
-      MOCKINGBIRD_ALLOWED_ORIGINS: ${MOCKINGBIRD_ALLOWED_ORIGINS:-}
-      MOCKINGBIRD_WS_ALLOWED_ORIGINS: ${MOCKINGBIRD_WS_ALLOWED_ORIGINS:-}
-      MOCKINGBIRD_GRAPHQL_QUERY_DEPTH: ${MOCKINGBIRD_GRAPHQL_QUERY_DEPTH:-20}
-      # PowerShell scripting (SPE) tuning.
-      MOCKINGBIRD_SPE_SESSION_TTL_MIN: ${MOCKINGBIRD_SPE_SESSION_TTL_MIN:-30}
-      MOCKINGBIRD_SPE_MAX_SESSIONS: ${MOCKINGBIRD_SPE_MAX_SESSIONS:-8}
-      TACO: 1
+      SITE_ROOT_PATH: ${SITE_ROOT_PATH}
     volumes:
-      - ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
+      - ${MOCKINGBIRD_WORKSPACE}:/workspaces
     restart: unless-stopped
