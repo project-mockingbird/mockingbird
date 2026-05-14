@@ -32,6 +32,7 @@ A few worth calling out:
 
 - **GraphQL Layout Service.** Experience Edge-shaped endpoint at `/sitecore/api/graph/edge` matching the headless layout query, so existing rendering hosts and Sitecore tooling can target Mockingbird with just a host swap. Browseable GraphiQL UI at `/graphiql` for ad-hoc query authoring.
 - **Multi-tab content tree.** A familiar tree view at `/tree` with a horizontal 2-pane split: per-pane tab strip, drag-to-resize handle, "Split right" / "Move to other pane" on tab right-click, "Open in new tab" from the tree, dirty-state confirm when closing a tab with unsaved field edits, and tabs persisted across reloads via localStorage.
+- **Runtime layer management.** Each project is a stack of layers - each layer a `sitecore.json` reference with a name, color, and visibility toggle. Add, remove, or replace layers from the project sidebar without restarting the container. The engine merges layers via SCS `allowedPushOperations` strength (CreateOnly < CreateAndUpdate < CreateUpdateAndDelete) on every reopen. Project state lives in browser localStorage and auto-restores on page load.
 - **Field editors for the standard Sitecore field types.** Single-line / multi-line text, rich text, lookup / multilist / treelist (with GUID resolution to readable names), name value list, name lookup value list, password, number, integer, datetime (with a calendar picker), checkbox, image (with the Media Picker dialog), rendering / layout, file. The shapes match what `dotnet sitecore` would write back.
 - **SXA Headless scaffolding.** Right-click `/sitecore/content` -> Insert -> Headless Site Collection to scaffold a tenant with the standard cross-cutting folder structure under each Project root (Templates, Media, Placeholder Settings, Renderings, Settings, Branches). Right-click a tenant -> Insert -> Headless Site to scaffold a site with JSSSettings, Site Definition, and StartItem auto-wired. The mechanism is a faithful TypeScript port of Sitecore's SPE scaffolding scripts (Add-JSSTenant + New-JSSSite + the Invoke-* action pipeline); curated definition items ship in the registry so the dialog is functional on a fresh install, and authors can extend the catalogue by adding Definition Items to their content tree.
 - **Image Media Picker dialog.** Pick an image from the site's media library (site-scoped via `query:$siteMedia`) with a filterable tree picker, thumbnail preview, alt text, dimensions (Keep Aspect Ratio with auto-recompute), and spacing fields. Round-trips to the same XML attribute set Sitecore persists.
@@ -53,14 +54,14 @@ docker compose up -d
 
 Mockingbird boots with the OOTB Sitecore registry loaded but no serialized items. Open `http://localhost:3333` and the first-run wizard walks the workspace mount to discover `sitecore.json` files for project selection.
 
-By default the compose mounts the directory you ran it from (`./`) at `/workspaces` inside the container. To point at a broader directory so the wizard can browse multiple repos, set `MOCKINGBIRD_WORKSPACE_HOST` in `.env`:
+By default the compose mounts the directory you ran it from (`./`) at `/workspaces` inside the container. To point at a broader directory so the wizard can browse multiple repos, set `MOCKINGBIRD_WORKSPACE` in `.env`:
 
 ```
-MOCKINGBIRD_WORKSPACE_HOST=C:/projects   # Windows
-MOCKINGBIRD_WORKSPACE_HOST=~/code         # macOS / Linux
+MOCKINGBIRD_WORKSPACE=C:/projects   # Windows
+MOCKINGBIRD_WORKSPACE=~/code         # macOS / Linux
 ```
 
-> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, pin to a specific tag (e.g. `1.0.9.0`) so a Hub republish doesn't move the floor.
+> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, set `MOCKINGBIRD_IMAGE=projectmockingbird/mockingbird:1.1.0.0` in `.env` so a Hub republish doesn't move the floor.
 
 ## Project registry: `config.mockingbird`
 
@@ -83,11 +84,9 @@ On first cache write, mockingbird:
 - appends `.mockingbird/` to root `.gitignore` (idempotent)
 
 This is purely transient state. Safe to delete; rebuilds on next open. The
-cache used to live in a named docker volume (`mockingbird-cache`); 1.0.9.0
-moves it to the workspace mount so there's exactly one volume declaration.
-If upgrading from <=1.0.8.x, you can reclaim the orphaned volume:
-
-    docker volume rm mockingbird-cache
+cache used to live in a named docker volume (`mockingbird-cache`) prior to
+1.0.9.0. If you have an orphaned volume from that era, reclaim it with
+`docker volume rm mockingbird-cache`.
 
 ### Per-user preferences (auto-restore, theme, etc.)
 
@@ -145,7 +144,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 ## Best Practices
 
-- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, pin to a specific version (`1.0.0.0` at the time of writing).
+- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:1.1.0.0` at the time of writing).
 - **Commit serialized YAML alongside the code that depends on it.** Author items in Mockingbird, let the file watcher emit clean YAML, and PR the YAML alongside the React / Next.js changes that consume it. Reviewers see the item changes in the diff.
 - **One `sitecore.json` per project.** The engine reads `sitecore.json` from each project root the wizard registers and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. Multi-layer setups (e.g. a tenant template layer + a content layer) live as separate `sitecore.json` files under the workspace mount; the wizard registers them as layers of one project.
 - **Treat the cache as disposable.** `.mockingbird/cache/index-*.json.gz` are derived artifacts; they rebuild from your YAML on the next boot. Safe to delete at any time, gitignored by default, safe to skip backing up.
@@ -222,10 +221,13 @@ If the head app already passes a `site` variable that matches one of your Site G
 
 ### Cross-origin development
 
-If the head app's dev server runs on a different origin than Mockingbird (typical: head app on `:3000`, Mockingbird on `:3333`), browser fetches will be CORS-rejected by default. Add the head app's origin to the comma-separated allowlist:
+If the head app's dev server runs on a different origin than Mockingbird (typical: head app on `:3000`, Mockingbird on `:3333`), browser fetches will be CORS-rejected by default. The `MOCKINGBIRD_ALLOWED_ORIGINS` env var (comma-separated origins) controls the allowlist. The default compose doesn't wire it through, so set it via a `docker-compose.override.yml`:
 
-```
-MOCKINGBIRD_ALLOWED_ORIGINS=http://localhost:3000
+```yaml
+services:
+  mockingbird:
+    environment:
+      MOCKINGBIRD_ALLOWED_ORIGINS: http://localhost:3000
 ```
 
 Server-side fetches (route handlers, build-time queries, anything running in Node rather than the browser) bypass the browser's CORS check entirely, so the allowlist only matters when the browser is hitting Mockingbird directly.
@@ -255,7 +257,7 @@ A `master:` PSDrive mounts the content tree; `$item["FieldName"]` indexer reads 
 
 ## Volumes
 
-A single bind mount: `${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces`.
+A single bind mount: `${MOCKINGBIRD_WORKSPACE}:/workspaces`. The host path comes from `.env`; the shipped `.env.example` defaults it to `./` (the directory you ran compose from).
 
 Everything mockingbird needs lives under that mount:
 
@@ -269,16 +271,33 @@ The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mock
 
 ## Environment variables
 
-`.env` feeds host paths and engine knobs into the container via `docker-compose.yml` interpolation. All have defaults in the compose; only set what you need to override.
+`.env` feeds host paths and the image tag into the container via `docker-compose.yml` interpolation. Copy `.env.example` to `.env` and tweak from there.
 
 ### Set in `.env`
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `MOCKINGBIRD_WORKSPACE_HOST` | Host path bound to `/workspaces` in the container. The first-run wizard walks this mount to discover `sitecore.json` files. | `./` |
+| `MOCKINGBIRD_WORKSPACE` | Host path bound to `/workspaces` in the container. The first-run wizard walks this mount to discover `sitecore.json` files. | `./` |
+| `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:1.1.0.0`) in shared environments. | `projectmockingbird/mockingbird:latest` |
 | `MOCKINGBIRD_PORT` | Host port mockingbird binds (loopback-only). Container always listens on 3333 internally. | `3333` |
+| `MOCKINGBIRD_HOST` | Container's internal listener address. `0.0.0.0` so Docker's port-NAT can forward; almost never needs changing. | `0.0.0.0` |
 | `COMPOSE_PROJECT_NAME` | Override the docker container name. | `mockingbird` |
 | `SITE_ROOT_PATH` | Synthetic-fallback site root for single-site dev. When real Site Grouping items exist in the content tree, requests resolve via `?site=` query param > `Host:` header > this fallback. Mirrors Sitecore's `<site name="website" hostName="*"/>` default-site role. | *(empty - hostname routing only)* |
+
+### Optional override knobs (not wired in default compose)
+
+These engine knobs are read by mockingbird at startup but the default `docker-compose.yml` doesn't pass them through. To set any of them, drop a `docker-compose.override.yml` alongside the default compose:
+
+```yaml
+services:
+  mockingbird:
+    environment:
+      MOCKINGBIRD_ALLOWED_ORIGINS: http://localhost:3000
+      MOCKINGBIRD_GRAPHQL_QUERY_DEPTH: 30
+```
+
+| Variable | Purpose | Default |
+|---|---|---|
 | `MOCKINGBIRD_ALLOWED_ORIGINS` | Comma-separated origins (scheme://host[:port]) allowed for cross-origin `/api/*` requests. Empty = same-origin only. | *(empty)* |
 | `MOCKINGBIRD_WS_ALLOWED_ORIGINS` | Same shape, for WebSocket upgrades on `/ws`. | *(empty)* |
 | `MOCKINGBIRD_GRAPHQL_QUERY_DEPTH` | Max GraphQL query depth before mercurius rejects. | `20` |
@@ -287,12 +306,14 @@ The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mock
 
 ### Container-internal (hardcoded in compose)
 
-| Variable | Value | Why |
+These are pinned values inside the compose `environment:` block; not configurable via `.env`. Listed here for reference and for anyone running mockingbird outside compose.
+
+| Variable | Value | Purpose |
 |---|---|---|
-| `MOCKINGBIRD_WORKSPACE` | `/workspaces` | Container path the host workspace is bind-mounted at. (Replaces `MOCKINGBIRD_WORKSPACE_ROOT`; old name still supported in 1.0.9.x as an alias.) |
-| `MOCKINGBIRD_CONFIG_PATH` | `${MOCKINGBIRD_WORKSPACE}/config.mockingbird` | Where the project registry lives. |
-| `INDEX_CACHE_PATH` | `${MOCKINGBIRD_WORKSPACE}/.mockingbird/cache/index.json.gz` | Persistent engine cache. |
-| `HOST` | `0.0.0.0` | The container's listener address; the host-side `127.0.0.1:` prefix on the port mapping is what scopes external reach. |
+| `MOCKINGBIRD_WORKSPACE` | `/workspaces` | Container-side workspace path - distinct from the host-side `MOCKINGBIRD_WORKSPACE` in `.env` (which is the volume SOURCE; this is the volume TARGET). Read by the engine to anchor `.mockingbird/staging/` for atomic writes. |
+| `MOCKINGBIRD_CONFIG_PATH` | `/workspaces/config.mockingbird` | Where the project registry lives. |
+| `INDEX_CACHE_PATH` | `/workspaces/.mockingbird/cache/index.json.gz` | Persistent engine cache. |
+| `PORT` | `3333` | The app's internal listen port. Container always speaks on 3333 regardless of what host port `MOCKINGBIRD_PORT` maps it to. |
 
 ## Troubleshooting
 
@@ -308,7 +329,7 @@ The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mock
 
 **Container starts but `EADDRINUSE` on the port.** Another process is bound to the host-side `MOCKINGBIRD_PORT`. Check `netstat -ano | findstr :3333` (Windows) or `lsof -i :3333` (Linux/Mac) and stop the other process or change `MOCKINGBIRD_PORT` in `.env`.
 
-**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:1.0.0.0`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
+**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:1.1.0.0`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
 
 **Docker build fails on `chown -R node:node /app`.** Almost always a slow bind-mount or a previous `npm install` that ran as root and left files the `node` user can't traverse. Clear the build cache (`docker builder prune`) and retry; if the problem persists, check that no `.dockerignore`-excluded path is being COPYed into stage 2.
 
@@ -369,8 +390,10 @@ npm run api
 # Run the CLI without Docker
 npm run cli -- tree /sitecore/content
 
-# Build the Docker image (tags from docker-compose.yml)
-docker compose build
+# Build the Docker image (compose template has no build: section,
+# so docker build is the path - tag whatever you want and reference
+# it via MOCKINGBIRD_IMAGE in .env)
+docker build -t projectmockingbird/mockingbird:dev .
 
 # Dev Web UI with hot reload on :5173 (proxies /api -> http://localhost:3333)
 npm run dev:web
