@@ -12,8 +12,10 @@ import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { EditableLayerName } from './EditableLayerName';
 import { LayerSourcePicker } from './LayerSourcePicker';
-import { useProjectsStore } from '@/state/projectsStore';
+import { LayerCollisionDialog } from './LayerCollisionDialog';
+import { useProjectsStore, type SavedProjectLayer } from '@/state/projectsStore';
 import { useSettings } from '@/settings/SettingsProvider';
+import { setSetting } from '@/settings/store';
 import { useReopenWithLayers } from '@/hooks/useReopenWithLayers';
 import { deriveName } from '@/components/open-project/layer-name';
 import { assignLayerColor } from '@/components/open-project/layer-colors';
@@ -64,6 +66,13 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [replaceTargetIndex, setReplaceTargetIndex] = useState<number | null>(null);
+  const [collidingProjectName, setCollidingProjectName] = useState<string | null>(null);
+  const [pendingMutation, setPendingMutation] = useState<{
+    oldHash: string;
+    nextLayers: SavedProjectLayer[];
+    projectName: string;
+    collidingHash: string;
+  } | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const reopen = useReopenWithLayers();
   const discardWorkspaceGate = useConfirmDiscardWorkspace();
@@ -72,6 +81,23 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const lastOpenedHash = settings['session.lastOpenedHash'];
   const projects = useProjectsStore((s) => s.projects);
   const renameProject = useProjectsStore((s) => s.rename);
+
+  const proposeReopen = async (
+    oldHash: string,
+    nextLayers: SavedProjectLayer[],
+    projectName: string,
+  ) => {
+    const { collidingHash } = await reopen.detectCollision({ oldHash, nextLayers });
+    if (collidingHash) {
+      const collidingProject = projects[collidingHash];
+      setCollidingProjectName(collidingProject?.name ?? collidingHash);
+      setPendingMutation({ oldHash, nextLayers, projectName, collidingHash });
+      return;
+    }
+    discardWorkspaceGate.request('switch', () => {
+      reopen.mutate({ oldHash, nextLayers, projectName });
+    });
+  };
 
   useEffect(() => {
     if (!actionsMenuOpen) return;
@@ -217,13 +243,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
                 const project = projects[lastOpenedHash];
                 if (!project) return;
                 const nextLayers = project.layers.filter((_, i) => i !== idx);
-                discardWorkspaceGate.request('switch', () => {
-                  reopen.mutate({
-                    oldHash: lastOpenedHash,
-                    nextLayers,
-                    projectName: project.name,
-                  });
-                });
+                void proposeReopen(lastOpenedHash, nextLayers, project.name);
               }}
               canRemove={userLayers.length > 1}
             />
@@ -269,11 +289,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
               color: assignLayerColor(existing.layers.length),
             },
           ];
-          reopen.mutate({
-            oldHash: lastOpenedHash,
-            nextLayers,
-            projectName: existing.name,
-          });
+          void proposeReopen(lastOpenedHash, nextLayers, existing.name);
         }}
         onCancel={() => setAddOpen(false)}
       />
@@ -301,13 +317,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
               i === targetIndex ? { ...l, sitecoreJsonPath: filePath } : l,
             );
             setReplaceTargetIndex(null);
-            discardWorkspaceGate.request('switch', () => {
-              reopen.mutate({
-                oldHash: lastOpenedHash,
-                nextLayers,
-                projectName: project.name,
-              });
-            });
+            void proposeReopen(lastOpenedHash, nextLayers, project.name);
           }}
           onCancel={() => setReplaceTargetIndex(null)}
         />
@@ -317,6 +327,21 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         dirtyCount={discardWorkspaceGate.pendingDirtyCount}
         onConfirm={discardWorkspaceGate.onConfirm}
         onCancel={discardWorkspaceGate.onCancel}
+      />
+      <LayerCollisionDialog
+        collidingProjectName={collidingProjectName}
+        onSwitch={() => {
+          if (!pendingMutation) return;
+          setSetting('session.lastOpenedHash', pendingMutation.collidingHash);
+          setCollidingProjectName(null);
+          setPendingMutation(null);
+          // NoProjectState's auto-restore + hydrator will open the existing
+          // project on the next status tick.
+        }}
+        onCancel={() => {
+          setCollidingProjectName(null);
+          setPendingMutation(null);
+        }}
       />
     </aside>
   );
