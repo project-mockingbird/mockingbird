@@ -6,12 +6,17 @@ import {
   mdiDotsVertical,
   mdiFolderArrowRight,
   mdiLayers,
+  mdiPlus,
 } from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { EditableLayerName } from './EditableLayerName';
+import { LayerSourcePicker } from './LayerSourcePicker';
 import { useProjectsStore } from '@/state/projectsStore';
 import { useSettings } from '@/settings/SettingsProvider';
+import { useReopenWithLayers } from '@/hooks/useReopenWithLayers';
+import { deriveName } from '@/components/open-project/layer-name';
+import { assignLayerColor } from '@/components/open-project/layer-colors';
 
 interface SidebarLayer {
   name: string;
@@ -55,7 +60,9 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const { isVisible, setVisibility, rename, recolor, overrides } = useLayerState();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const reopen = useReopenWithLayers();
 
   const { settings } = useSettings();
   const lastOpenedHash = settings['session.lastOpenedHash'];
@@ -203,6 +210,16 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
             />
           );
         })}
+        <div className="px-3 pt-1 pb-2">
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground py-1 rounded border border-dashed hover:bg-accent/40"
+          >
+            <Icon path={mdiPlus} className="size-3" />
+            Add layer
+          </button>
+        </div>
         <LayerRow
           layerName="Sitecore IAR"
           effectiveCount={ootbCount}
@@ -214,6 +231,33 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           onRecolor={() => {}}
         />
       </div>
+      <LayerSourcePicker
+        open={addOpen}
+        mode="add"
+        existingPaths={userLayers
+          .map((l) => l.sitecoreJsonPath)
+          .filter((p): p is string => typeof p === 'string')}
+        onConfirm={(filePath) => {
+          setAddOpen(false);
+          if (!lastOpenedHash) return;
+          const existing = projects[lastOpenedHash];
+          if (!existing) return;
+          const nextLayers = [
+            ...existing.layers,
+            {
+              sitecoreJsonPath: filePath,
+              name: deriveName(filePath),
+              color: assignLayerColor(existing.layers.length),
+            },
+          ];
+          reopen.mutate({
+            oldHash: lastOpenedHash,
+            nextLayers,
+            projectName: existing.name,
+          });
+        }}
+        onCancel={() => setAddOpen(false)}
+      />
     </aside>
   );
 }

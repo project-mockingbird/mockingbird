@@ -43,6 +43,11 @@ const statusNoProject = { state: 'no-project' as const, layers: [] };
 beforeEach(() => {
   resetLayerState();
   localStorageStub.clear();
+  // stub fetch for any /api/fs/list call FolderBrowser makes when the picker mounts
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ path: '/', entries: [] }), { status: 200 }),
+  );
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
 
 describe('<ProjectSidebar>', () => {
@@ -120,5 +125,22 @@ describe('<ProjectSidebar>', () => {
     // statusReady layers have paths like /workspaces/p/{layer}/sitecore.json
     // stripping two segments from authoring path -> /workspaces/p -> basename = "p"
     expect(screen.getByText('p')).toBeInTheDocument();
+  });
+});
+
+describe('<ProjectSidebar> add layer', () => {
+  it('renders "+ Add layer" button below the user-layer list', () => {
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    expect(screen.getByRole('button', { name: /add layer/i })).toBeInTheDocument();
+    // OOTB row still present below
+    expect(screen.getByText(/Sitecore IAR/)).toBeInTheDocument();
+  });
+
+  it('clicking "+ Add layer" opens the LayerSourcePicker in add mode', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /add layer/i }));
+    // LayerSourcePicker's add-mode banner uses data-testid="layer-source-picker-mode"
+    expect(screen.getByTestId('layer-source-picker-mode')).toHaveTextContent(/add a layer/i);
   });
 });
