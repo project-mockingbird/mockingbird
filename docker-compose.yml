@@ -4,8 +4,8 @@
 # All mockingbird state (project registry + engine cache) lives UNDER that
 # mount, so there is exactly one volume declaration.
 #
-# Default mount: ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
-#   override MOCKINGBIRD_WORKSPACE_HOST in .env to point at a broader directory
+# Default mount: ${MOCKINGBIRD_WORKSPACE}:/workspaces
+#   override MOCKINGBIRD_WORKSPACE in .env to point at a broader directory
 #   (e.g. C:/projects on Windows, ~/code on macOS/Linux) if your repos live
 #   elsewhere.
 #
@@ -14,19 +14,24 @@
 #   .mockingbird/cache/     - engine cache (auto-gitignored)
 services:
   mockingbird:
-    image: projectmockingbird/mockingbird:1.0.9.2
-    container_name: ${COMPOSE_PROJECT_NAME:-mockingbird}
+    image: ${MOCKINGBIRD_IMAGE}
+    container_name: ${COMPOSE_PROJECT_NAME}
     ports:
       # Bind to loopback only so a developer on a coffee-shop / hostile LAN
       # doesn't accidentally expose mockingbird to the network. Drop the
       # 127.0.0.1 prefix to publish to all host interfaces.
-      - "127.0.0.1:${MOCKINGBIRD_PORT:-3333}:3333"
+      - "127.0.0.1:${MOCKINGBIRD_PORT}:${MOCKINGBIRD_PORT}"
     environment:
-      PORT: 3333
-      HOST: 0.0.0.0
+      PORT: ${MOCKINGBIRD_PORT}
+      HOST: ${MOCKINGBIRD_HOST}
+      # Container-side workspace path - distinct from the host-side
+      # MOCKINGBIRD_WORKSPACE in .env (which is the volume SOURCE path).
+      # The EXDEV staging fix in src/engine/insert-branch.ts reads this env
+      # var; without it, atomic writes fall back to /tmp (different FS than
+      # the bind mount) and rename fails with EXDEV.
       MOCKINGBIRD_WORKSPACE: /workspaces
-      MOCKINGBIRD_CONFIG_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/config.mockingbird
-      INDEX_CACHE_PATH: ${MOCKINGBIRD_WORKSPACE:-/workspaces}/.mockingbird/cache/index.json.gz
+      MOCKINGBIRD_CONFIG_PATH: /workspaces/config.mockingbird
+      INDEX_CACHE_PATH: /workspaces/.mockingbird/cache/index.json.gz
       # Optional Layout Service synthetic-fallback site root. Empty by default;
       # set per-project at runtime via the wizard, or pin globally via .env.
       SITE_ROOT_PATH: ${SITE_ROOT_PATH:-}
@@ -37,7 +42,6 @@ services:
       # PowerShell scripting (SPE) tuning.
       MOCKINGBIRD_SPE_SESSION_TTL_MIN: ${MOCKINGBIRD_SPE_SESSION_TTL_MIN:-30}
       MOCKINGBIRD_SPE_MAX_SESSIONS: ${MOCKINGBIRD_SPE_MAX_SESSIONS:-8}
-      TACO: 1
     volumes:
-      - ${MOCKINGBIRD_WORKSPACE_HOST:-./}:/workspaces
+      - ${MOCKINGBIRD_WORKSPACE}:/workspaces
     restart: unless-stopped

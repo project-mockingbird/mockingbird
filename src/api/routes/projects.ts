@@ -96,6 +96,13 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       throw err;
     }
 
+    // The schema generator is gated on a non-empty item tree, but at server
+    // boot the multi-layer flow settles readiness on 'no-project' before any
+    // project is loaded, so the readiness-driven trigger fires once with an
+    // empty tree and never re-runs. Trigger it here now that openWorkspace
+    // has populated the tree. Idempotent - bails if already extended.
+    app.extendMockingbirdSchema?.();
+
     reply.send({ state: engine.readiness.state, layers: layersWithEffectiveCount(engine) });
   });
 

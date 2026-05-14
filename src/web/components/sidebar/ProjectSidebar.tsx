@@ -6,12 +6,21 @@ import {
   mdiDotsVertical,
   mdiFolderArrowRight,
   mdiLayers,
+  mdiPlus,
 } from '@mdi/js';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { EditableLayerName } from './EditableLayerName';
-import { useProjectsStore } from '@/state/projectsStore';
+import { LayerSourcePicker } from './LayerSourcePicker';
+import { LayerCollisionDialog } from './LayerCollisionDialog';
+import { useProjectsStore, type SavedProjectLayer } from '@/state/projectsStore';
 import { useSettings } from '@/settings/SettingsProvider';
+import { setSetting } from '@/settings/store';
+import { useReopenWithLayers } from '@/hooks/useReopenWithLayers';
+import { deriveName } from '@/components/open-project/layer-name';
+import { assignLayerColor } from '@/components/open-project/layer-colors';
+import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
+import { ConfirmDiscardWorkspaceDialog } from '@/components/workspace/ConfirmDiscardWorkspaceDialog';
 
 interface SidebarLayer {
   name: string;
@@ -55,12 +64,40 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const { isVisible, setVisibility, rename, recolor, overrides } = useLayerState();
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [replaceTargetIndex, setReplaceTargetIndex] = useState<number | null>(null);
+  const [collidingProjectName, setCollidingProjectName] = useState<string | null>(null);
+  const [pendingMutation, setPendingMutation] = useState<{
+    oldHash: string;
+    nextLayers: SavedProjectLayer[];
+    projectName: string;
+    collidingHash: string;
+  } | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const reopen = useReopenWithLayers();
+  const discardWorkspaceGate = useConfirmDiscardWorkspace();
 
   const { settings } = useSettings();
   const lastOpenedHash = settings['session.lastOpenedHash'];
   const projects = useProjectsStore((s) => s.projects);
   const renameProject = useProjectsStore((s) => s.rename);
+
+  const proposeReopen = async (
+    oldHash: string,
+    nextLayers: SavedProjectLayer[],
+    projectName: string,
+  ) => {
+    const { collidingHash } = await reopen.detectCollision({ oldHash, nextLayers });
+    if (collidingHash) {
+      const collidingProject = projects[collidingHash];
+      setCollidingProjectName(collidingProject?.name ?? collidingHash);
+      setPendingMutation({ oldHash, nextLayers, projectName, collidingHash });
+      return;
+    }
+    discardWorkspaceGate.request('switch', () => {
+      reopen.mutate({ oldHash, nextLayers, projectName });
+    });
+  };
 
   useEffect(() => {
     if (!actionsMenuOpen) return;
@@ -187,7 +224,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
           Content Layers
         </div>
-        {userLayers.map((layer) => {
+        {userLayers.map((layer, idx) => {
           const override = overrides[layer.name] ?? {};
           return (
             <LayerRow
@@ -200,9 +237,28 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
               onToggle={(v) => setVisibility(layer.name, v)}
               onRename={(n) => rename(layer.name, n)}
               onRecolor={(c) => recolor(layer.name, c)}
+              onReplaceSource={() => setReplaceTargetIndex(idx)}
+              onRemove={() => {
+                if (!lastOpenedHash) return;
+                const project = projects[lastOpenedHash];
+                if (!project) return;
+                const nextLayers = project.layers.filter((_, i) => i !== idx);
+                void proposeReopen(lastOpenedHash, nextLayers, project.name);
+              }}
+              canRemove={userLayers.length > 1}
             />
           );
         })}
+        <div className="px-3 pt-1 pb-2">
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="w-full flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground py-1 rounded border border-dashed hover:bg-accent/40"
+          >
+            <Icon path={mdiPlus} className="size-3" />
+            Add layer
+          </button>
+        </div>
         <LayerRow
           layerName="Sitecore IAR"
           effectiveCount={ootbCount}
@@ -214,6 +270,79 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
           onRecolor={() => {}}
         />
       </div>
+      <LayerSourcePicker
+        open={addOpen}
+        mode="add"
+        existingPaths={userLayers
+          .map((l) => l.sitecoreJsonPath)
+          .filter((p): p is string => typeof p === 'string')}
+        onConfirm={(filePath) => {
+          setAddOpen(false);
+          if (!lastOpenedHash) return;
+          const existing = projects[lastOpenedHash];
+          if (!existing) return;
+          const nextLayers = [
+            ...existing.layers,
+            {
+              sitecoreJsonPath: filePath,
+              name: deriveName(filePath),
+              color: assignLayerColor(existing.layers.length),
+            },
+          ];
+          void proposeReopen(lastOpenedHash, nextLayers, existing.name);
+        }}
+        onCancel={() => setAddOpen(false)}
+      />
+      {replaceTargetIndex !== null && (
+        <LayerSourcePicker
+          open
+          mode="replace"
+          currentPath={
+            lastOpenedHash
+              ? projects[lastOpenedHash]?.layers[replaceTargetIndex]?.sitecoreJsonPath
+              : undefined
+          }
+          existingPaths={
+            lastOpenedHash
+              ? (projects[lastOpenedHash]?.layers.map((l) => l.sitecoreJsonPath) ?? [])
+              : []
+          }
+          onConfirm={(filePath) => {
+            if (!lastOpenedHash) return;
+            const project = projects[lastOpenedHash];
+            if (!project) return;
+            const targetIndex = replaceTargetIndex;
+            if (targetIndex === null) return;
+            const nextLayers = project.layers.map((l, i) =>
+              i === targetIndex ? { ...l, sitecoreJsonPath: filePath } : l,
+            );
+            setReplaceTargetIndex(null);
+            void proposeReopen(lastOpenedHash, nextLayers, project.name);
+          }}
+          onCancel={() => setReplaceTargetIndex(null)}
+        />
+      )}
+      <ConfirmDiscardWorkspaceDialog
+        action={discardWorkspaceGate.pendingAction}
+        dirtyCount={discardWorkspaceGate.pendingDirtyCount}
+        onConfirm={discardWorkspaceGate.onConfirm}
+        onCancel={discardWorkspaceGate.onCancel}
+      />
+      <LayerCollisionDialog
+        collidingProjectName={collidingProjectName}
+        onSwitch={() => {
+          if (!pendingMutation) return;
+          setSetting('session.lastOpenedHash', pendingMutation.collidingHash);
+          setCollidingProjectName(null);
+          setPendingMutation(null);
+          // NoProjectState's auto-restore + hydrator will open the existing
+          // project on the next status tick.
+        }}
+        onCancel={() => {
+          setCollidingProjectName(null);
+          setPendingMutation(null);
+        }}
+      />
     </aside>
   );
 }

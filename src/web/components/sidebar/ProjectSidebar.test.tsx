@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -43,6 +43,11 @@ const statusNoProject = { state: 'no-project' as const, layers: [] };
 beforeEach(() => {
   resetLayerState();
   localStorageStub.clear();
+  // stub fetch for any /api/fs/list call FolderBrowser makes when the picker mounts
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ path: '/', entries: [] }), { status: 200 }),
+  );
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
 
 describe('<ProjectSidebar>', () => {
@@ -120,5 +125,79 @@ describe('<ProjectSidebar>', () => {
     // statusReady layers have paths like /workspaces/p/{layer}/sitecore.json
     // stripping two segments from authoring path -> /workspaces/p -> basename = "p"
     expect(screen.getByText('p')).toBeInTheDocument();
+  });
+});
+
+describe('<ProjectSidebar> add layer', () => {
+  it('renders "+ Add layer" button below the user-layer list', () => {
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    expect(screen.getByRole('button', { name: /add layer/i })).toBeInTheDocument();
+    // OOTB row still present below
+    expect(screen.getByText(/Sitecore IAR/)).toBeInTheDocument();
+  });
+
+  it('clicking "+ Add layer" opens the LayerSourcePicker in add mode', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /add layer/i }));
+    // LayerSourcePicker's add-mode banner uses data-testid="layer-source-picker-mode"
+    expect(screen.getByTestId('layer-source-picker-mode')).toHaveTextContent(/add a layer/i);
+  });
+});
+
+describe('<ProjectSidebar> replace source', () => {
+  it('clicking Replace source... on a layer kebab opens the picker in replace mode', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    const kebabs = screen.getAllByRole('button', { name: /layer actions/i });
+    expect(kebabs.length).toBeGreaterThan(0);
+    await user.click(kebabs[0]);
+    await user.click(screen.getByRole('button', { name: /replace source/i }));
+    expect(screen.getByTestId('layer-source-picker-mode')).toHaveTextContent(/replace layer source/i);
+  });
+});
+
+describe('<ProjectSidebar> remove layer', () => {
+  beforeEach(async () => {
+    const { workspaceStore } = await import('@/state/workspaceStore');
+    workspaceStore.reset();
+  });
+
+  it('removing a layer with no dirty tabs fires reopen immediately', async () => {
+    const user = userEvent.setup();
+    const { useProjectsStore } = await import('@/state/projectsStore');
+    useProjectsStore.getState().setAll({
+      h1: {
+        hash: 'h1',
+        name: 'proj',
+        layers: statusReady.layers
+          .filter((l) => l.name !== 'ootb')
+          .map((l) => ({
+            sitecoreJsonPath: l.sitecoreJsonPath as string,
+            name: l.name,
+            color: l.color ?? '#888',
+          })),
+        createdAt: 1,
+        lastOpenedAt: 1,
+      },
+    });
+    const { setSetting } = await import('@/settings/store');
+    setSetting('session.lastOpenedHash', 'h1');
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ state: 'ready', layers: [] }), { status: 200 }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+
+    const kebabs = screen.getAllByRole('button', { name: /layer actions/i });
+    await user.click(kebabs[0]);
+    await user.click(screen.getByRole('button', { name: /remove layer/i }));
+    await user.click(screen.getByRole('button', { name: /^remove$/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.body as string).includes('"authoring"')).toBe(false);
   });
 });
