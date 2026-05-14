@@ -14,7 +14,7 @@
 #   .mockingbird/cache/     - engine cache (auto-gitignored)
 services:
   mockingbird:
-    image: projectmockingbird/mockingbird:1.0.9.2
+    image: projectmockingbird/mockingbird:1.0.10.0
     container_name: ${COMPOSE_PROJECT_NAME:-mockingbird}
     ports:
       # Bind to loopback only so a developer on a coffee-shop / hostile LAN
