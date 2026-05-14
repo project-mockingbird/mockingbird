@@ -25,7 +25,7 @@ export function useReopenWithLayers() {
   const qc = useQueryClient();
 
   const mutation = useMutation<ReopenWithLayersResult, Error, ReopenInput>({
-    mutationFn: async ({ oldHash, nextLayers, projectName }) => {
+    mutationFn: async ({ nextLayers, projectName }) => {
       const res = await fetch('/api/projects/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -35,15 +35,16 @@ export function useReopenWithLayers() {
         const body = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
-      const data = (await res.json()) as ReopenWithLayersResult;
-      const newHash = await computeProjectHash(nextLayers.map((l) => l.sitecoreJsonPath));
-      useProjectsStore.getState().rekey(oldHash, newHash, nextLayers, Date.now());
+      return (await res.json()) as ReopenWithLayersResult;
+    },
+    onSuccess: async (_data, vars) => {
+      const newHash = await computeProjectHash(vars.nextLayers.map((l) => l.sitecoreJsonPath));
+      useProjectsStore.getState().rekey(vars.oldHash, newHash, vars.nextLayers, Date.now());
       setSetting('session.lastOpenedHash', newHash);
       workspaceStore.reset();
       qc.invalidateQueries({ queryKey: ['status'] });
       qc.invalidateQueries({ queryKey: ['tree'] });
       qc.invalidateQueries({ queryKey: ['children'] });
-      return data;
     },
   });
 
@@ -62,5 +63,5 @@ export function useReopenWithLayers() {
     return { newHash, collidingHash: colliding ? newHash : null };
   }
 
-  return Object.assign(mutation, { detectCollision });
+  return { ...mutation, detectCollision };
 }

@@ -140,4 +140,35 @@ describe('useReopenWithLayers', () => {
     expect(next.collidingHash).toBe(collidingHash);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('when rekey throws (concurrent collision), mutation reflects the error but server reopen already happened', async () => {
+    seedProject('oldhash');
+    // Seed a project at a hash that will collide with the computed newHash for nextLayers.
+    const nextLayers = [
+      baseLayer,
+      { sitecoreJsonPath: '/ws/b/sitecore.json', name: 'b', color: '#222' },
+    ];
+    const newHash = await (await import('../../../src/web/state/project-hash')).computeProjectHash(
+      nextLayers.map((l) => l.sitecoreJsonPath),
+    );
+    useProjectsStore.getState().upsert({
+      hash: newHash,
+      name: 'preexisting',
+      layers: nextLayers,
+      createdAt: 1,
+      lastOpenedAt: 2,
+    });
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ state: 'ready', layers: [] }), { status: 200 }));
+
+    const { result } = renderHook(() => useReopenWithLayers(), { wrapper });
+
+    await expect(
+      result.current.mutateAsync({ oldHash: 'oldhash', nextLayers, projectName: 'proj' }),
+    ).rejects.toThrow(/already exists/i);
+
+    // The HTTP call DID happen (server-side reopen succeeded)
+    expect(fetchMock).toHaveBeenCalledOnce();
+    // Old hash entry remains (rekey aborted before deletion)
+    expect(useProjectsStore.getState().get('oldhash')).not.toBeNull();
+  });
 });
