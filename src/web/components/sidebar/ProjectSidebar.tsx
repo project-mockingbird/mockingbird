@@ -17,6 +17,8 @@ import { useSettings } from '@/settings/SettingsProvider';
 import { useReopenWithLayers } from '@/hooks/useReopenWithLayers';
 import { deriveName } from '@/components/open-project/layer-name';
 import { assignLayerColor } from '@/components/open-project/layer-colors';
+import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
+import { ConfirmDiscardWorkspaceDialog } from '@/components/workspace/ConfirmDiscardWorkspaceDialog';
 
 interface SidebarLayer {
   name: string;
@@ -64,6 +66,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const [replaceTargetIndex, setReplaceTargetIndex] = useState<number | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const reopen = useReopenWithLayers();
+  const discardWorkspaceGate = useConfirmDiscardWorkspace();
 
   const { settings } = useSettings();
   const lastOpenedHash = settings['session.lastOpenedHash'];
@@ -209,6 +212,20 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
               onRename={(n) => rename(layer.name, n)}
               onRecolor={(c) => recolor(layer.name, c)}
               onReplaceSource={() => setReplaceTargetIndex(idx)}
+              onRemove={() => {
+                if (!lastOpenedHash) return;
+                const project = projects[lastOpenedHash];
+                if (!project) return;
+                const nextLayers = project.layers.filter((_, i) => i !== idx);
+                discardWorkspaceGate.request('switch', () => {
+                  reopen.mutate({
+                    oldHash: lastOpenedHash,
+                    nextLayers,
+                    projectName: project.name,
+                  });
+                });
+              }}
+              canRemove={userLayers.length > 1}
             />
           );
         })}
@@ -275,23 +292,32 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
               : []
           }
           onConfirm={(filePath) => {
-            const targetIndex = replaceTargetIndex;
-            setReplaceTargetIndex(null);
             if (!lastOpenedHash) return;
             const project = projects[lastOpenedHash];
             if (!project) return;
+            const targetIndex = replaceTargetIndex;
+            if (targetIndex === null) return;
             const nextLayers = project.layers.map((l, i) =>
               i === targetIndex ? { ...l, sitecoreJsonPath: filePath } : l,
             );
-            reopen.mutate({
-              oldHash: lastOpenedHash,
-              nextLayers,
-              projectName: project.name,
+            setReplaceTargetIndex(null);
+            discardWorkspaceGate.request('switch', () => {
+              reopen.mutate({
+                oldHash: lastOpenedHash,
+                nextLayers,
+                projectName: project.name,
+              });
             });
           }}
           onCancel={() => setReplaceTargetIndex(null)}
         />
       )}
+      <ConfirmDiscardWorkspaceDialog
+        action={discardWorkspaceGate.pendingAction}
+        dirtyCount={discardWorkspaceGate.pendingDirtyCount}
+        onConfirm={discardWorkspaceGate.onConfirm}
+        onCancel={discardWorkspaceGate.onCancel}
+      />
     </aside>
   );
 }
