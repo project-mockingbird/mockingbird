@@ -61,6 +61,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [replaceTargetIndex, setReplaceTargetIndex] = useState<number | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const reopen = useReopenWithLayers();
 
@@ -194,7 +195,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
           Content Layers
         </div>
-        {userLayers.map((layer) => {
+        {userLayers.map((layer, idx) => {
           const override = overrides[layer.name] ?? {};
           return (
             <LayerRow
@@ -207,6 +208,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
               onToggle={(v) => setVisibility(layer.name, v)}
               onRename={(n) => rename(layer.name, n)}
               onRecolor={(c) => recolor(layer.name, c)}
+              onReplaceSource={() => setReplaceTargetIndex(idx)}
             />
           );
         })}
@@ -258,6 +260,38 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         }}
         onCancel={() => setAddOpen(false)}
       />
+      {replaceTargetIndex !== null && (
+        <LayerSourcePicker
+          open
+          mode="replace"
+          currentPath={
+            lastOpenedHash
+              ? projects[lastOpenedHash]?.layers[replaceTargetIndex]?.sitecoreJsonPath
+              : undefined
+          }
+          existingPaths={
+            lastOpenedHash
+              ? (projects[lastOpenedHash]?.layers.map((l) => l.sitecoreJsonPath) ?? [])
+              : []
+          }
+          onConfirm={(filePath) => {
+            const targetIndex = replaceTargetIndex;
+            setReplaceTargetIndex(null);
+            if (!lastOpenedHash) return;
+            const project = projects[lastOpenedHash];
+            if (!project) return;
+            const nextLayers = project.layers.map((l, i) =>
+              i === targetIndex ? { ...l, sitecoreJsonPath: filePath } : l,
+            );
+            reopen.mutate({
+              oldHash: lastOpenedHash,
+              nextLayers,
+              projectName: project.name,
+            });
+          }}
+          onCancel={() => setReplaceTargetIndex(null)}
+        />
+      )}
     </aside>
   );
 }

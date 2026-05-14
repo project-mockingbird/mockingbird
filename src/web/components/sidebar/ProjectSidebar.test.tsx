@@ -144,3 +144,15 @@ describe('<ProjectSidebar> add layer', () => {
     expect(screen.getByTestId('layer-source-picker-mode')).toHaveTextContent(/add a layer/i);
   });
 });
+
+describe('<ProjectSidebar> replace source', () => {
+  it('clicking Replace source... on a layer kebab opens the picker in replace mode', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    const kebabs = screen.getAllByRole('button', { name: /layer actions/i });
+    expect(kebabs.length).toBeGreaterThan(0);
+    await user.click(kebabs[0]);
+    await user.click(screen.getByRole('button', { name: /replace source/i }));
+    expect(screen.getByTestId('layer-source-picker-mode')).toHaveTextContent(/replace layer source/i);
+  });
+});
