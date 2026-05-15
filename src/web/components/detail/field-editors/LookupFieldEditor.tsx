@@ -23,13 +23,21 @@ interface LookupFieldEditorProps {
  * shares Droplink's wire format; the difference in Sitecore is the picker UX
  * (tree vs flat dropdown), but the underlying source-resolution + storage are
  * identical so we render Droptree as a flat Select for now. A real tree
- * picker is tracked as backlog #33. Falls back to a plain text input + an
- * "(unresolved)" hint when the source string isn't one we know how to
- * handle yet (e.g. fast: queries, multi-predicate XPath, or fields without
- * a Source value).
+ * picker is tracked as backlog #33.
+ *
+ * Empty-Source handling matches Sitecore.Shell.Applications.ContentEditor.Tree.
+ * Sitecore.Kernel's DataContext.GetState (decompile line ~174376) falls back
+ * to `/sitecore` root when Source resolves to empty. Mockingbird ports that
+ * for Droptree only; Droplink/Droplist with empty Source still fall back to
+ * raw text (they're enumeration controls that need an explicit source).
+ *
+ * Other unsupported source forms (fast: queries, multi-predicate XPath, etc.)
+ * fall through with an "(unresolved)" hint.
  */
 export function LookupFieldEditor({ kind, fieldId, label, value, fieldSource, contextItemId, editing, onChange, onNavigate }: LookupFieldEditorProps) {
-  const { data: items, isLoading, error } = useLookupSource(fieldSource, contextItemId);
+  const trimmedSource = fieldSource.trim();
+  const effectiveSource = trimmedSource === '' && kind === 'Droptree' ? '/sitecore' : fieldSource;
+  const { data: items, isLoading, error } = useLookupSource(effectiveSource, contextItemId);
   const storesGuid = kind === 'Droplink' || kind === 'Droptree';
   const trimmedValue = value && storesGuid ? normaliseGuid(value) : '';
   const itemsList = items ?? [];
@@ -44,7 +52,7 @@ export function LookupFieldEditor({ kind, fieldId, label, value, fieldSource, co
   const fallbackId = storesGuid && trimmedValue && !valueInItems ? trimmedValue : null;
   const { data: fallbackItem } = useItem(fallbackId);
 
-  if (!fieldSource.trim()) {
+  if (!effectiveSource.trim()) {
     return (
       <FieldShell fieldId={fieldId} label={label} onNavigate={onNavigate}>
         <Input value={value} onChange={(e) => onChange(e.target.value)} className="text-xs" readOnly={!editing} />

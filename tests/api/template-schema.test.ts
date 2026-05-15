@@ -114,6 +114,9 @@ describe('getTemplateSchema', () => {
     expect(schema.sections[0].fields[0]).toEqual({
       id: fieldId,
       name: 'Title',
+      // Field has no Title/__Display name unversioned override, so the
+      // user-facing label falls back to the item's tree name.
+      displayName: 'Title',
       type: 'Single-Line Text',
       source: '',
       shared: false,

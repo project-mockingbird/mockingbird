@@ -68,13 +68,38 @@ describe('LookupFieldEditor Droptree variant', () => {
     expect(screen.getByText('Deeply Nested Template')).toBeInTheDocument();
   });
 
-  it('falls back to a raw text input when fieldSource is empty', () => {
+  it('defaults the source to /sitecore when fieldSource is empty (Sitecore.Kernel Tree control parity)', () => {
+    // Sitecore.Kernel DataContext.GetState falls back to "/" (== /sitecore)
+    // root when Source is empty. Mockingbird ports that for Droptree so the
+    // picker still renders instead of bailing to raw text.
+    hookMocks.useLookupSource.mockClear();
     wrap(
       <LookupFieldEditor
         kind="Droptree"
         fieldId="abc"
         label="Parameters Template"
-        value="{11111111-1111-1111-1111-111111111111}"
+        value=""
+        fieldSource=""
+        editing
+        onChange={() => {}}
+      />
+    );
+    // useLookupSource was called with the effective default source.
+    expect(hookMocks.useLookupSource).toHaveBeenCalledWith('/sitecore', undefined);
+    // No "no Source" fallback message - the picker renders.
+    expect(screen.queryByText(/no Source/i)).not.toBeInTheDocument();
+  });
+
+  it('still falls back to raw text for Droplink/Droplist with empty fieldSource', () => {
+    // Droplink/Droplist are enumeration controls - they need an explicit
+    // Source. The Sitecore.Kernel /sitecore-root fallback only applies to
+    // the Tree (Droptree) control.
+    wrap(
+      <LookupFieldEditor
+        kind="Droplink"
+        fieldId="abc"
+        label="Some Lookup"
+        value=""
         fieldSource=""
         editing
         onChange={() => {}}

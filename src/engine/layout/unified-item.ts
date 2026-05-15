@@ -42,6 +42,21 @@ export function getSharedField(u: UnifiedItem, fieldId: string): string | undefi
   return u.value.sharedFields[fieldId];
 }
 
+/**
+ * Read an unversioned field value for the given language. Falls through to
+ * undefined when the field is absent or has no value for that language.
+ * For registry items the data comes from `unversionedFields[lang][fieldId]`
+ * (registry v5.0+); for tree-resolved items it comes from
+ * `languages[].fields[]` keyed by id.
+ */
+export function getUnversionedField(u: UnifiedItem, fieldId: string, language: string): string | undefined {
+  if (u.kind === 'node') {
+    const lang = u.value.item.languages.find(l => l.language === language);
+    return lang?.fields.find(f => f.id === fieldId)?.value;
+  }
+  return u.value.unversionedFields?.[language]?.[fieldId];
+}
+
 export function getChildren(u: UnifiedItem, engine: Engine): UnifiedItem[] {
   if (u.kind === 'node') {
     return Array.from(u.value.children.values()).map(child => ({ kind: 'node' as const, value: child }));

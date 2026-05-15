@@ -12,9 +12,29 @@ import {
   getName,
   getTemplate,
   getSharedField,
+  getUnversionedField,
   getChildren,
   lookupUnifiedItem,
 } from './layout/unified-item.js';
+
+/**
+ * Resolve the user-facing label for a template-field item, mirroring what
+ * Sitecore Content Editor renders next to the editable input. Preference:
+ * 1. `Title` unversioned field on the field-definition item (en).
+ * 2. `__Display name` unversioned field on the field-definition item (en).
+ * 3. The item's tree name. Always non-empty as a final fallback.
+ *
+ * Returns the empty string when Title / __Display name are unset AND the
+ * caller passed an item without a name; in practice that doesn't happen
+ * for real template-field items.
+ */
+function resolveFieldDisplayName(fieldChild: UnifiedItem): string {
+  const title = getUnversionedField(fieldChild, FIELD_IDS.title, 'en');
+  if (title && title.trim() !== '') return title;
+  const display = getUnversionedField(fieldChild, FIELD_IDS.displayName, 'en');
+  if (display && display.trim() !== '') return display;
+  return getName(fieldChild);
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -22,7 +42,15 @@ import {
 
 export interface TemplateFieldSchema {
   id: string;
+  /** The field-definition item's tree name (e.g. "SitemapMediaItems"). */
   name: string;
+  /**
+   * The user-facing label for the field. Resolved from the Template Field's
+   * `Title` unversioned field (preferred, since Sitecore's Content Editor
+   * displays this) and falls back to `__Display name` then to `name`.
+   * Empty string when none of those carry a meaningful override.
+   */
+  displayName: string;
   type: string;
   source: string;
   shared: boolean;
@@ -65,11 +93,23 @@ function parseSortOrder(value: string | undefined): number {
 
 // parseBaseTemplates was a local copy of parseBraceGuids; deduped per the DRY rule.
 
-function sortByOrderThenName<T extends { sortOrder: number; name: string }>(items: T[]): T[] {
-  return items.sort((a, b) => {
-    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-    return a.name.localeCompare(b.name);
-  });
+/**
+ * Stable sort by sortOrder ONLY, preserving original array order for ties.
+ * Mirrors Sitecore.Kernel's behavior: within a `TemplateSection.Fields`
+ * ListDictionary, fields are kept in insertion order (which equals
+ * `DataSource.GetChildIDs` order from Sitecore's data layer). Ties on
+ * sortOrder fall back to the encounter order through the base-template
+ * BFS walk - NOT alphabetical, which would be a divergence from CE's
+ * display order.
+ */
+function stableSortByOrder<T extends { sortOrder: number }>(items: T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      if (a.item.sortOrder !== b.item.sortOrder) return a.item.sortOrder - b.item.sortOrder;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.item);
 }
 
 /**
@@ -92,6 +132,7 @@ function collectOwnSections(templateItem: UnifiedItem, engine: Engine, isStandar
       fields.push({
         id: getId(fieldChild),
         name: getName(fieldChild),
+        displayName: resolveFieldDisplayName(fieldChild),
         type: getSharedField(fieldChild, FIELD_IDS.type) ?? '',
         source: getSharedField(fieldChild, FIELD_IDS.source) ?? '',
         shared: getSharedField(fieldChild, FIELD_IDS.shared) === '1',
@@ -106,7 +147,10 @@ function collectOwnSections(templateItem: UnifiedItem, engine: Engine, isStandar
       sortOrder: parseSortOrder(getSharedField(child, FIELD_IDS.sortorder)),
       isStandard,
       sourceTemplateId: templateId,
-      fields: sortByOrderThenName(fields),
+      // Per-section field order: sortOrder asc, ties keep child-discovery
+      // order (mirroring Sitecore's `DataSource.GetChildIDs` -> ListDictionary
+      // insertion in `TemplateSection.AddField`). No alphabetical tiebreak.
+      fields: stableSortByOrder(fields),
     });
   }
 
@@ -220,15 +264,19 @@ export function getTemplateSchema(templateId: string, engine: Engine): TemplateS
     }
   }
 
-  // Re-sort each merged section's fields (the union may have arrived in
-  // most-derived-then-base order; `sortByOrderThenName` lands them in the
-  // editor-visible order regardless of contributor walk order).
+  // Re-stable-sort each merged section's fields by sortOrder only. Ties
+  // preserve the cross-base append order from the BFS walk above, which is
+  // how Sitecore.Kernel's `Template.GetFields(true)` lands them in the
+  // dictionary it returns. The previous `sortByOrderThenName` re-sort here
+  // imposed an alphabetical tiebreak that doesn't match CE's display order
+  // (e.g. would push `Modules` sortOrder=400 to the bottom even though CE
+  // shows it in its walk position).
   for (const section of merged.values()) {
-    section.fields = sortByOrderThenName(section.fields);
+    section.fields = stableSortByOrder(section.fields);
   }
 
   const schema: TemplateSchema = {
-    sections: sortByOrderThenName(Array.from(merged.values())),
+    sections: stableSortByOrder(Array.from(merged.values())),
   };
 
   schemaCache.set(normalizedId, schema);
@@ -296,6 +344,7 @@ export function enrichSchemaWithStoredFields(
       field: {
         id: getId(fieldDef),
         name: getName(fieldDef),
+        displayName: resolveFieldDisplayName(fieldDef),
         type: fieldType,
         source: getSharedField(fieldDef, FIELD_IDS.source) ?? '',
         shared: getSharedField(fieldDef, FIELD_IDS.shared) === '1',
@@ -336,10 +385,12 @@ export function enrichSchemaWithStoredFields(
     ordered.push(newSection);
   }
 
-  // Re-sort the affected sections' fields.
+  // Re-stable-sort the affected sections' fields (sortOrder asc, ties
+  // preserve append order). Sections are returned in declaration order
+  // with synthetic additions placed last via the 999_999 sortOrder above.
   for (const sec of ordered) {
-    sec.fields = sortByOrderThenName(sec.fields);
+    sec.fields = stableSortByOrder(sec.fields);
   }
 
-  return { sections: sortByOrderThenName(ordered) };
+  return { sections: stableSortByOrder(ordered) };
 }

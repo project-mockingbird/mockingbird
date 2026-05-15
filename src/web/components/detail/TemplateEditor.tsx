@@ -238,7 +238,21 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
         const sectionFields: ScsField[] = [];
         for (const schemaField of section.fields) {
           const itemField = allItemFields.get(schemaField.id);
-          sectionFields.push(itemField ?? { id: schemaField.id, hint: schemaField.name, value: '', type: schemaField.type });
+          // Label resolution preference (Sitecore CE parity):
+          //   1. Template Field's Title / __Display name (schemaField.displayName)
+          //      — but only if it differs from the raw item name (otherwise
+          //      it carries no information).
+          //   2. The item's tree name (schemaField.name) — what SCS writes
+          //      as the YAML Hint and what Sitecore shows when Title is unset.
+          // The YAML's per-item Hint is intentionally NOT a label source:
+          // SCS auto-writes Hint = field Name on every save, so preferring
+          // Hint just echoes Name back and defeats the displayName promotion.
+          const dn = schemaField.displayName?.trim();
+          const label = dn && dn !== schemaField.name ? dn : schemaField.name;
+          const merged = itemField
+            ? { ...itemField, hint: label }
+            : { id: schemaField.id, hint: label, value: '', type: schemaField.type };
+          sectionFields.push(merged);
           matchedIds.add(schemaField.id);
         }
         if (sectionFields.length > 0) {
