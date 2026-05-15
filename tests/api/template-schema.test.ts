@@ -90,7 +90,14 @@ describe('getTemplateSchema', () => {
     const sectionId = 'bbbb0000-0000-0000-0000-000000000001';
     const fieldId = 'cccc0000-0000-0000-0000-000000000001';
 
-    const template = makeRegistryItem({ id: templateId, name: 'TestTemplate' });
+    // Anchor the template to Standard so the section is not flagged as a
+    // structural fragment (only null-base templates get that flag, and only
+    // Standard's own sub-sections get isStandard=true).
+    const template = makeRegistryItem({
+      id: templateId,
+      name: 'TestTemplate',
+      sharedFields: { [FIELD_IDS.baseTemplate]: `{${STANDARD_TEMPLATE_ID.toUpperCase()}}` },
+    });
     const section = makeSection(sectionId, 'Content', 100);
     const field = makeField(fieldId, 'Title', 'Single-Line Text', 100);
 
@@ -124,6 +131,64 @@ describe('getTemplateSchema', () => {
       sortOrder: 100,
     });
     expect(schema.sections[0].sourceTemplateId).toBe(templateId);
+  });
+
+  it('flags sections from null-base structural templates as isStructuralFragment', () => {
+    // SXA "structural fragment" templates like _Name, _Description, _Site Template
+    // have __Base template set to an all-zero GUID. They contribute sections
+    // (e.g. Metadata) that Content Editor hides under Show Standard Fields = OFF,
+    // even though those sections aren't __-prefixed Standard fields. They must
+    // surface in the Standard Fields tab via the UI's combined filter, but
+    // `isStandard` stays false so layout JSON emission still includes the
+    // section's fields - they're authored content, not Sitecore system fields.
+    const templateId = 'aaaa0000-0000-0000-0000-000000000099';
+    const sectionId = 'bbbb0000-0000-0000-0000-000000000099';
+    const fieldId = 'cccc0000-0000-0000-0000-000000000099';
+
+    const template = makeRegistryItem({
+      id: templateId,
+      name: '_StructuralBase',
+      sharedFields: { [FIELD_IDS.baseTemplate]: '{00000000-0000-0000-0000-000000000000}' },
+    });
+    const section = makeSection(sectionId, 'Metadata', 100);
+    const field = makeField(fieldId, 'Name', 'Single-Line Text', 100);
+
+    const registry = new Map<string, RegistryItem>([[templateId, template]]);
+    const children = new Map<string, RegistryItem[]>([
+      [templateId, [section]],
+      [sectionId, [field]],
+    ]);
+
+    const engine = createMockEngine(registry, children);
+    const schema = getTemplateSchema(templateId, engine as unknown as Engine);
+
+    expect(schema.sections).toHaveLength(1);
+    expect(schema.sections[0].name).toBe('Metadata');
+    expect(schema.sections[0].isStandard).toBe(false);
+    expect(schema.sections[0].isStructuralFragment).toBe(true);
+  });
+
+  it('also flags sections from templates with an entirely missing base field', () => {
+    // Same effect as an all-zero base: when parseBraceGuids returns no
+    // inheritable GUIDs, the template is treated as a structural fragment.
+    const templateId = 'aaaa0000-0000-0000-0000-0000000000aa';
+    const sectionId = 'bbbb0000-0000-0000-0000-0000000000aa';
+    const fieldId = 'cccc0000-0000-0000-0000-0000000000aa';
+
+    const template = makeRegistryItem({ id: templateId, name: '_NoBaseField' });
+    const section = makeSection(sectionId, 'Custom', 100);
+    const field = makeField(fieldId, 'Anything', 'Single-Line Text', 100);
+
+    const registry = new Map<string, RegistryItem>([[templateId, template]]);
+    const children = new Map<string, RegistryItem[]>([
+      [templateId, [section]],
+      [sectionId, [field]],
+    ]);
+
+    const engine = createMockEngine(registry, children);
+    const schema = getTemplateSchema(templateId, engine as unknown as Engine);
+    expect(schema.sections[0].isStandard).toBe(false);
+    expect(schema.sections[0].isStructuralFragment).toBe(true);
   });
 
   it('sorts sections and fields by sortOrder then alphabetically', () => {

@@ -43,9 +43,62 @@ describe('buildRegistryItemDetail', () => {
     expect(b).toEqual({ id: 'fld-bbb', hint: '', value: 'value-b' });
   });
 
-  it('returns empty languages array (registry has shared-only field data)', () => {
+  it('returns empty languages array when the registry item has no unversioned/versioned data', () => {
     const result = buildRegistryItemDetail(regItem(), engine);
     expect(result.languages).toEqual([]);
+  });
+
+  it('exposes unversionedFields per language in the languages shape', () => {
+    const result = buildRegistryItemDetail(
+      regItem({
+        unversionedFields: {
+          en: { 'fld-title': 'Site media library', 'fld-display': 'Site media library' },
+          'de-DE': { 'fld-title': 'SiteMediaLibrary' },
+        },
+      }),
+      engine,
+    );
+    const en = (result.languages as Array<{ language: string; fields: Array<{ id: string; value: string }> }>)
+      .find(l => l.language === 'en');
+    expect(en).toBeDefined();
+    expect(en!.fields).toHaveLength(2);
+    expect(en!.fields.find(f => f.id === 'fld-title')?.value).toBe('Site media library');
+    const de = (result.languages as Array<{ language: string; fields: Array<{ id: string; value: string }> }>)
+      .find(l => l.language === 'de-DE');
+    expect(de).toBeDefined();
+    expect(de!.fields[0].value).toBe('SiteMediaLibrary');
+  });
+
+  it('exposes versionedFields per language + version in the languages shape', () => {
+    const result = buildRegistryItemDetail(
+      regItem({
+        versionedFields: {
+          en: {
+            '1': { 'fld-created': '20220209T062012Z' },
+            '2': { 'fld-created': '20230101T000000Z' },
+          },
+        },
+      }),
+      engine,
+    );
+    const en = (result.languages as Array<{ language: string; versions: Array<{ version: number; fields: Array<{ id: string; value: string }> }> }>)
+      .find(l => l.language === 'en');
+    expect(en).toBeDefined();
+    expect(en!.versions).toHaveLength(2);
+    expect(en!.versions[0]).toEqual({ version: 1, fields: [{ id: 'fld-created', hint: '', value: '20220209T062012Z' }] });
+    expect(en!.versions[1].version).toBe(2);
+  });
+
+  it('merges languages that appear in only unversioned OR only versioned maps', () => {
+    const result = buildRegistryItemDetail(
+      regItem({
+        unversionedFields: { en: { 'fld-title': 'en-only-unv' } },
+        versionedFields: { 'ja-JP': { '1': { 'fld-created': 'ja-only-ver' } } },
+      }),
+      engine,
+    );
+    const langs = (result.languages as Array<{ language: string }>).map(l => l.language);
+    expect(langs).toEqual(['en', 'ja-JP']);
   });
 
   it('classifies the item type using the template GUID', () => {

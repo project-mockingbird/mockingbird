@@ -127,6 +127,12 @@ export interface WebSocketEvent {
 export interface TemplateFieldSchema {
   id: string;
   name: string;
+  /**
+   * User-facing label resolved by the engine (Title unversioned field
+   * preferred, then __Display name, then item name). Optional on the
+   * wire for backwards compatibility with pre-1.1.0.0 API responses.
+   */
+  displayName?: string;
   type: string;
   source: string;
   shared: boolean;
@@ -139,6 +145,13 @@ export interface TemplateSectionSchema {
   name: string;
   sortOrder: number;
   isStandard: boolean;
+  /**
+   * True for sections from null-base "structural fragment" templates
+   * (e.g. SXA's _Name/_Description/_Site Template). CE hides these under
+   * "Show Standard Fields = OFF" alongside isStandard sections. Optional
+   * on the wire for backwards compatibility with pre-1.1.0.1 API responses.
+   */
+  isStructuralFragment?: boolean;
   sourceTemplateId: string;
   fields: TemplateFieldSchema[];
 }

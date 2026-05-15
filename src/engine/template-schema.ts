@@ -62,7 +62,20 @@ export interface TemplateSectionSchema {
   id: string;
   name: string;
   sortOrder: number;
+  /**
+   * True when the section originates in the Standard template chain
+   * (`__`-prefixed Sitecore system fields). Layout JSON emission excludes
+   * these. Set by `collectAllSections`.
+   */
   isStandard: boolean;
+  /**
+   * True when the section comes from a null-base "structural" template
+   * (e.g. SXA's `_Name`, `_Description`, `_Site Template`). CE hides
+   * these under Show Standard Fields = OFF alongside `isStandard`
+   * sections. Used by the Content Editor tab filter ONLY; layout still
+   * emits these fields.
+   */
+  isStructuralFragment: boolean;
   sourceTemplateId: string;
   fields: TemplateFieldSchema[];
 }
@@ -146,6 +159,8 @@ function collectOwnSections(templateItem: UnifiedItem, engine: Engine, isStandar
       name: getName(child),
       sortOrder: parseSortOrder(getSharedField(child, FIELD_IDS.sortorder)),
       isStandard,
+      // Default; overwritten per source template in collectAllSections.
+      isStructuralFragment: false,
       sourceTemplateId: templateId,
       // Per-section field order: sortOrder asc, ties keep child-discovery
       // order (mirroring Sitecore's `DataSource.GetChildIDs` -> ListDictionary
@@ -157,10 +172,27 @@ function collectOwnSections(templateItem: UnifiedItem, engine: Engine, isStandar
   return sections;
 }
 
+const NULL_GUID = '00000000-0000-0000-0000-000000000000';
+
 /**
  * Recursively walk the inheritance chain, collecting sections.
  * Uses BFS-like ordering: own sections first, then base template sections.
  * Deduplication: first occurrence (most-derived) wins.
+ *
+ * Two distinct standard-ness classifications are produced:
+ *
+ *   - `isStandard` flags sections originating in the Standard template
+ *     chain (the 15 well-known section templates inherited by Standard).
+ *     These contain `__`-prefixed Sitecore system fields. Layout JSON
+ *     emission (`field-formatter.ts`, `utils.ts`) excludes these.
+ *   - `isStructuralFragment` flags sections from null-base "structural"
+ *     templates like SXA's `_Name`, `_Description`, `_Site Template`.
+ *     CE hides these under "Show Standard Fields = OFF" alongside the
+ *     Standard fields, even though they aren't `__`-prefixed - they're
+ *     framework slots, not authored content. Used by the Content Editor
+ *     tab filter ONLY; layout MUST still emit these fields. Templates
+ *     where `__Base template` is empty/missing or contains only the
+ *     all-zero GUID qualify.
  */
 function collectAllSections(
   templateId: string,
@@ -175,12 +207,15 @@ function collectAllSections(
   const templateItem = lookupUnifiedItem(normalizedId, engine);
   if (!templateItem) return [];
 
-  const currentIsStandard = isStandard || normalizedId === STANDARD_TEMPLATE_ID;
-  const ownSections = collectOwnSections(templateItem, engine, currentIsStandard);
-
-  // Parse base templates
   const baseTemplateValue = getSharedField(templateItem, FIELD_IDS.baseTemplate);
-  const baseIds = parseBraceGuids(baseTemplateValue);
+  const baseIds = parseBraceGuids(baseTemplateValue).filter(id => id !== NULL_GUID);
+  const isStructuralFragment = baseIds.length === 0 && normalizedId !== STANDARD_TEMPLATE_ID;
+
+  const currentIsStandard = isStandard || normalizedId === STANDARD_TEMPLATE_ID;
+  const ownSections = collectOwnSections(templateItem, engine, currentIsStandard).map(section => ({
+    ...section,
+    isStructuralFragment,
+  }));
 
   // Recurse into bases
   const baseSections: TemplateSectionSchema[] = [];
@@ -378,6 +413,7 @@ export function enrichSchemaWithStoredFields(
       name: add.sectionName,
       sortOrder: 999_999, // append after declared sections
       isStandard: false,
+      isStructuralFragment: false,
       sourceTemplateId: '',
       fields: [add.field],
     };

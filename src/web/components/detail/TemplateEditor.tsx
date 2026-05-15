@@ -231,7 +231,7 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
 
   const { groupedSections, unmatchedFields } = useMemo(() => {
     const matchedIds = new Set<string>();
-    const sections: { title: string; fields: ScsField[]; isStandard: boolean }[] = [];
+    const sections: { title: string; fields: ScsField[]; isStandard: boolean; isStructuralFragment: boolean }[] = [];
 
     if (schema) {
       for (const section of schema.sections) {
@@ -256,7 +256,12 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
           matchedIds.add(schemaField.id);
         }
         if (sectionFields.length > 0) {
-          sections.push({ title: section.name, fields: sectionFields, isStandard: section.isStandard });
+          sections.push({
+            title: section.name,
+            fields: sectionFields,
+            isStandard: section.isStandard,
+            isStructuralFragment: section.isStructuralFragment === true,
+          });
         }
       }
     }
@@ -265,9 +270,15 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
     return { groupedSections: sections, unmatchedFields: unmatched };
   }, [schema, allItemFields]);
 
+  // Tab filter mirrors CE's Show Standard Fields toggle: the Standard tab
+  // surfaces both `__`-prefixed Sitecore system sections (isStandard) and
+  // null-base structural fragments (isStructuralFragment). The Content tab
+  // shows everything else.
+  const isStandardForUi = (s: { isStandard: boolean; isStructuralFragment: boolean }): boolean =>
+    s.isStandard || s.isStructuralFragment;
   const visibleSections = sectionFilter === 'standard'
-    ? groupedSections.filter(s => s.isStandard)
-    : groupedSections.filter(s => !s.isStandard);
+    ? groupedSections.filter(isStandardForUi)
+    : groupedSections.filter(s => !isStandardForUi(s));
 
   const showOtherFields = sectionFilter === 'content' && unmatchedFields.length > 0;
   const useFallback = !schema;
