@@ -425,20 +425,29 @@ export function synthesizeItemFromRegistry(reg: RegistryItem): ScsItem {
       hint: '',
       value,
     })),
-    languages: Object.entries(reg.versionedFields ?? {}).map(([language, versions]) => ({
-      language,
-      // Registry has no language-level unversioned fields; they only exist
-      // in the tree serialization format (SCS YAML). Always empty for
-      // registry-synthesized items.
-      fields: [],
-      versions: Object.entries(versions).map(([version, fields]) => ({
-        version: parseInt(version, 10),
-        fields: Object.entries(fields).map(([id, value]) => ({
+    languages: (() => {
+      // Union of every language that has unversioned OR versioned data.
+      const langs = new Set<string>([
+        ...Object.keys(reg.unversionedFields ?? {}),
+        ...Object.keys(reg.versionedFields ?? {}),
+      ]);
+      return Array.from(langs).map((language) => ({
+        language,
+        // Registry v5.0+ carries language-level unversioned fields.
+        fields: Object.entries(reg.unversionedFields?.[language] ?? {}).map(([id, value]) => ({
           id: id.toLowerCase(),
           hint: '',
           value,
         })),
-      })),
-    })),
+        versions: Object.entries(reg.versionedFields?.[language] ?? {}).map(([version, fields]) => ({
+          version: parseInt(version, 10),
+          fields: Object.entries(fields).map(([id, value]) => ({
+            id: id.toLowerCase(),
+            hint: '',
+            value,
+          })),
+        })),
+      }));
+    })(),
   };
 }

@@ -10,16 +10,17 @@ $resourceLoader = [Sitecore.DependencyInjection.ServiceLocator]::ServiceProvider
 # ---------------------------------------------------------------------------
 # Universal field extraction
 #
-# 0.6+ (registry v4.0): replaces the per-phase field allowlists with one pass
-# that captures every locally-stored shared field per item. Sitecore stores a
-# value on $field.Value whether it's local OR a cascaded default from a base
-# template's __Standard Values; ContainsStandardValue distinguishes them. We
-# capture only locally-stored values - cascaded defaults are reconstructed at
-# runtime from the SV items already extracted in Phase 3.
+# v5.0: captures every non-empty shared-field value Sitecore exposes on the
+# item, INCLUDING values that cascade from a base-template `__Standard Values`
+# item. Earlier v4.0 skipped cascaded defaults on the assumption that the
+# runtime would walk the SV chain to reconstruct them; the runtime never did,
+# so cascaded values (e.g. SXA Tenant `_Base Tenant.Configuration.Templates`
+# Source = `/sitecore/templates`) silently dropped. v5.0 captures the
+# resolved value, growing the registry but eliminating the gap.
 #
-# Denylist: Blob (binary, balloons size; media is bind-mounted separately)
-# plus per-edit churn fields (Lock, Revision, Workflow state) that have no
-# runtime use in mockingbird.
+# Denylist (size + per-edit churn, no runtime use in mockingbird):
+#   Blob (binary; media is bind-mounted separately)
+#   Lock, Revision, Workflow state
 # ---------------------------------------------------------------------------
 
 $BLOB_FIELD_ID         = '40e50ed9-ba07-4702-992e-a912738d32dc'
@@ -27,28 +28,60 @@ $LOCK_FIELD_ID         = '001dd393-96c5-490b-924a-b0f25cd9efd8'   # __Lock
 $REVISION_FIELD_ID     = '8cdc337e-a112-42fb-bbb4-4143751e123f'   # __Revision
 $WORKFLOW_STATE_FIELD  = '3e431de1-525e-47a3-b6b0-1ccbec3a8c98'   # __Workflow state
 
-$SHARED_FIELD_DENYLIST = @{
+$FIELD_DENYLIST = @{
   $BLOB_FIELD_ID        = $true
   $LOCK_FIELD_ID        = $true
   $REVISION_FIELD_ID    = $true
   $WORKFLOW_STATE_FIELD = $true
 }
 
-# Capture every locally-stored shared field on the item, except denylisted IDs.
-# Mutates $regItem.sharedFields. Returns the count of fields added/updated.
+# Capture every non-empty shared-field value on the item, except denylisted IDs.
+# Captures cascaded defaults (ContainsStandardValue=true) too, so the runtime
+# does not need to walk the SV chain. Mutates $regItem.sharedFields. Returns
+# the count of fields added.
 function Enrich-AllShared($regItem, $scItem) {
     $added = 0
     foreach ($field in $scItem.Fields) {
         if (-not $field.Shared) { continue }
         $fid = $field.ID.Guid.ToString().ToLowerInvariant()
-        if ($SHARED_FIELD_DENYLIST.ContainsKey($fid)) { continue }
-        # Skip cascaded defaults; only keep values stored ON this item.
-        if ($field.ContainsStandardValue) { continue }
+        if ($FIELD_DENYLIST.ContainsKey($fid)) { continue }
         if ([string]::IsNullOrEmpty($field.Value)) { continue }
         $regItem.sharedFields[$fid] = $field.Value
         $added++
     }
     return $added
+}
+
+# Capture every non-empty unversioned-field value on the item for the given
+# language context, except denylisted IDs. Captures cascaded defaults too.
+# Returns a hashtable of field-id -> value (empty if nothing captured).
+function Get-AllUnversioned($scItem) {
+    $fields = @{}
+    foreach ($field in $scItem.Fields) {
+        if ($field.Shared) { continue }
+        if (-not $field.Unversioned) { continue }
+        $fid = $field.ID.Guid.ToString().ToLowerInvariant()
+        if ($FIELD_DENYLIST.ContainsKey($fid)) { continue }
+        if ([string]::IsNullOrEmpty($field.Value)) { continue }
+        $fields[$fid] = $field.Value
+    }
+    return $fields
+}
+
+# Capture every non-empty versioned-field value on the item for the given
+# language+version context, except denylisted IDs. Captures cascaded defaults
+# too. Returns a hashtable of field-id -> value (empty if nothing captured).
+function Get-AllVersioned($scItem) {
+    $fields = @{}
+    foreach ($field in $scItem.Fields) {
+        if ($field.Shared) { continue }
+        if ($field.Unversioned) { continue }
+        $fid = $field.ID.Guid.ToString().ToLowerInvariant()
+        if ($FIELD_DENYLIST.ContainsKey($fid)) { continue }
+        if ([string]::IsNullOrEmpty($field.Value)) { continue }
+        $fields[$fid] = $field.Value
+    }
+    return $fields
 }
 
 # ---------------------------------------------------------------------------
@@ -163,115 +196,95 @@ Write-Host "Reconstructing paths..."
 foreach ($item in $items) { $item.path = Get-ItemPath $item }
 
 # ---------------------------------------------------------------------------
-# Phase 2: Universal shared-field extraction
+# Phase 2: Universal field extraction (shared + unversioned + versioned)
 #
-# Iterate $items and, for each item resolvable in its database, capture all
-# locally-stored shared field values via Enrich-AllShared. Replaces the
-# previous Phase 2 (templates/sections/fields), Phase 4 (ComponentQuery),
-# and Phase 5a (rendering Placeholders/RCR/componentName) - all of which
-# were narrow allowlists.
+# For each item resolvable in its database, capture ALL non-empty field
+# values across all three field categories, for every language with versions,
+# for every version per language. Captures cascaded defaults too.
+#
+# Output shape per item:
+#   sharedFields:      { <field-guid>: "<value>", ... }
+#   unversionedFields: { <lang>: { <field-guid>: "<value>", ... }, ... }       (only when non-empty)
+#   versionedFields:   { <lang>: { <version>: { <field-guid>: "<value>", ... }, ... }, ... }  (only when non-empty)
+#
+# Subsumes the old Phase 3 (which only handled __Standard Values items, en/v1).
 # ---------------------------------------------------------------------------
 
 Write-Host ""
-Write-Host "Phase 2: Universal shared-field extraction..."
+Write-Host "Phase 2: Universal field extraction (shared + unversioned + versioned, all languages, all versions)..."
 
 $enrichedItems = 0
-$enrichedFields = 0
+$enrichedSharedFields = 0
+$enrichedUnversionedFields = 0
+$enrichedVersionedFields = 0
 $skipped = 0
 $batch = 0
 $total = $items.Count
 
 foreach ($regItem in $items) {
     $batch++
-    if ($batch % 1000 -eq 0) { Write-Host "    $batch / $total..." }
+    if ($batch % 500 -eq 0) { Write-Host "    $batch / $total..." }
     try {
         $db = [Sitecore.Data.Database]::GetDatabase($regItem.database)
+        if (-not $db) { $skipped++; continue }
+
+        # 1. Shared fields - read from the default context item.
         $scItem = $db.GetItem([Sitecore.Data.ID]::Parse($regItem.id))
         if (-not $scItem) { $skipped++; continue }
-        $added = Enrich-AllShared $regItem $scItem
-        if ($added -gt 0) { $enrichedItems++; $enrichedFields += $added }
-    } catch {
-        $skipped++
-        # Skip items that can't be looked up (e.g. IAR-only items not in DB)
-    }
-}
+        $sharedAdded = Enrich-AllShared $regItem $scItem
+        $enrichedSharedFields += $sharedAdded
 
-Write-Host "  Enriched $enrichedFields shared field values across $enrichedItems items ($skipped items skipped, IAR-only or DB-unreachable)"
+        # 2. Per-language unversioned + versioned extraction.
+        # scItem.Languages returns every language defined globally; filter to
+        # those with at least one version on THIS item to avoid spurious
+        # cascaded-only-from-SV rows on every language.
+        $unversionedByLang = @{}
+        $versionedByLang = @{}
 
-# ---------------------------------------------------------------------------
-# Phase 3: Versioned fields for __Standard Values items
-#
-# SV items carry template default field values. Prod Edge cascades these to
-# any item of the template that hasn't overridden the field; mockingbird
-# needs the same data to match prod. Without this, fields like
-# SearchBoxWithSuggestions.SearchButtonText ("Search" on prod) come back
-# as "" on mockingbird.
-#
-# Identification: name == "__Standard Values" (case-insensitive). SVs don't
-# share a template ID - each SV's own template IS the parent template it
-# provides defaults for. Don't filter on a template GUID.
-#
-# Filters (per dev spec):
-#   - skip shared fields (already captured in Phase 2)
-#   - skip empty values (keep the registry lean)
-#   - skip Sitecore system fields (names starting with __)
-#
-# Output shape (sibling of sharedFields, only emitted when non-empty):
-#   versionedFields: { en: { "1": { <field-guid>: "<value>" } } }
-# ---------------------------------------------------------------------------
+        foreach ($lang in $scItem.Languages) {
+            $langItem = $db.GetItem($scItem.ID, $lang)
+            if (-not $langItem) { continue }
+            if ($langItem.Versions.Count -eq 0) { continue }
 
-Write-Host ""
-Write-Host "Phase 3: Extracting versioned fields from __Standard Values items..."
+            $langName = $lang.Name
 
-$svItems = [System.Collections.ArrayList]::new()
-foreach ($item in $items) {
-    if ($item.name -and [string]::Equals($item.name, "__Standard Values", [System.StringComparison]::OrdinalIgnoreCase)) {
-        [void]$svItems.Add($item)
-    }
-}
-Write-Host "  Candidate SV items: $($svItems.Count)"
+            # Unversioned fields are per-language but not per-version; read
+            # them once per language from the latest version's context item.
+            $unvFields = Get-AllUnversioned $langItem
+            if ($unvFields.Count -gt 0) {
+                $unversionedByLang[$langName] = $unvFields
+                $enrichedUnversionedFields += $unvFields.Count
+            }
 
-$lang = [Sitecore.Globalization.Language]::Parse("en")
-$ver  = [Sitecore.Data.Version]::Parse("1")
-$svEnriched = 0
-$svTotalFields = 0
-$svBatch = 0
-
-foreach ($regItem in $svItems) {
-    $svBatch++
-    if ($svBatch % 100 -eq 0) { Write-Host "    $svBatch / $($svItems.Count)..." }
-
-    try {
-        $db = [Sitecore.Data.Database]::GetDatabase($regItem.database)
-        $scItem = $db.GetItem([Sitecore.Data.ID]::Parse($regItem.id), $lang, $ver)
-        if (-not $scItem) { continue }
-        if ($scItem.Versions.Count -eq 0) { continue }
-
-        $fields = @{}
-        foreach ($field in $scItem.Fields) {
-            if ($field.Shared) { continue }
-            if ([string]::IsNullOrEmpty($field.Value)) { continue }
-            if ($field.Name.StartsWith("__")) { continue }
-            $fieldIdStr = $field.ID.Guid.ToString().ToLowerInvariant()
-            $fields[$fieldIdStr] = $field.Value
-        }
-
-        if ($fields.Count -gt 0) {
-            $regItem.versionedFields = @{
-                "en" = @{
-                    "1" = $fields
+            # Versioned fields are per-language-per-version.
+            $versionedByVer = @{}
+            foreach ($v in $langItem.Versions.GetVersions()) {
+                $verItem = $db.GetItem($scItem.ID, $lang, $v.Version)
+                if (-not $verItem) { continue }
+                $verFields = Get-AllVersioned $verItem
+                if ($verFields.Count -gt 0) {
+                    $versionedByVer[$v.Version.Number.ToString()] = $verFields
+                    $enrichedVersionedFields += $verFields.Count
                 }
             }
-            $svEnriched++
-            $svTotalFields += $fields.Count
+            if ($versionedByVer.Count -gt 0) {
+                $versionedByLang[$langName] = $versionedByVer
+            }
+        }
+
+        if ($unversionedByLang.Count -gt 0) { $regItem.unversionedFields = $unversionedByLang }
+        if ($versionedByLang.Count -gt 0)   { $regItem.versionedFields   = $versionedByLang }
+
+        if ($sharedAdded -gt 0 -or $unversionedByLang.Count -gt 0 -or $versionedByLang.Count -gt 0) {
+            $enrichedItems++
         }
     } catch {
-        # Skip SVs that can't be resolved in the DB (protobuf-only items with no DB entry)
+        $skipped++
+        Write-Host "    SKIP $($regItem.id): $($_.Exception.Message)" -ForegroundColor DarkGray
     }
 }
 
-Write-Host "  Enriched $svEnriched of $($svItems.Count) SV items"
-Write-Host "  Total versioned field values: $svTotalFields"
+Write-Host "  Enriched $enrichedItems items: $enrichedSharedFields shared, $enrichedUnversionedFields unversioned, $enrichedVersionedFields versioned field values ($skipped items skipped, IAR-only or DB-unreachable)"
 
 # ---------------------------------------------------------------------------
 # Phase 5 (0.4.0.14) - LayoutService emission contract metadata
@@ -393,7 +406,7 @@ Write-Host "  Enriched $p5RcrEnriched RCR Settings items (UseContextItem + ItemS
 Write-Host "Phase 5 complete."
 
 # ---------------------------------------------------------------------------
-# Acceptance spot-check (per dev spec)
+# Acceptance spot-checks
 # ---------------------------------------------------------------------------
 
 $searchBoxSvId           = "4f8772a8-6a97-4fad-a88a-63e85f070cee"
@@ -403,11 +416,11 @@ $searchBoxSv = $byId[$searchBoxSvId]
 if (-not $searchBoxSv) {
     Write-Host "  WARN: Search Box SV $searchBoxSvId not found in registry items!" -ForegroundColor Yellow
 } elseif (-not $searchBoxSv.ContainsKey("versionedFields")) {
-    Write-Host "  WARN: Search Box SV has no versionedFields key (Phase 3 missed it)" -ForegroundColor Yellow
+    Write-Host "  WARN: Search Box SV has no versionedFields key" -ForegroundColor Yellow
 } else {
     $val = $searchBoxSv.versionedFields["en"]["1"][$searchButtonTextFieldId]
     if ($val -eq "Search") {
-        Write-Host "  Phase 3 spot-check PASS: Search Box SV.SearchButtonText = 'Search'" -ForegroundColor Green
+        Write-Host "  Spot-check PASS: Search Box SV.SearchButtonText = 'Search'" -ForegroundColor Green
     } else {
         Write-Host "  WARN: Search Box SV.SearchButtonText = '$val' (expected 'Search')" -ForegroundColor Yellow
     }
@@ -420,10 +433,47 @@ $renderingsWithParamsTemplate = ($items | Where-Object {
     $_.sharedFields.ContainsKey($paramsTemplateFieldId)
 }).Count
 if ($renderingsWithParamsTemplate -eq 0) {
-    Write-Host "  WARN: Phase 2 produced 0 ParametersTemplate enrichments on Json Renderings - the universal pass missed something" -ForegroundColor Yellow
+    Write-Host "  WARN: 0 Json Renderings carry ParametersTemplate - the universal pass missed something" -ForegroundColor Yellow
 } else {
-    Write-Host "  Phase 2 spot-check: $renderingsWithParamsTemplate Json Rendering items carry ParametersTemplate" -ForegroundColor Green
+    Write-Host "  Spot-check PASS: $renderingsWithParamsTemplate Json Rendering items carry ParametersTemplate" -ForegroundColor Green
 }
+
+# v5.0 spot-check: Templates field-definition item under _Base Tenant should
+# now carry a Source value (cascaded default that v4.0 dropped via the
+# ContainsStandardValue filter). If this passes, the SXA Tenant Configuration
+# Droptree pickers will render correctly downstream.
+$templatesFieldId   = "9c596379-f8d4-45d1-a064-cdf1ede2e7c7"
+$sourceFieldId      = "1eb8ae32-e190-44a6-968d-ed904c794ebf"
+$templatesField     = $byId[$templatesFieldId]
+if (-not $templatesField) {
+    Write-Host "  NOTE: _Base Tenant.Configuration.Templates field-definition not in registry (SXA may not be installed on this CM)" -ForegroundColor DarkGray
+} elseif ($templatesField.sharedFields.ContainsKey($sourceFieldId)) {
+    $src = $templatesField.sharedFields[$sourceFieldId]
+    Write-Host "  v5.0 spot-check PASS: Templates field-definition has Source = '$src'" -ForegroundColor Green
+} else {
+    Write-Host "  WARN: Templates field-definition still has no Source after v5.0 - investigate" -ForegroundColor Yellow
+}
+
+# Aggregate distinct-field-IDs metrics (registry growth indicator).
+$distinctShared = @{}
+$distinctUnversioned = @{}
+$distinctVersioned = @{}
+foreach ($it in $items) {
+    if ($it.sharedFields) { foreach ($k in $it.sharedFields.Keys) { $distinctShared[$k] = $true } }
+    if ($it.unversionedFields) {
+        foreach ($lang in $it.unversionedFields.Keys) {
+            foreach ($k in $it.unversionedFields[$lang].Keys) { $distinctUnversioned[$k] = $true }
+        }
+    }
+    if ($it.versionedFields) {
+        foreach ($lang in $it.versionedFields.Keys) {
+            foreach ($ver in $it.versionedFields[$lang].Keys) {
+                foreach ($k in $it.versionedFields[$lang][$ver].Keys) { $distinctVersioned[$k] = $true }
+            }
+        }
+    }
+}
+Write-Host "  Distinct field IDs: $($distinctShared.Count) shared, $($distinctUnversioned.Count) unversioned, $($distinctVersioned.Count) versioned"
 
 # ---------------------------------------------------------------------------
 # Output
@@ -431,11 +481,12 @@ if ($renderingsWithParamsTemplate -eq 0) {
 
 $output = @{
     # `version` is the registry's extraction-generation marker, not a JSON-schema
-    # version. Bump on substantive changes to what gets captured (e.g. v4.0 added
-    # the universal Enrich-AllShared pass). Code reading this registry does not
-    # version-gate; the field is for human/operator clarity when correlating
-    # bake artifacts.
-    version     = "4.0"
+    # version. Bump on substantive changes to what gets captured:
+    #   v4.0 - universal shared-field Enrich-AllShared pass (skipped cascaded)
+    #   v5.0 - drops ContainsStandardValue filter; adds per-item unversioned +
+    #          versioned extraction across all languages and versions; drops
+    #          the SV-only specialisation in favour of universal per-item walk.
+    version     = "5.0"
     source      = $env:COMPUTERNAME
     extractedAt = (Get-Date -Format "o")
     items       = $items

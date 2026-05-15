@@ -178,14 +178,22 @@ export interface RegistryItem {
   /** Shared field values: field definition GUID → value. */
   sharedFields: Record<string, string>;
   /**
+   * Per-language unversioned field values keyed by language → field definition
+   * GUID → value. Registry v5.0 captures these for every item, every language.
+   * Carries data like per-language `Title`, `__Display name` overrides.
+   *
+   * Omitted when the item has no non-empty unversioned values.
+   */
+  unversionedFields?: Record<string, Record<string, string>>;
+  /**
    * Versioned field values keyed by language → version → field definition
    * GUID → value. Registry v3.0 adds these to `__Standard Values` items so
    * template-default field values (e.g. SXA's Search Box template default
    * `SearchButtonText = "Search"`) can cascade to any item of that template
    * whose own serialization suppresses values equal to the SV default.
+   * Registry v5.0 captures these for every item, every language + version.
    *
-   * Omitted on items that carry no versioned defaults (kept lean — only
-   * ~66 of 781 SV items actually publish non-empty defaults).
+   * Omitted when the item has no non-empty versioned values.
    */
   versionedFields?: Record<string, Record<string, Record<string, string>>>;
 }
