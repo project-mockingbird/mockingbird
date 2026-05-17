@@ -24,6 +24,7 @@ import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
 import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
+import { CONFIG_QUERY_KEY } from '@/hooks/useConfigQuery';
 import { useProjectsStore } from '@/state/projectsStore';
 import { ProjectsStoreHydrator } from '@/state/projectsStoreHydrator';
 import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
@@ -98,7 +99,7 @@ function ContentTreePage() {
             {
               onSuccess: () => {
                 touchLastOpened(project.hash);
-                qc.invalidateQueries({ queryKey: ['config', 'mockingbird'] });
+                qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
               },
             },
           );

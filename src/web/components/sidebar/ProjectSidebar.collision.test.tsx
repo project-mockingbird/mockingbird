@@ -126,4 +126,59 @@ describe('<ProjectSidebar> collision dialog', () => {
     // The /api/projects/open POST was NOT fired
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('clicking Switch to existing opens the colliding project via POST /api/projects/open', async () => {
+    const user = userEvent.setup();
+
+    const currentLayers = [
+      { sitecoreJsonPath: '/workspaces/p/authoring/sitecore.json', name: 'authoring', color: '#22c55e' },
+      { sitecoreJsonPath: '/workspaces/p/content/sitecore.json', name: 'content', color: '#3b82f6' },
+    ];
+    const currentHash = await computeProjectHash(currentLayers.map((l) => l.sitecoreJsonPath));
+    const collidingLayers = [
+      ...currentLayers,
+      { sitecoreJsonPath: '/workspaces/p/extra/sitecore.json', name: 'extra', color: '#a855f7' },
+    ];
+    const collidingHash = await computeProjectHash(collidingLayers.map((l) => l.sitecoreJsonPath));
+
+    useProjectsStore.getState().setAll({
+      [currentHash]: {
+        hash: currentHash, name: 'current', layers: currentLayers, createdAt: 1, lastOpenedAt: 2,
+      },
+      [collidingHash]: {
+        hash: collidingHash, name: 'existing-collider', layers: collidingLayers, createdAt: 3, lastOpenedAt: 4,
+      },
+    });
+
+    renderWithClient(
+      <ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />,
+      { lastOpenedHash: currentHash },
+    );
+
+    // Trigger the add-layer flow to surface the collision dialog.
+    // detectCollision is pure client-side (hash comparison), so no fetch fires here.
+    await user.click(screen.getByRole('button', { name: /add layer/i }));
+    await user.click(screen.getByText('pick-extra'));
+
+    // Wait for collision dialog.
+    expect(await screen.findByText(/existing-collider/i)).toBeInTheDocument();
+
+    // Set up fetch response for the upcoming /api/projects/open call.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ state: 'ready', layers: collidingLayers }),
+    });
+
+    // Click the Switch button.
+    await user.click(screen.getByRole('button', { name: /switch to existing/i }));
+
+    // useOpenProject fires POST /api/projects/open with the colliding project's layers.
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/projects/open');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    expect(body.layers).toEqual(collidingLayers);
+    expect(body.projectName).toBe('existing-collider');
+  });
 });

@@ -8,7 +8,6 @@ import {
   mdiLayers,
   mdiPlus,
 } from '@mdi/js';
-import { useQueryClient } from '@tanstack/react-query';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { EditableLayerName } from './EditableLayerName';
@@ -17,6 +16,7 @@ import { LayerCollisionDialog } from './LayerCollisionDialog';
 import { useProjectsStore, type SavedProjectLayer } from '@/state/projectsStore';
 import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 import { useReopenWithLayers } from '@/hooks/useReopenWithLayers';
+import { useOpenProject } from '@/hooks/useOpenProject';
 import { deriveName } from '@/components/open-project/layer-name';
 import { assignLayerColor } from '@/components/open-project/layer-colors';
 import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
@@ -74,8 +74,8 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
     collidingHash: string;
   } | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
-  const qc = useQueryClient();
   const reopen = useReopenWithLayers();
+  const openProject = useOpenProject();
   const discardWorkspaceGate = useConfirmDiscardWorkspace();
 
   const lastOpenedHash = useCurrentProjectHash();
@@ -332,11 +332,14 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         collidingProjectName={collidingProjectName}
         onSwitch={() => {
           if (!pendingMutation) return;
-          qc.invalidateQueries({ queryKey: ['config', 'mockingbird'] });
+          const collidingProject = projects[pendingMutation.collidingHash];
           setCollidingProjectName(null);
           setPendingMutation(null);
-          // NoProjectState's auto-restore + hydrator will open the existing
-          // project on the next status tick.
+          if (!collidingProject) return;
+          openProject.mutate({
+            layers: collidingProject.layers,
+            projectName: collidingProject.name,
+          });
         }}
         onCancel={() => {
           setCollidingProjectName(null);
