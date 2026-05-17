@@ -73,11 +73,11 @@ describeIfReady('SPE cmdlets end-to-end', () => {
     await engine.close();
   });
 
-  async function runScript(script: string): Promise<Frame[]> {
+  async function runScript(script: string, opts: { applyMode?: boolean } = {}): Promise<Frame[]> {
     const session = await manager.create();
     const frames: Frame[] = [];
     const sub = manager.subscribe(session.sessionId, (f) => frames.push(f))!;
-    const exec = manager.execute(session.sessionId, { script, applyMode: false });
+    const exec = manager.execute(session.sessionId, { script, applyMode: opts.applyMode ?? false });
     if ('error' in exec) throw new Error(`execute: ${exec.error}`);
     await new Promise<void>((res, rej) => {
       const t = setTimeout(() => rej(new Error('timeout waiting for runComplete')), 15_000);
@@ -134,5 +134,96 @@ describeIfReady('SPE cmdlets end-to-end', () => {
   it('Publish-Item throws a not-supported error', async () => {
     const frames = await runScript(`try { Publish-Item } catch { Write-Output "ERR: $($_.Exception.Message)" }`);
     expect(streamText(frames)).toMatch(/not supported/i);
+  });
+
+  // -----------------------------------------------------------------
+  // Backlog #66: SPE-style edit-context writes
+  // -----------------------------------------------------------------
+
+  // The Standard Values item is the edit target throughout: it exists in the
+  // fixture, owns a real Title shared field that's safe to mutate, and its
+  // path is stable across test runs (the parent tree's IDs are pinned).
+  const SV_PATH = '/sitecore/templates/Project/MyProject/MyTemplate/__Standard Values';
+
+  it('edit-context dry-run emits a single diff frame for buffered fields', async () => {
+    const frames = await runScript(`
+      $item = Get-Item -Path '${SV_PATH}'
+      $item.Editing.BeginEdit()
+      $item['Title'] = 'Updated via edit-context'
+      $item.Editing.EndEdit()
+    `);
+    const diffs = frames.filter(f => f.type === 'diff');
+    expect(diffs).toHaveLength(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((diffs[0] as any).operation).toContain('EndEdit on');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((diffs[0] as any).operation).toContain(SV_PATH);
+  });
+
+  it('edit-context apply commits the field to disk and a re-fetch sees the new value', async () => {
+    const script = `
+      $item = Get-Item -Path '${SV_PATH}'
+      $item.Editing.BeginEdit()
+      $item['Title'] = 'Applied via edit-context'
+      $item.Editing.EndEdit()
+      $after = Get-Item -Path '${SV_PATH}'
+      Write-Output "AFTER: $($after['Title'])"
+    `;
+    const frames = await runScript(script, { applyMode: true });
+    expect(streamText(frames)).toContain('AFTER: Applied via edit-context');
+  });
+
+  it('edit-context assignment without BeginEdit throws InvalidOperationException', async () => {
+    const frames = await runScript(`
+      $item = Get-Item -Path '${SV_PATH}'
+      try { $item['Title'] = 'Should-Throw'; Write-Output 'NO-THROW' }
+      catch { Write-Output "CAUGHT: $($_.Exception.Message)" }
+    `);
+    expect(streamText(frames)).toMatch(/CAUGHT:.*BeginEdit/);
+  });
+
+  it('edit-context CancelEdit drops pending changes and rolls back the local cache', async () => {
+    const frames = await runScript(`
+      $item = Get-Item -Path '${SV_PATH}'
+      $original = $item['Title']
+      $item.Editing.BeginEdit()
+      $item['Title'] = 'Should-Not-Land'
+      $item.Editing.CancelEdit()
+      Write-Output "ORIGINAL: $original"
+      Write-Output "AFTER-CANCEL: $($item['Title'])"
+    `);
+    const out = streamText(frames);
+    expect(out).not.toContain('Should-Not-Land');
+    expect(out).toMatch(/ORIGINAL: (.*)\r?\nAFTER-CANCEL: \1/);
+    expect(frames.filter(f => f.type === 'diff')).toHaveLength(0);
+  });
+
+  it('edit-context nested BeginEdit only commits at the outermost EndEdit', async () => {
+    const frames = await runScript(`
+      $item = Get-Item -Path '${SV_PATH}'
+      $item.Editing.BeginEdit()
+      $item.Editing.BeginEdit()
+      $item['Title'] = 'Nested-Edit-Test'
+      $item.Editing.EndEdit()
+      Write-Output "AFTER-INNER: $($item.Editing.IsEditing)"
+      $item.Editing.EndEdit()
+      Write-Output "AFTER-OUTER: $($item.Editing.IsEditing)"
+    `);
+    const diffs = frames.filter(f => f.type === 'diff');
+    expect(diffs).toHaveLength(1);
+    const out = streamText(frames);
+    expect(out).toContain('AFTER-INNER: True');
+    expect(out).toContain('AFTER-OUTER: False');
+  });
+
+  it('edit-context buffers multiple field writes into one PUT', async () => {
+    const frames = await runScript(`
+      $item = Get-Item -Path '${SV_PATH}'
+      $item.Editing.BeginEdit()
+      $item['Title'] = 'New Title'
+      $item.Editing.EndEdit()
+    `);
+    const diffs = frames.filter(f => f.type === 'diff');
+    expect(diffs).toHaveLength(1);
   });
 }, 60_000);
