@@ -4,6 +4,7 @@ import type { SavedProject } from '@/state/projectsStore';
 export interface MockingbirdConfig {
   version: 1;
   projects: Record<string, SavedProject>;
+  lastOpenedHash?: string;
 }
 
 const CONFIG_QUERY_KEY = ['config', 'mockingbird'] as const;
