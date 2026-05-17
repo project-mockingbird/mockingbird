@@ -8,7 +8,6 @@ import { SettingsProvider } from '@/settings/SettingsProvider';
 import { ProjectSidebar } from './ProjectSidebar';
 import { resetLayerState } from '@/state/layerState';
 import { useProjectsStore, resetProjectsStore } from '@/state/projectsStore';
-import { setSetting } from '@/settings/store';
 import { computeProjectHash } from '@/state/project-hash';
 import { workspaceStore } from '@/state/workspaceStore';
 
@@ -51,8 +50,15 @@ const localStorageStub = (() => {
 })();
 Object.defineProperty(window, 'localStorage', { value: localStorageStub });
 
-function renderWithClient(ui: React.ReactElement) {
+function renderWithClient(ui: React.ReactElement, clientOpts?: { lastOpenedHash?: string }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (clientOpts !== undefined) {
+    qc.setQueryData(['config', 'mockingbird'], {
+      version: 1,
+      projects: {},
+      ...(clientOpts.lastOpenedHash !== undefined ? { lastOpenedHash: clientOpts.lastOpenedHash } : {}),
+    });
+  }
   return render(
     <SettingsProvider>
       <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
@@ -105,9 +111,10 @@ describe('<ProjectSidebar> collision dialog', () => {
         hash: collidingHash, name: 'existing-collider', layers: collidingLayers, createdAt: 3, lastOpenedAt: 4,
       },
     });
-    setSetting('session.lastOpenedHash', currentHash);
-
-    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(
+      <ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />,
+      { lastOpenedHash: currentHash },
+    );
 
     // Open the picker via the Add layer button. The mock renders a stub picker
     // with a button that calls onConfirm directly with the colliding path.

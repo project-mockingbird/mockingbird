@@ -18,17 +18,25 @@ vi.stubGlobal('localStorage', {
   clear: () => { _mem = {}; },
 });
 
-function makeClient() {
-  return new QueryClient({
+function makeClient(initial?: { lastOpenedHash?: string }) {
+  const qc = new QueryClient({
     defaultOptions: {
       queries: { retry: false, refetchOnWindowFocus: false },
       mutations: { retry: false },
     },
   });
+  if (initial !== undefined) {
+    qc.setQueryData(['config', 'mockingbird'], {
+      version: 1,
+      projects: {},
+      ...(initial.lastOpenedHash !== undefined ? { lastOpenedHash: initial.lastOpenedHash } : {}),
+    });
+  }
+  return qc;
 }
 
-function renderWithProviders(ui: React.ReactNode) {
-  const qc = makeClient();
+function renderWithProviders(ui: React.ReactNode, clientOpts?: { lastOpenedHash?: string }) {
+  const qc = makeClient(clientOpts);
   return render(
     <SettingsProvider>
       <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
@@ -92,9 +100,8 @@ describe('NoProjectState', () => {
       hydrated: true,
     });
     store.setSetting('session.autoRestore', true);
-    store.setSetting('session.lastOpenedHash', 'h1');
 
-    renderWithProviders(<NoProjectState />);
+    renderWithProviders(<NoProjectState />, { lastOpenedHash: 'h1' });
     await waitFor(() => expect(openCalls.length).toBeGreaterThan(0));
     expect(openCalls[0]).toMatchObject({ projectName: 'demo' });
   });
@@ -123,9 +130,8 @@ describe('NoProjectState', () => {
       hydrated: true,
     });
     store.setSetting('session.autoRestore', false);
-    store.setSetting('session.lastOpenedHash', 'h1');
 
-    renderWithProviders(<NoProjectState />);
+    renderWithProviders(<NoProjectState />, { lastOpenedHash: 'h1' });
     // Give effects a chance to fire.
     await new Promise((r) => setTimeout(r, 20));
     expect(openCalls).toHaveLength(0);
