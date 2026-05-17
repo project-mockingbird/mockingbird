@@ -16,6 +16,7 @@ import { renameItem } from '../../engine/rename-item.js';
 import { buildRegistryItemDetail } from '../items-from-registry.js';
 import { serializeItem } from '../../engine/serializer.js';
 import { applyFieldEdit, readCurrentFieldValue } from '../../engine/mutate-fields.js';
+import { buildSchemaFieldMaps, resolveFieldKey } from '../../engine/plan-update-fields.js';
 import { unifiedDiff } from '../../engine/unified-diff.js';
 import type { MutationPlan } from '../../engine/mutation-plan.js';
 import { toHostPath } from '../host-path.js';
@@ -349,31 +350,26 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     }
     // The plan was computed on a clone; replay the field edits on the live item
     // so the in-memory tree matches the on-disk state we are about to write.
+    // Name resolution (e.g. "Title" -> canonical GUID) goes through the shared
+    // helpers so both the dry-run plan and the live-tree replay agree on which
+    // field is being mutated.
     const schema = getTemplateSchema(node.item.template, engine);
-    const scopeByFieldId = new Map<string, 'shared' | 'unversioned' | 'versioned'>();
-    const nameByFieldId = new Map<string, string>();
-    for (const section of schema.sections) {
-      for (const field of section.fields) {
-        scopeByFieldId.set(field.id.toLowerCase(),
-          field.unversioned ? 'unversioned' : field.shared ? 'shared' : 'versioned');
-        nameByFieldId.set(field.id.toLowerCase(), field.name);
-      }
-    }
+    const maps = buildSchemaFieldMaps(schema);
     // Capture pre-mutation values so we can revert in-memory if applyPlan
     // throws. Without this, a partial-disk-write failure leaves the live
     // tree showing values that never landed on disk.
     const previousValues: Record<string, string | undefined> = {};
     for (const rawId of Object.keys(body.fields)) {
-      const lower = rawId.toLowerCase();
-      previousValues[lower] = readCurrentFieldValue(node.item, lower, language, version);
+      const resolved = resolveFieldKey(maps, rawId);
+      previousValues[resolved] = readCurrentFieldValue(node.item, resolved, language, version);
     }
     for (const [rawId, value] of Object.entries(body.fields)) {
-      const lower = rawId.toLowerCase();
+      const resolved = resolveFieldKey(maps, rawId);
       // Pass the schema-resolved name as hint so applyFieldEdit's existing-field
       // heal-empty-Hint branch fires. Without this, the live tree's in-memory
       // hint stays empty even though the on-disk plan wrote the healed value.
-      applyFieldEdit(node.item, lower, value, language, version,
-        scopeByFieldId.get(lower), nameByFieldId.get(lower) ?? '');
+      applyFieldEdit(node.item, resolved, value, language, version,
+        maps.scopeByFieldId.get(resolved), maps.nameByFieldId.get(resolved) ?? '');
     }
     try {
       await engine.applyPlan(plan);
@@ -384,10 +380,10 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       // of the correct scope array, which is more invasive than the
       // disk-vs-memory mismatch we are guarding against here.
       for (const rawId of Object.keys(body.fields)) {
-        const lower = rawId.toLowerCase();
-        const old = previousValues[lower];
+        const resolved = resolveFieldKey(maps, rawId);
+        const old = previousValues[resolved];
         if (old !== undefined) {
-          applyFieldEdit(node.item, lower, old, language, version, scopeByFieldId.get(lower), nameByFieldId.get(lower) ?? '');
+          applyFieldEdit(node.item, resolved, old, language, version, maps.scopeByFieldId.get(resolved), maps.nameByFieldId.get(resolved) ?? '');
         }
       }
       throw err;
