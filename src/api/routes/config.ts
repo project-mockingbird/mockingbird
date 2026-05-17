@@ -6,6 +6,7 @@ function isValidConfigBody(body: unknown): body is MockingbirdConfig {
   const b = body as Record<string, unknown>;
   if (b.version !== 1) return false;
   if (!b.projects || typeof b.projects !== 'object' || Array.isArray(b.projects)) return false;
+  if (b.lastOpenedHash !== undefined && typeof b.lastOpenedHash !== 'string') return false;
   // Light shape check on each project entry. Hard errors here surface bugs;
   // we don't enforce every nested field strictly because the migration path
   // ferries data through verbatim.

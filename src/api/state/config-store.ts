@@ -18,6 +18,9 @@ export interface SavedProject {
 export interface MockingbirdConfig {
   version: 1;
   projects: Record<string, SavedProject>;
+  /** Hash of the last-opened project. Server uses this to replay openWorkspace
+   *  on boot for headless consumers. Cleared on POST /api/projects/close. */
+  lastOpenedHash?: string;
 }
 
 /**
@@ -37,10 +40,14 @@ export async function readConfig(filePath: string): Promise<MockingbirdConfig> {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return { version: 1, projects: {} };
     if (parsed.version !== 1) return { version: 1, projects: {} };
-    return {
+    const out: MockingbirdConfig = {
       version: 1,
       projects: parsed.projects && typeof parsed.projects === 'object' ? parsed.projects : {},
     };
+    if (typeof parsed.lastOpenedHash === 'string') {
+      out.lastOpenedHash = parsed.lastOpenedHash;
+    }
+    return out;
   } catch {
     return { version: 1, projects: {} };
   }
