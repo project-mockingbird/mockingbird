@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@/lib/icon';
 import { mdiFolderOpen } from '@mdi/js';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,7 @@ import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore, type SavedProject } from '@/state/projectsStore';
 import { useSettings } from '@/settings/SettingsProvider';
+import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 
 interface NoProjectStateProps {
   onOpenProject?: () => void;
@@ -22,8 +24,9 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  const { settings, setSetting } = useSettings();
-  const lastOpenedHash = settings['session.lastOpenedHash'];
+  const { settings } = useSettings();
+  const qc = useQueryClient();
+  const lastOpenedHash = useCurrentProjectHash();
   const autoRestore = settings['session.autoRestore'];
 
   const hydrated = useProjectsStore((s) => s.hydrated);
@@ -50,13 +53,13 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
       {
         onSuccess: () => {
           touchLastOpened(project.hash);
-          setSetting('session.lastOpenedHash', project.hash);
+          qc.invalidateQueries({ queryKey: ['config', 'mockingbird'] });
         },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not restore last project.'),
       },
     );
-  }, [hydrated, autoRestore, lastOpenedHash, openProject, setSetting, touchLastOpened]);
+  }, [hydrated, autoRestore, lastOpenedHash, openProject, qc, touchLastOpened]);
 
   const handleOpenSaved = (project: SavedProject) => {
     setRestoreError(null);
@@ -66,7 +69,7 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
       {
         onSuccess: () => {
           touchLastOpened(project.hash);
-          setSetting('session.lastOpenedHash', project.hash);
+          qc.invalidateQueries({ queryKey: ['config', 'mockingbird'] });
         },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not open project.'),

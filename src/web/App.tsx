@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
 import { Header } from '@/components/layout/Header';
@@ -21,6 +21,7 @@ import { CheckoutDialog } from '@/components/package/CheckoutDialog';
 import { ProjectSidebar } from '@/components/sidebar/ProjectSidebar';
 import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
 import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
+import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore } from '@/state/projectsStore';
@@ -76,9 +77,10 @@ function ContentTreePage() {
   const { data: status } = useEngineStatus();
   const [chooserOpen, setChooserOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const qc = useQueryClient();
   const close = useCloseProject();
   const openProject = useOpenProject();
-  const currentProjectHash = settings['session.lastOpenedHash'];
+  const currentProjectHash = useCurrentProjectHash();
   const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
   const discardGate = useConfirmDiscardWorkspace();
 
@@ -96,7 +98,7 @@ function ContentTreePage() {
             {
               onSuccess: () => {
                 touchLastOpened(project.hash);
-                setSetting('session.lastOpenedHash', project.hash);
+                qc.invalidateQueries({ queryKey: ['config', 'mockingbird'] });
               },
             },
           );

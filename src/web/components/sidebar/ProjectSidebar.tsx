@@ -8,14 +8,14 @@ import {
   mdiLayers,
   mdiPlus,
 } from '@mdi/js';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLayerState } from '@/state/layerState';
 import { LayerRow } from './LayerRow';
 import { EditableLayerName } from './EditableLayerName';
 import { LayerSourcePicker } from './LayerSourcePicker';
 import { LayerCollisionDialog } from './LayerCollisionDialog';
 import { useProjectsStore, type SavedProjectLayer } from '@/state/projectsStore';
-import { useSettings } from '@/settings/SettingsProvider';
-import { setSetting } from '@/settings/store';
+import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 import { useReopenWithLayers } from '@/hooks/useReopenWithLayers';
 import { deriveName } from '@/components/open-project/layer-name';
 import { assignLayerColor } from '@/components/open-project/layer-colors';
@@ -74,11 +74,11 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
     collidingHash: string;
   } | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const qc = useQueryClient();
   const reopen = useReopenWithLayers();
   const discardWorkspaceGate = useConfirmDiscardWorkspace();
 
-  const { settings } = useSettings();
-  const lastOpenedHash = settings['session.lastOpenedHash'];
+  const lastOpenedHash = useCurrentProjectHash();
   const projects = useProjectsStore((s) => s.projects);
   const renameProject = useProjectsStore((s) => s.rename);
 
@@ -332,7 +332,7 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         collidingProjectName={collidingProjectName}
         onSwitch={() => {
           if (!pendingMutation) return;
-          setSetting('session.lastOpenedHash', pendingMutation.collidingHash);
+          qc.invalidateQueries({ queryKey: ['config', 'mockingbird'] });
           setCollidingProjectName(null);
           setPendingMutation(null);
           // NoProjectState's auto-restore + hydrator will open the existing
