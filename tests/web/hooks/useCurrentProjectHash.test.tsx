@@ -56,4 +56,11 @@ describe('useCurrentProjectHash', () => {
     const { result } = renderHook(() => useCurrentProjectHash(), { wrapper: wrapper(client) });
     await waitFor(() => expect(result.current).toBeNull());
   });
+
+  it('returns null when the config query errors', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('', { status: 500 }))));
+    const { result } = renderHook(() => useCurrentProjectHash(), { wrapper: wrapper(client) });
+    await waitFor(() => expect(result.current).toBeNull());
+  });
 });
