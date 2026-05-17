@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { resolve, normalize, sep } from 'path';
+import { resolve } from 'path';
+import { resolveWorkspacePath } from '../state/workspace-path.js';
 import type { Engine } from '../../engine/index.js';
 import { computeProjectHash } from '../project-hash.js';
 import { readConfig, writeConfig, resolveConfigPath } from '../state/config-store.js';
@@ -23,21 +24,6 @@ export function layersWithEffectiveCount(
     result.push({ name: 'ootb', effectiveCount: statsByName.get('ootb')! });
   }
   return result;
-}
-
-/**
- * Resolves a workspace-relative path to an absolute path inside the workspace
- * root, rejecting any escape attempt. Returns null on invalid input or escape.
- * Mirrors the path-jail logic from src/api/routes/fs.ts.
- */
-function resolveWorkspacePath(workspaceRoot: string, requested: string): string | null {
-  if (typeof requested !== 'string') return null;
-  if (!requested.startsWith('/')) return null;
-  const candidate = resolve(workspaceRoot, '.' + requested);
-  const normalized = normalize(candidate);
-  const rootWithSep = workspaceRoot.endsWith(sep) ? workspaceRoot : workspaceRoot + sep;
-  if (normalized !== workspaceRoot && !normalized.startsWith(rootWithSep)) return null;
-  return normalized;
 }
 
 export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): void {

@@ -8,7 +8,8 @@ import fastifyStatic from '@fastify/static';
 import { multistream } from 'pino';
 import { Engine } from '../engine/index.js';
 import { ensureWorkspaceLayout } from '../engine/workspace-bootstrap.js';
-import { ensureConfigExists, resolveConfigPath } from './state/config-store.js';
+import { ensureConfigExists, readConfig, resolveConfigPath } from './state/config-store.js';
+import { resolveWorkspacePath } from './state/workspace-path.js';
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
 import { registerReadinessGate } from './hooks/readiness-gate.js';
@@ -186,6 +187,48 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   app.addHook('onClose', async () => {
     await speManager.disposeAll();
   });
+
+  // Boot-time replay: if no rootDir was provided (i.e., SCS_SITECORE_JSON is
+  // unset) and config.mockingbird has a lastOpenedHash matching a saved
+  // project, replay the open so headless consumers (rendering hosts hitting
+  // /api/graphql) do not need a human to visit the web UI first.
+  if (!opts.rootDir) {
+    try {
+      const config = await readConfig(resolveConfigPath());
+      const hash = config.lastOpenedHash;
+      if (hash) {
+        const project = config.projects[hash];
+        if (project) {
+          const wsRoot = resolve(
+            process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces',
+          );
+          const layers = [];
+          let bad = false;
+          for (const l of project.layers) {
+            const abs = resolveWorkspacePath(wsRoot, l.sitecoreJsonPath);
+            if (abs === null) { bad = true; break; }
+            layers.push({ sitecoreJsonPath: abs, name: l.name, color: l.color });
+          }
+          if (bad) {
+            app.log.warn(`[boot-replay] project "${project.name}" has layer paths that escape the workspace; skipping`);
+          } else {
+            try {
+              await engine.openWorkspace(layers, { projectName: project.name, lazy: true });
+              app.extendMockingbirdSchema?.();
+              app.log.info(`[boot-replay] restored project "${project.name}" (${hash.slice(0, 8)})`);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              app.log.warn(`[boot-replay] failed to restore "${project.name}": ${message}`);
+            }
+          }
+        } else {
+          app.log.warn(`[boot-replay] stale lastOpenedHash "${hash.slice(0, 8)}" - no matching project; continuing in no-project mode`);
+        }
+      }
+    } catch (err) {
+      app.log.warn({ err }, '[boot-replay] config read failed; continuing in no-project mode');
+    }
+  }
 
   // Serve static Web UI if built
   const __apiDir = fileURLToPath(new URL('.', import.meta.url));
