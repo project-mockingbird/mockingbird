@@ -20,6 +20,12 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3333',
         changeOrigin: true,
+        // ws:true forwards WebSocket upgrades for /api/spe/sessions/:id/stream
+        // (the SPE PowerShell ISE's server-push channel). Without this, the
+        // dev server proxies the upgrade request as regular HTTP and the
+        // IsePage sits forever in 'connecting...'. The prod image is unaffected
+        // because fastify serves the web bundle directly on 3333.
+        ws: true,
       },
       '/graphiql': {
         target: 'http://localhost:3333',
