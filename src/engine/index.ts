@@ -1045,10 +1045,24 @@ export class Engine {
    * watcher is disabled in multi-layer mode (re-open to pick up changes);
    * the engine cache also does not write in multi-layer mode for the same
    * reason.
+   *
+   * Pass `options.lazy = true` (single-layer only) to return immediately after
+   * kicking off background indexing without waiting for readiness. In that
+   * mode itemProvenance and layerStats remain empty until re-opened without
+   * the flag.
    */
   async openWorkspace(
     layers: LayerSpec[],
-    options?: { projectName?: string; lazy?: boolean },
+    options?: {
+      projectName?: string;
+      /** When true, returns after startInit kicks off background indexing -
+       *  does NOT await readiness.ready(). Single-layer only; multi-layer
+       *  silently ignores. Note: itemProvenance and layerStats stay empty
+       *  after a lazy open until the workspace is re-opened without the flag.
+       *  Intended for boot-time replay paths where the caller does not need
+       *  provenance. */
+      lazy?: boolean;
+    },
   ): Promise<void> {
     // Reject 'ootb' as a user layer name (case-insensitive). The sentinel is
     // reserved for the registry substrate in provenance shapes. Validated
@@ -1100,6 +1114,10 @@ export class Engine {
       }
       return;
     }
+
+    // Multi-layer ignores options.lazy intentionally - the scan-and-merge path
+    // has no equivalent early-return point. Boot-time replay callers that need
+    // lazy semantics get full-await behavior for multi-layer projects.
 
     // Multi-layer path: read each layer's per-layer cache (or scan cold),
     // then merge by push-ops precedence. Each layer's gzipped cache lives at

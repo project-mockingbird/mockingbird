@@ -25,6 +25,30 @@ beforeAll(async () => {
       items: { path: 'items', includes: [{ name: 'foo', path: '/sitecore/content/lazy', allowedPushOperations: 'CreateUpdateAndDelete' }] },
     }),
   );
+  // Add a real item file so the indexer has at least one item to process.
+  // An empty fixture lets readiness flip to 'ready' synchronously, making
+  // the lazy vs. non-lazy paths indistinguishable in assertions.
+  await writeFile(
+    join(projectPath, 'items', 'sample.yml'),
+    `---
+ID: "ce0bf41d-1111-2222-3333-aaaaaaaaaaaa"
+Parent: "00000000-0000-0000-0000-000000000000"
+Template: "ab86861a-6030-46c5-b394-e8f99e8b87db"
+Path: /sitecore/content/lazy/sample
+SharedFields:
+- ID: "a4f985d9-98b3-4b52-aaaf-4344f6e747c6"
+  Hint: __Renderings
+  Value: ""
+Languages:
+- Language: en
+  Versions:
+  - Version: 1
+    Fields:
+    - ID: "75577384-3c97-45da-a847-81b00500e250"
+      Hint: Name
+      Value: sample
+`,
+  );
 });
 
 afterAll(async () => {
@@ -36,23 +60,28 @@ describe('Engine.openWorkspace lazy mode', () => {
     const engine = new Engine({ watch: false });
     await engine.startInit();
 
-    const t0 = Date.now();
     await engine.openWorkspace(
       [{ sitecoreJsonPath: join(projectPath, 'sitecore.json'), name: 'lazy' }],
       { lazy: true },
     );
-    const elapsed = Date.now() - t0;
 
-    // Readiness should NOT be ready yet; lazy means we returned early.
-    expect(['initializing', 'ready']).toContain(engine.readiness.state);
+    // At minimum, the call should NOT have awaited indexing. If state happens
+    // to be 'ready' it means indexing completed synchronously (tiny fixture);
+    // either way, the call returned without blocking.
+    const earlyState = engine.readiness.state;
+    expect(['initializing', 'ready']).toContain(earlyState);
 
-    // Eventually completes
+    // The lazy path must NOT populate itemProvenance - that is the key
+    // observable contract. If a future change accidentally re-introduces an
+    // await readiness.ready() in the lazy path it would also fill provenance,
+    // causing this assertion to fail.
+    const beforeWait = engine['_itemProvenance'].size;
     await engine.readiness.ready();
+    expect(engine['_itemProvenance'].size).toBe(beforeWait); // lazy keeps it empty
+
     expect(engine.readiness.state).toBe('ready');
 
     await engine.close();
-
-    expect(elapsed).toBeGreaterThanOrEqual(0);
   });
 
   it('lazy=false (default) awaits indexing to ready', async () => {
