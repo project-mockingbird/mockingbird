@@ -1046,7 +1046,10 @@ export class Engine {
    * the engine cache also does not write in multi-layer mode for the same
    * reason.
    */
-  async openWorkspace(layers: LayerSpec[], options?: { projectName?: string }): Promise<void> {
+  async openWorkspace(
+    layers: LayerSpec[],
+    options?: { projectName?: string; lazy?: boolean },
+  ): Promise<void> {
     // Reject 'ootb' as a user layer name (case-insensitive). The sentinel is
     // reserved for the registry substrate in provenance shapes. Validated
     // BEFORE closeWorkspace so a bad call does not tear down an open workspace.
@@ -1082,17 +1085,19 @@ export class Engine {
       this._initStarted = false;
       this.readiness.reset();
       await this.startInit();
-      await this.readiness.ready();
-      // Eager provenance fill: every tree node attributes to the single layer.
-      let nodeCount = 0;
-      for (const node of this.tree.getAllNodes()) {
-        this._itemProvenance.set(node.item.id, {
-          winnerLayer: primary.name,
-          contributingLayers: [primary.name],
-        });
-        nodeCount++;
+      if (!options?.lazy) {
+        await this.readiness.ready();
+        // Eager provenance fill: every tree node attributes to the single layer.
+        let nodeCount = 0;
+        for (const node of this.tree.getAllNodes()) {
+          this._itemProvenance.set(node.item.id, {
+            winnerLayer: primary.name,
+            contributingLayers: [primary.name],
+          });
+          nodeCount++;
+        }
+        this._layerStats.set(primary.name, nodeCount);
       }
-      this._layerStats.set(primary.name, nodeCount);
       return;
     }
 
