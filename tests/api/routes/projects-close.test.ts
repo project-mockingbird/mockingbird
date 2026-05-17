@@ -71,4 +71,35 @@ describe('POST /api/projects/close', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ state: 'no-project', layers: [] });
   });
+
+  it('clears lastOpenedHash but preserves project records on close', async () => {
+    process.env.MOCKINGBIRD_CONFIG_PATH = join(workspaceRoot, 'config-close-clear.mockingbird');
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    // Open first to populate the persisted state
+    await app.inject({
+      method: 'POST',
+      url: '/api/projects/open',
+      payload: { layers: [{ sitecoreJsonPath: '/project-close/sitecore.json', name: 'project-close' }] },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const { readConfig } = await import('../../../src/api/state/config-store.js');
+    const beforeClose = await readConfig(process.env.MOCKINGBIRD_CONFIG_PATH);
+    expect(beforeClose.lastOpenedHash).toBeDefined();
+    const hash = beforeClose.lastOpenedHash!;
+
+    // Now close
+    const closeRes = await app.inject({ method: 'POST', url: '/api/projects/close' });
+    expect(closeRes.statusCode).toBe(200);
+
+    const afterClose = await readConfig(process.env.MOCKINGBIRD_CONFIG_PATH);
+    expect(afterClose.lastOpenedHash).toBeUndefined();
+    // Project record still there
+    expect(afterClose.projects[hash]).toBeDefined();
+
+    delete process.env.MOCKINGBIRD_CONFIG_PATH;
+  });
 });

@@ -143,6 +143,20 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
    */
   app.post('/api/projects/close', async (_req, reply) => {
     await engine.closeWorkspace();
+
+    // Best effort: clear lastOpenedHash so the next boot does not replay
+    // the project the user just closed. Project records are preserved.
+    try {
+      const configPath = resolveConfigPath();
+      const config = await readConfig(configPath);
+      if (config.lastOpenedHash) {
+        delete config.lastOpenedHash;
+        await writeConfig(configPath, config);
+      }
+    } catch (err) {
+      app.log.warn({ err }, '[projects/close] failed to clear lastOpenedHash');
+    }
+
     reply.send({ state: engine.readiness.state, layers: [] });
   });
 }
