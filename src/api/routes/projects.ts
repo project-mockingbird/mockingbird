@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { resolve, normalize, sep } from 'path';
 import type { Engine } from '../../engine/index.js';
+import { computeProjectHash } from '../project-hash.js';
+import { readConfig, writeConfig, resolveConfigPath } from '../state/config-store.js';
 
 /**
  * Merges user layers with layer stats and appends the synthetic ootb row when
@@ -67,6 +69,7 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
     }
 
     const resolved = [];
+    const requestedPaths: string[] = [];
     for (const layer of layers) {
       if (typeof layer.sitecoreJsonPath !== 'string' || typeof layer.name !== 'string') {
         reply.code(400).send({ error: 'each layer must have sitecoreJsonPath and name strings' });
@@ -82,6 +85,7 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
         name: layer.name,
         color: layer.color,
       });
+      requestedPaths.push(layer.sitecoreJsonPath);
     }
 
     const projectName = typeof req.body?.projectName === 'string' ? req.body.projectName : undefined;
@@ -102,6 +106,32 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
     // empty tree and never re-runs. Trigger it here now that openWorkspace
     // has populated the tree. Idempotent - bails if already extended.
     app.extendMockingbirdSchema?.();
+
+    // Persist lastOpenedHash + bump lastOpenedAt on the project record. Best
+    // effort: a failed write is logged but does not fail the open response.
+    try {
+      const hash = computeProjectHash(requestedPaths);
+      const configPath = resolveConfigPath();
+      const config = await readConfig(configPath);
+      const now = Date.now();
+      const existing = config.projects[hash];
+      const savedLayers = layers.map((l) => ({
+        sitecoreJsonPath: l.sitecoreJsonPath as string,
+        name: l.name as string,
+        color: (l.color ?? '#22c55e') as string,
+      }));
+      config.projects[hash] = {
+        hash,
+        name: projectName ?? existing?.name ?? hash,
+        layers: savedLayers,
+        createdAt: existing?.createdAt ?? now,
+        lastOpenedAt: now,
+      };
+      config.lastOpenedHash = hash;
+      await writeConfig(configPath, config);
+    } catch (err) {
+      app.log.warn({ err }, '[projects/open] failed to persist lastOpenedHash');
+    }
 
     reply.send({ state: engine.readiness.state, layers: layersWithEffectiveCount(engine) });
   });

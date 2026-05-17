@@ -145,4 +145,66 @@ describe('POST /api/projects/open', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('writes lastOpenedHash to config.mockingbird after a successful open', async () => {
+    process.env.MOCKINGBIRD_CONFIG_PATH = join(workspaceRoot, 'config-hash-write.mockingbird');
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/projects/open',
+      payload: {
+        layers: [{ sitecoreJsonPath: '/project-x/sitecore.json', name: 'project-x' }],
+        projectName: 'Project X',
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const { readConfig } = await import('../../../src/api/state/config-store.js');
+    const config = await readConfig(process.env.MOCKINGBIRD_CONFIG_PATH);
+    expect(config.lastOpenedHash).toBeDefined();
+    expect(typeof config.lastOpenedHash).toBe('string');
+    expect(config.lastOpenedHash!.length).toBe(12);
+
+    // Also upserts the project record under that hash
+    expect(config.projects[config.lastOpenedHash!]).toBeDefined();
+    expect(config.projects[config.lastOpenedHash!].name).toBe('Project X');
+
+    delete process.env.MOCKINGBIRD_CONFIG_PATH;
+  });
+
+  it('bumps lastOpenedAt on the project record on repeat open', async () => {
+    process.env.MOCKINGBIRD_CONFIG_PATH = join(workspaceRoot, 'config-bump.mockingbird');
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+    await created.engine.readiness.ready();
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/projects/open',
+      payload: { layers: [{ sitecoreJsonPath: '/project-x/sitecore.json', name: 'project-x' }] },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const { readConfig } = await import('../../../src/api/state/config-store.js');
+    const firstRead = await readConfig(process.env.MOCKINGBIRD_CONFIG_PATH);
+    const hash = firstRead.lastOpenedHash!;
+    const firstOpenedAt = firstRead.projects[hash].lastOpenedAt;
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/projects/open',
+      payload: { layers: [{ sitecoreJsonPath: '/project-x/sitecore.json', name: 'project-x' }] },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const secondRead = await readConfig(process.env.MOCKINGBIRD_CONFIG_PATH);
+    expect(secondRead.projects[hash].lastOpenedAt).toBeGreaterThan(firstOpenedAt);
+
+    delete process.env.MOCKINGBIRD_CONFIG_PATH;
+  });
 });
