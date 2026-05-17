@@ -330,6 +330,14 @@ function Write-MockingbirdDiff {
     Write-Host "$($global:MockingbirdFramePrefix)$($payload | ConvertTo-Json -Compress -Depth 5)"
 }
 
+# Clear-Host override. The built-in cmdlet calls [Console]::SetCursorPosition,
+# which throws "The handle is invalid." against the SPE host's redirected
+# stdio. Emit a framed `clear` directive instead so the IsePage wipes both
+# the xterm buffer and any inline diff/applied blocks above it.
+function Clear-Host {
+    Write-Host "$($global:MockingbirdFramePrefix){`"type`":`"clear`"}"
+}
+
 # === Out-of-scope cmdlets (throw with helpful message) ===
 
 function Publish-Item { throw "Publish-Item is not supported in Mockingbird (no master/web split). Use git." }

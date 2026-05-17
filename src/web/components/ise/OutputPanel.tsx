@@ -71,6 +71,14 @@ export function OutputPanel({ frames }: OutputPanelProps) {
         onRunAborted: (runId) => term.writeln(`\x1b[33m< Run ${runId} aborted\x1b[0m`),
         onSessionExpiring: () => term.writeln('\x1b[33m! Session expires in 5min\x1b[0m'),
         onSessionClosed: (reason) => term.writeln(`\x1b[31m! Session closed (${reason})\x1b[0m`),
+        // Mockingbird's Clear-Host override emits a `clear` frame so the
+        // SPE host doesn't have to call SetCursorPosition (which fails
+        // against the redirected-stdio child). Wipe both the xterm buffer
+        // and the inline diff/applied blocks rendered above it.
+        onClear: () => {
+          term.clear();
+          setBlocks([]);
+        },
       });
     }
   }, [frames]);

@@ -11,6 +11,7 @@
         'New-Item','Remove-Item','Find-Item',
         'Get-ItemTemplate','Get-ItemReference','Get-ItemReferrer',
         'Get-MockingbirdApiUrl',
+        'Clear-Host',
         # Out-of-scope, throw NotImplemented:
         'Publish-Item','Invoke-Workflow','Show-FieldEditor','Show-ListView',
         'Show-Confirm','Show-Input','Set-ItemAcl','Lock-Item','Initialize-SearchIndex'

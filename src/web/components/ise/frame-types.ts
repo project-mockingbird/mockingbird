@@ -12,4 +12,5 @@ export type Frame =
   | { type: 'sessionExpiring'; expiresAt: string }
   | { type: 'sessionClosed'; reason: 'ttl' | 'explicit' | 'crash' }
   | { type: 'diff'; format: 'unified'; operation?: string; summary?: string; warnings?: string[]; data: string }
-  | { type: 'applied'; summary: { writes: number; paths: string[] } };
+  | { type: 'applied'; summary: { writes: number; paths: string[] } }
+  | { type: 'clear' };

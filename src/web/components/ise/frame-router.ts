@@ -21,6 +21,7 @@ export interface FrameRouterTargets {
   onRunAborted: (runId: string) => void;
   onSessionExpiring: (expiresAt: string) => void;
   onSessionClosed: (reason: 'ttl' | 'explicit' | 'crash') => void;
+  onClear: () => void;
 }
 
 const ANSI_RESET = '\x1b[0m';
@@ -70,6 +71,9 @@ export function routeFrame(frame: Frame, targets: FrameRouterTargets): void {
       return;
     case 'sessionClosed':
       targets.onSessionClosed(frame.reason);
+      return;
+    case 'clear':
+      targets.onClear();
       return;
     default: {
       // Exhaustiveness check: adding a new Frame variant must be handled above
