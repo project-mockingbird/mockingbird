@@ -10,20 +10,25 @@ const SETTINGS_STORAGE_KEY = 'mockingbird.settings.v1';
 
 async function migrateLastOpenedHash(
   serverConfig: { version: 1; projects: Record<string, unknown>; lastOpenedHash?: string },
+  extraHashHint?: string,
 ): Promise<void> {
   if (typeof localStorage === 'undefined') return;
 
-  let browserHash: string | null = null;
-  try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && typeof parsed['session.lastOpenedHash'] === 'string') {
-        browserHash = parsed['session.lastOpenedHash'];
+  // Start with the hint from the legacy localStorage migration (if any), then
+  // check the settings store for a browser-persisted key as a fallback.
+  let browserHash: string | null = extraHashHint ?? null;
+  if (!browserHash) {
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && typeof parsed['session.lastOpenedHash'] === 'string') {
+          browserHash = parsed['session.lastOpenedHash'];
+        }
       }
+    } catch {
+      return;
     }
-  } catch {
-    return;
   }
 
   if (!browserHash) return;
@@ -93,8 +98,10 @@ export function ProjectsStoreHydrator() {
     const serverIsEmpty = Object.keys(serverProjects).length === 0;
 
     void (async () => {
+      let migrated: Awaited<ReturnType<typeof migrateFromLocalStorage>> = null;
+
       if (serverIsEmpty) {
-        const migrated = await migrateFromLocalStorage();
+        migrated = await migrateFromLocalStorage();
         if (migrated && Object.keys(migrated.projects).length > 0) {
           setAll(migrated.projects);
           try {
@@ -105,9 +112,6 @@ export function ProjectsStoreHydrator() {
             });
           } catch (err) {
             console.warn('[migration] PUT /api/config failed:', err);
-          }
-          if (migrated.lastOpenedHash) {
-            setSetting('session.lastOpenedHash', migrated.lastOpenedHash);
           }
           setSetting('session.autoRestore', migrated.autoRestore);
         } else {
@@ -121,7 +125,10 @@ export function ProjectsStoreHydrator() {
       // server-side lastOpenedHash field on config.mockingbird. After this
       // hydrator finishes, the browser key is gone and the server is the
       // single source of truth.
-      await migrateLastOpenedHash(data ?? { version: 1, projects: serverProjects });
+      await migrateLastOpenedHash(
+        data ?? { version: 1, projects: serverProjects },
+        migrated?.lastOpenedHash ?? undefined,
+      );
 
       markHydrated();
     })();
