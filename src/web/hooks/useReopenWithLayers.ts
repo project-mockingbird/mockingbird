@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useProjectsStore, type SavedProjectLayer } from '@/state/projectsStore';
 import { computeProjectHash } from '@/state/project-hash';
-import { setSetting } from '@/settings/store';
 import { workspaceStore } from '@/state/workspaceStore';
+import { CONFIG_QUERY_KEY } from '@/hooks/useConfigQuery';
 
 export interface ReopenInput {
   oldHash: string;
@@ -40,11 +40,11 @@ export function useReopenWithLayers() {
     onSuccess: async (_data, vars) => {
       const newHash = await computeProjectHash(vars.nextLayers.map((l) => l.sitecoreJsonPath));
       useProjectsStore.getState().rekey(vars.oldHash, newHash, vars.nextLayers, Date.now());
-      setSetting('session.lastOpenedHash', newHash);
       workspaceStore.reset();
       qc.invalidateQueries({ queryKey: ['status'] });
       qc.invalidateQueries({ queryKey: ['tree'] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     },
   });
 
