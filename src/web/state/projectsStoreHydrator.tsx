@@ -38,7 +38,7 @@ async function migrateLastOpenedHash(
       });
     } catch (err) {
       console.warn('[migration] failed to promote session.lastOpenedHash to server:', err);
-      return;
+      // fall through - still clear the browser key below
     }
   }
 

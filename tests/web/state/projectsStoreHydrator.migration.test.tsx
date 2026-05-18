@@ -65,8 +65,7 @@ describe('lastOpenedHash migration in ProjectsStoreHydrator', () => {
     }));
 
     // Browser key removed
-    const stored = JSON.parse(_mem[SETTINGS_KEY] ?? '{}');
-    expect(stored['session.lastOpenedHash']).toBeUndefined();
+    expect(localStorage.getItem(SETTINGS_KEY)).toBeNull();
   });
 
   it('skips PUT when server already has a hash, still clears browser key', async () => {
@@ -94,8 +93,7 @@ describe('lastOpenedHash migration in ProjectsStoreHydrator', () => {
 
     expect(putCalled).not.toHaveBeenCalled();
 
-    const stored = JSON.parse(_mem[SETTINGS_KEY] ?? '{}');
-    expect(stored['session.lastOpenedHash']).toBeUndefined();
+    expect(localStorage.getItem(SETTINGS_KEY)).toBeNull();
   });
 
   it('is a no-op when browser has nothing to migrate', async () => {
@@ -116,5 +114,27 @@ describe('lastOpenedHash migration in ProjectsStoreHydrator', () => {
 
     await waitFor(() => expect(useProjectsStore.getState().hydrated).toBe(true));
     expect(putCalled).not.toHaveBeenCalled();
+  });
+
+  it('clears the browser key even when the PUT fails', async () => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ 'session.lastOpenedHash': 'browserhash' }));
+
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url === '/api/config' && (!init || init.method === 'GET' || init.method === undefined)) {
+        return Promise.resolve(new Response(JSON.stringify({ version: 1, projects: {} }), { status: 200 }));
+      }
+      if (url === '/api/config' && init?.method === 'PUT') {
+        return Promise.reject(new Error('network error'));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    }));
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<ProjectsStoreHydrator />, { wrapper: wrapper(client) });
+
+    await waitFor(() => expect(useProjectsStore.getState().hydrated).toBe(true));
+
+    // Browser key cleared despite the PUT failure
+    expect(localStorage.getItem(SETTINGS_KEY)).toBeNull();
   });
 });
