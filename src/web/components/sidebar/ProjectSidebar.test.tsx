@@ -20,8 +20,15 @@ const localStorageStub = (() => {
 })();
 Object.defineProperty(window, 'localStorage', { value: localStorageStub });
 
-function renderWithClient(ui: React.ReactElement) {
+function renderWithClient(ui: React.ReactElement, clientOpts?: { lastOpenedHash?: string }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (clientOpts !== undefined) {
+    qc.setQueryData(['config', 'mockingbird'], {
+      version: 1,
+      projects: {},
+      ...(clientOpts.lastOpenedHash !== undefined ? { lastOpenedHash: clientOpts.lastOpenedHash } : {}),
+    });
+  }
   return render(
     <SettingsProvider>
       <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
@@ -181,15 +188,15 @@ describe('<ProjectSidebar> remove layer', () => {
         lastOpenedAt: 1,
       },
     });
-    const { setSetting } = await import('@/settings/store');
-    setSetting('session.lastOpenedHash', 'h1');
-
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ state: 'ready', layers: [] }), { status: 200 }),
     );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    renderWithClient(<ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />);
+    renderWithClient(
+      <ProjectSidebar status={statusReady} onSwitch={() => {}} onClose={() => {}} />,
+      { lastOpenedHash: 'h1' },
+    );
 
     const kebabs = screen.getAllByRole('button', { name: /layer actions/i });
     await user.click(kebabs[0]);

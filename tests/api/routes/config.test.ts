@@ -91,4 +91,74 @@ describe('PUT /api/config', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('preserves existing lastOpenedHash when body omits it', async () => {
+    const preservePath = join(workspaceRoot, 'config-put-preserve.mockingbird');
+    process.env.MOCKINGBIRD_CONFIG_PATH = preservePath;
+    const { writeConfig } = await import('../../../src/api/state/config-store.js');
+    await writeConfig(preservePath, {
+      version: 1,
+      projects: {
+        h1: { hash: 'h1', name: 'P', layers: [], createdAt: 1, lastOpenedAt: 2 },
+      },
+      lastOpenedHash: 'preserve-me',
+    });
+
+    const { app: a } = await createServer({});
+    app = a;
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/config',
+      payload: {
+        version: 1,
+        projects: {
+          h2: { hash: 'h2', name: 'Q', layers: [], createdAt: 3, lastOpenedAt: 4 },
+        },
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const { readConfig } = await import('../../../src/api/state/config-store.js');
+    const after = await readConfig(preservePath);
+    expect(after.lastOpenedHash).toBe('preserve-me');
+    expect(after.projects['h2']).toBeDefined();
+    expect(after.projects['h1']).toBeUndefined();
+
+    process.env.MOCKINGBIRD_CONFIG_PATH = configPath;
+    await rm(preservePath, { force: true });
+  });
+
+  it('overwrites lastOpenedHash when body provides one', async () => {
+    const overwritePath = join(workspaceRoot, 'config-put-overwrite.mockingbird');
+    process.env.MOCKINGBIRD_CONFIG_PATH = overwritePath;
+    const { writeConfig } = await import('../../../src/api/state/config-store.js');
+    await writeConfig(overwritePath, {
+      version: 1,
+      projects: {},
+      lastOpenedHash: 'old',
+    });
+
+    const { app: a } = await createServer({});
+    app = a;
+
+    await app.inject({
+      method: 'PUT',
+      url: '/api/config',
+      payload: {
+        version: 1,
+        projects: {},
+        lastOpenedHash: 'new',
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const { readConfig } = await import('../../../src/api/state/config-store.js');
+    const after = await readConfig(overwritePath);
+    expect(after.lastOpenedHash).toBe('new');
+
+    process.env.MOCKINGBIRD_CONFIG_PATH = configPath;
+    await rm(overwritePath, { force: true });
+  });
 });

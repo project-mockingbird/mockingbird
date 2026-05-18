@@ -64,6 +64,42 @@ describe('readConfig', () => {
     const result = await readConfig(configPath);
     expect(result).toEqual({ version: 1, projects: {} });
   });
+
+  it('returns lastOpenedHash when present', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({ version: 1, projects: {}, lastOpenedHash: 'abc123def456' }),
+      'utf-8',
+    );
+    const result = await readConfig(configPath);
+    expect(result.lastOpenedHash).toBe('abc123def456');
+  });
+
+  it('returns undefined lastOpenedHash when absent', async () => {
+    await writeFile(configPath, JSON.stringify({ version: 1, projects: {} }), 'utf-8');
+    const result = await readConfig(configPath);
+    expect(result.lastOpenedHash).toBeUndefined();
+  });
+
+  it('normalizes lastOpenedHash to undefined when not a string', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({ version: 1, projects: {}, lastOpenedHash: 42 }),
+      'utf-8',
+    );
+    const result = await readConfig(configPath);
+    expect(result.lastOpenedHash).toBeUndefined();
+  });
+
+  it('normalizes lastOpenedHash to undefined when null in file', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({ version: 1, projects: {}, lastOpenedHash: null }),
+      'utf-8',
+    );
+    const result = await readConfig(configPath);
+    expect(result.lastOpenedHash).toBeUndefined();
+  });
 });
 
 describe('writeConfig', () => {
@@ -103,6 +139,17 @@ describe('writeConfig', () => {
     await writeConfig(configPath, config);
     const read = await readConfig(configPath);
     expect(read).toEqual(config);
+  });
+
+  it('round-trips lastOpenedHash', async () => {
+    const config: MockingbirdConfig = {
+      version: 1,
+      projects: {},
+      lastOpenedHash: 'def456abc789',
+    };
+    await writeConfig(configPath, config);
+    const read = await readConfig(configPath);
+    expect(read.lastOpenedHash).toBe('def456abc789');
   });
 });
 

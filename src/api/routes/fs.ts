@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { readdir, stat, lstat } from 'fs/promises';
 import { resolve, join, normalize, sep } from 'path';
 import { isScsConfigShape, summarizeCandidate } from '../../engine/scs-config-detector.js';
+import { getWorkspaceRoot } from '../state/workspace-path.js';
 
 interface FsDirectoryEntry {
   name: string;
@@ -46,9 +47,7 @@ const HIDDEN_ENTRIES = new Set(['.git', '.vscode', '.DS_Store', '.idea', 'node_m
  * parse) are silently omitted.
  */
 export function registerFsRoutes(app: FastifyInstance): void {
-  const workspaceRoot = resolve(
-    process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces',
-  );
+  const workspaceRoot = resolve(getWorkspaceRoot());
 
   app.get<{ Querystring: { path?: string; includeFiles?: string } }>(
     '/api/fs/list',

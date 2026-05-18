@@ -14,9 +14,9 @@ import { EditableLayerName } from './EditableLayerName';
 import { LayerSourcePicker } from './LayerSourcePicker';
 import { LayerCollisionDialog } from './LayerCollisionDialog';
 import { useProjectsStore, type SavedProjectLayer } from '@/state/projectsStore';
-import { useSettings } from '@/settings/SettingsProvider';
-import { setSetting } from '@/settings/store';
+import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 import { useReopenWithLayers } from '@/hooks/useReopenWithLayers';
+import { useOpenProject } from '@/hooks/useOpenProject';
 import { deriveName } from '@/components/open-project/layer-name';
 import { assignLayerColor } from '@/components/open-project/layer-colors';
 import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
@@ -75,10 +75,10 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
   } | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const reopen = useReopenWithLayers();
+  const openProject = useOpenProject();
   const discardWorkspaceGate = useConfirmDiscardWorkspace();
 
-  const { settings } = useSettings();
-  const lastOpenedHash = settings['session.lastOpenedHash'];
+  const lastOpenedHash = useCurrentProjectHash();
   const projects = useProjectsStore((s) => s.projects);
   const renameProject = useProjectsStore((s) => s.rename);
 
@@ -332,11 +332,14 @@ export function ProjectSidebar({ status, onSwitch, onClose }: ProjectSidebarProp
         collidingProjectName={collidingProjectName}
         onSwitch={() => {
           if (!pendingMutation) return;
-          setSetting('session.lastOpenedHash', pendingMutation.collidingHash);
+          const collidingProject = projects[pendingMutation.collidingHash];
           setCollidingProjectName(null);
           setPendingMutation(null);
-          // NoProjectState's auto-restore + hydrator will open the existing
-          // project on the next status tick.
+          if (!collidingProject) return;
+          openProject.mutate({
+            layers: collidingProject.layers,
+            projectName: collidingProject.name,
+          });
         }}
         onCancel={() => {
           setCollidingProjectName(null);

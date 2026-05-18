@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, rename, access } from 'fs/promises';
 import { dirname, resolve, join } from 'path';
+import { getWorkspaceRoot } from './workspace-path.js';
 
 export interface SavedProjectLayer {
   sitecoreJsonPath: string;
@@ -18,6 +19,9 @@ export interface SavedProject {
 export interface MockingbirdConfig {
   version: 1;
   projects: Record<string, SavedProject>;
+  /** Hash of the last-opened project. Server uses this to replay openWorkspace
+   *  on boot for headless consumers. Cleared on POST /api/projects/close. */
+  lastOpenedHash?: string;
 }
 
 /**
@@ -37,10 +41,14 @@ export async function readConfig(filePath: string): Promise<MockingbirdConfig> {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return { version: 1, projects: {} };
     if (parsed.version !== 1) return { version: 1, projects: {} };
-    return {
+    const out: MockingbirdConfig = {
       version: 1,
       projects: parsed.projects && typeof parsed.projects === 'object' ? parsed.projects : {},
     };
+    if (typeof parsed.lastOpenedHash === 'string') {
+      out.lastOpenedHash = parsed.lastOpenedHash;
+    }
+    return out;
   } catch {
     return { version: 1, projects: {} };
   }
@@ -81,6 +89,5 @@ export async function ensureConfigExists(filePath: string): Promise<void> {
  */
 export function resolveConfigPath(): string {
   if (process.env.MOCKINGBIRD_CONFIG_PATH) return resolve(process.env.MOCKINGBIRD_CONFIG_PATH);
-  const workspace = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
-  return join(resolve(workspace), 'config.mockingbird');
+  return join(resolve(getWorkspaceRoot()), 'config.mockingbird');
 }

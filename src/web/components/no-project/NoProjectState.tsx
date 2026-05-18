@@ -8,6 +8,7 @@ import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore, type SavedProject } from '@/state/projectsStore';
 import { useSettings } from '@/settings/SettingsProvider';
+import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 
 interface NoProjectStateProps {
   onOpenProject?: () => void;
@@ -22,8 +23,8 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  const { settings, setSetting } = useSettings();
-  const lastOpenedHash = settings['session.lastOpenedHash'];
+  const { settings } = useSettings();
+  const lastOpenedHash = useCurrentProjectHash();
   const autoRestore = settings['session.autoRestore'];
 
   const hydrated = useProjectsStore((s) => s.hydrated);
@@ -50,13 +51,12 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
       {
         onSuccess: () => {
           touchLastOpened(project.hash);
-          setSetting('session.lastOpenedHash', project.hash);
         },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not restore last project.'),
       },
     );
-  }, [hydrated, autoRestore, lastOpenedHash, openProject, setSetting, touchLastOpened]);
+  }, [hydrated, autoRestore, lastOpenedHash, openProject, touchLastOpened]);
 
   const handleOpenSaved = (project: SavedProject) => {
     setRestoreError(null);
@@ -66,7 +66,6 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
       {
         onSuccess: () => {
           touchLastOpened(project.hash);
-          setSetting('session.lastOpenedHash', project.hash);
         },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not open project.'),

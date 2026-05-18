@@ -9,7 +9,6 @@ import { deriveName } from './layer-name';
 import { deriveProjectName } from './project-name';
 import { computeProjectHash } from '@/state/project-hash';
 import { useProjectsStore } from '@/state/projectsStore';
-import { setSetting } from '@/settings/store';
 
 interface OpenProjectWizardProps {
   open: boolean;
@@ -107,7 +106,6 @@ export function OpenProjectWizard({ open, onClose, initialMode = 'first-run' }: 
         lastOpenedAt: nowMs,
       });
       touchLastOpened(hash);
-      setSetting('session.lastOpenedHash', hash);
       toast.success('Project opened.');
       reset();
       onClose();

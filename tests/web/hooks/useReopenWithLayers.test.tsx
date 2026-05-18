@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { useReopenWithLayers } from '../../../src/web/hooks/useReopenWithLayers';
 import { useProjectsStore, resetProjectsStore } from '../../../src/web/state/projectsStore';
-import { setSetting } from '../../../src/web/settings/store';
 
 // jsdom's localStorage in this harness lacks removeItem; stub a full impl so
 // settings/store.ts can call setItem / removeItem freely.
@@ -26,7 +25,6 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   resetProjectsStore();
-  setSetting('session.lastOpenedHash', null);
   fetchMock.mockReset();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
@@ -45,7 +43,6 @@ function seedProject(hash: string) {
     createdAt: 100,
     lastOpenedAt: 200,
   });
-  setSetting('session.lastOpenedHash', hash);
 }
 
 describe('useReopenWithLayers', () => {
@@ -75,7 +72,7 @@ describe('useReopenWithLayers', () => {
     });
   });
 
-  it('rekeys the project on success and updates lastOpenedHash', async () => {
+  it('rekeys the project on success', async () => {
     seedProject('oldhash');
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ state: 'ready', layers: [] }), { status: 200 }));
 

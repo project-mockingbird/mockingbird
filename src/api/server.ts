@@ -8,7 +8,8 @@ import fastifyStatic from '@fastify/static';
 import { multistream } from 'pino';
 import { Engine } from '../engine/index.js';
 import { ensureWorkspaceLayout } from '../engine/workspace-bootstrap.js';
-import { ensureConfigExists, resolveConfigPath } from './state/config-store.js';
+import { ensureConfigExists, readConfig, resolveConfigPath } from './state/config-store.js';
+import { resolveWorkspacePath, getWorkspaceRoot } from './state/workspace-path.js';
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
 import { registerReadinessGate } from './hooks/readiness-gate.js';
@@ -63,7 +64,7 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   // Ensure workspace cache directory and .gitignore are set up. This is
   // idempotent and runs once at server startup. Non-fatal if it fails
   // (e.g., read-only workspace), so we log the error and continue.
-  const workspaceRoot = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+  const workspaceRoot = resolve(getWorkspaceRoot());
   await ensureWorkspaceLayout(workspaceRoot).catch((err) => {
     console.warn('[workspace] bootstrap failed (non-fatal):', err);
   });
@@ -186,6 +187,45 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   app.addHook('onClose', async () => {
     await speManager.disposeAll();
   });
+
+  // Boot-time replay: if no rootDir was provided (i.e., SCS_SITECORE_JSON is
+  // unset) and config.mockingbird has a lastOpenedHash matching a saved
+  // project, replay the open so headless consumers (rendering hosts hitting
+  // /api/graphql) do not need a human to visit the web UI first.
+  if (!opts.rootDir) {
+    try {
+      const config = await readConfig(resolveConfigPath());
+      const hash = config.lastOpenedHash;
+      if (hash) {
+        const project = config.projects[hash];
+        if (project) {
+          const layers = [];
+          let bad = false;
+          for (const l of project.layers) {
+            const abs = resolveWorkspacePath(workspaceRoot, l.sitecoreJsonPath);
+            if (abs === null) { bad = true; break; }
+            layers.push({ sitecoreJsonPath: abs, name: l.name, color: l.color });
+          }
+          if (bad) {
+            app.log.warn(`[boot-replay] project "${project.name}" has layer paths that escape the workspace; skipping`);
+          } else {
+            try {
+              await engine.openWorkspace(layers, { projectName: project.name, lazy: true });
+              app.extendMockingbirdSchema?.();
+              app.log.info(`[boot-replay] restored project "${project.name}" (${hash})`);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              app.log.warn(`[boot-replay] failed to restore "${project.name}": ${message}`);
+            }
+          }
+        } else {
+          app.log.warn(`[boot-replay] stale lastOpenedHash "${hash}" - no matching project; continuing in no-project mode`);
+        }
+      }
+    } catch (err) {
+      app.log.warn({ err }, '[boot-replay] config read failed; continuing in no-project mode');
+    }
+  }
 
   // Serve static Web UI if built
   const __apiDir = fileURLToPath(new URL('.', import.meta.url));

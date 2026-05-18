@@ -21,6 +21,7 @@ import { CheckoutDialog } from '@/components/package/CheckoutDialog';
 import { ProjectSidebar } from '@/components/sidebar/ProjectSidebar';
 import { OpenProjectWizard } from '@/components/open-project/OpenProjectWizard';
 import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
+import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore } from '@/state/projectsStore';
@@ -78,7 +79,7 @@ function ContentTreePage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const close = useCloseProject();
   const openProject = useOpenProject();
-  const currentProjectHash = settings['session.lastOpenedHash'];
+  const currentProjectHash = useCurrentProjectHash();
   const touchLastOpened = useProjectsStore((s) => s.touchLastOpened);
   const discardGate = useConfirmDiscardWorkspace();
 
@@ -96,7 +97,6 @@ function ContentTreePage() {
             {
               onSuccess: () => {
                 touchLastOpened(project.hash);
-                setSetting('session.lastOpenedHash', project.hash);
               },
             },
           );
