@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "prepare": "git config --local core.hooksPath hooks",
+    "prepare": "test -d .git && git config --local core.hooksPath hooks || true",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint:graphql-context": "node scripts/lint-graphql-context.mjs",
