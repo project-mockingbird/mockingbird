@@ -14,7 +14,7 @@ function makeMediaItem(id: string, path: string, ext = 'png') {
   });
 }
 
-describe('renderField — image processor stub', () => {
+describe('renderField - image processor stub', () => {
   it('emits <img> with authored attrs in source order + src projection', () => {
     const mediaId = 'abababab-0000-0000-0000-000000000001';
     const media = makeMediaItem(mediaId, '/sitecore/media library/Project/imgs/hero', 'jpg');
@@ -29,7 +29,7 @@ describe('renderField — image processor stub', () => {
     });
 
     // width/height drop out when neither the authored XML nor the media
-    // item carries a dimension — matches prod Edge's rule of omitting
+    // item carries a dimension - matches prod Edge's rule of omitting
     // empty-valued optional dim attrs.
     expect(html).toBe(
       '<img alt="Hero" class="headline" hspace="30" src="/-/media/Project/imgs/hero.jpg?iar=0" />',
@@ -85,7 +85,7 @@ describe('renderField — image processor stub', () => {
     });
   });
 
-  it('round-trips through walkElementAttrs back to the authored key set plus src — empty dims dropped', () => {
+  it('round-trips through walkElementAttrs back to the authored key set plus src - empty dims dropped', () => {
     const mediaId = 'cdcdcdcd-0000-0000-0000-000000000002';
     const media = makeMediaItem(mediaId, '/sitecore/media library/x/y');
     const engine = buildEngine([media]);
@@ -137,7 +137,7 @@ describe('renderField — image processor stub', () => {
   });
 });
 
-describe('renderField — link processor stub', () => {
+describe('renderField - link processor stub', () => {
   it('emits <a> with authored attrs in source order + href projection for internal linktype', () => {
     const targetId = 'eeeeeeee-0000-0000-0000-000000000003';
     const target = makeItem({ id: targetId, path: '/sitecore/content/site/Home/about' });

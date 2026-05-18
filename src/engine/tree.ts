@@ -26,7 +26,7 @@ export class ItemTree {
   private byId = new Map<string, ItemNode>();
   private byPath = new Map<string, ItemNode>();
   /**
-   * Secondary index keyed by the URL-safe form of every item's path —
+   * Secondary index keyed by the URL-safe form of every item's path -
    * looked up only when {@link byPath} misses on the raw lowercase form.
    * On a key collision (two siblings whose names differ only by case or
    * space-vs-dash) the first item added wins, matching Sitecore's real
@@ -123,7 +123,7 @@ export class ItemTree {
       }
     }
 
-    // Check if any existing orphans are children of this new item — also
+    // Check if any existing orphans are children of this new item - also
     // comparing by canonical form so mixed-encoding parent references
     // still pair up.
     const stillOrphaned: ItemNode[] = [];
@@ -167,7 +167,7 @@ export class ItemTree {
    * Index the node under its URL-safe path key, first-wins on collision.
    * Logs a warning the first time a collision is observed so authoring
    * data with sibling items that differ only by case or space-vs-dash
-   * surfaces in container logs (rare in SXA — the editor prevents it).
+   * surfaces in container logs (rare in SXA - the editor prevents it).
    */
   private indexUrlSafe(node: ItemNode): void {
     const key = urlSafePath(node.item.path);
@@ -175,7 +175,7 @@ export class ItemTree {
     if (existing && existing.item.id !== node.item.id) {
       console.warn(
         `  [tree] URL-safe path collision: "${node.item.path}" normalizes to "${key}" ` +
-        `which is already claimed by "${existing.item.path}" — keeping first-added item.`,
+        `which is already claimed by "${existing.item.path}" - keeping first-added item.`,
       );
       return;
     }
@@ -194,8 +194,8 @@ export class ItemTree {
 
   /**
    * Relink a node (and its subtree) to a new parent, updating all paths.
-   * Does NOT call removeItem — children are preserved.
-   * Does NOT delete old files — callers are responsible for file cleanup.
+   * Does NOT call removeItem - children are preserved.
+   * Does NOT delete old files - callers are responsible for file cleanup.
    */
   relinkItem(id: string, newParentId: string, newPath: string): void {
     const node = this.byId.get(id);
@@ -226,7 +226,7 @@ export class ItemTree {
 
   private updatePathsRecursive(node: ItemNode, oldPrefix: string, newPrefix: string): void {
     this.byPath.delete(node.item.path.toLowerCase());
-    // Only clear the URL-safe alias if it currently points at this node —
+    // Only clear the URL-safe alias if it currently points at this node -
     // a colliding sibling may legitimately own the slot.
     const oldUrlKey = urlSafePath(node.item.path);
     if (this.byUrlSafePath.get(oldUrlKey) === node) {
@@ -268,7 +268,7 @@ export class ItemTree {
    * `item.parent` pointer as the single source of truth. Intended to be
    * called at the tail of a full index phase (fresh scan, cache load, or
    * additional-root scan) so the tree is guaranteed self-consistent
-   * regardless of the order in which items were added — a defense against
+   * regardless of the order in which items were added - a defense against
    * mixed-SCS-serializer encoding of parent references (brace-wrapped /
    * uppercased variants) and against stale orphan state from prior
    * partial builds.
@@ -279,7 +279,7 @@ export class ItemTree {
    * in a non-canonical form still resolves.
    *
    * Returns the number of nodes still lacking a parent after the rebuild
-   * — excluding true tree roots (items with no parent pointer at all).
+   * - excluding true tree roots (items with no parent pointer at all).
    * Callers can use this as a startup consistency signal.
    */
   rebuildChildrenIndex(): number {

@@ -241,7 +241,7 @@ describe('resolveLayout ComponentQuery dispatch (item 8)', () => {
     const result = await resolveLayout('/', engine, {
       siteRootPath: '/sitecore/content/site/Home',
       mediaBaseUrl: '',
-      // No graphqlExecutor — ComponentQuery ignored; default field emission runs.
+      // No graphqlExecutor - ComponentQuery ignored; default field emission runs.
     });
 
     expect(result).not.toBeNull();
@@ -254,7 +254,7 @@ describe('resolveLayout ComponentQuery dispatch (item 8)', () => {
     // Mercurius rejects with a FastifyError whose `.errors` array carries the
     // specific validation messages (e.g. "Cannot query field 'path' on type
     // 'ItemUrl'"). The prior log format only stringified `r.reason` which
-    // elided that detail — the next schema gap was invisible without a
+    // elided that detail - the next schema gap was invisible without a
     // rebuild-redeploy cycle. This test pins the improved message shape.
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -286,14 +286,14 @@ describe('resolveLayout ComponentQuery dispatch (item 8)', () => {
     // Prod Edge emits `id` in bare 32-hex uppercase only for ComponentQuery-
     // executed IGQL result rows (Spotlight-style `children(...) { results }`
     // projections). Mercurius's AnyItem.id resolver returns canonical
-    // lowercase-dashed for everything else in 0.3.4 — so when a
+    // lowercase-dashed for everything else in 0.3.4 - so when a
     // ComponentQuery selects `id` under a `results[*]` it must be rewritten
     // back to the Edge shape. Restoring the 0.3.4 carve-out that was
     // reverted along with the AnyItem paths (209 deep-path regression).
     const canonical = '88da64de-28b6-4620-b108-5d8c61564f6f';
     const executor = vi.fn().mockResolvedValue({
       datasource: {
-        // datasource-level id stays canonical — NOT inside a results array.
+        // datasource-level id stays canonical - NOT inside a results array.
         id: 'cafebabe-0000-0000-0000-000000000001',
         links: {
           results: [
@@ -325,7 +325,7 @@ describe('resolveLayout ComponentQuery dispatch (item 8)', () => {
   it('suppresses fields.data but keeps the rendering when the executor throws', async () => {
     // Prior behaviour should resume: the per-rendering ComponentQuery call
     // fails, but the rendering itself stays in the layout and its fields
-    // come from the default resolver chain — a single bad query must not
+    // come from the default resolver chain - a single bad query must not
     // null the whole route.
     const page = homePage(titleRenderingWithQuery.id);
     const engine = buildEngine([

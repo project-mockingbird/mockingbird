@@ -26,7 +26,7 @@ function spotlightLink(id: string, parentId: string, sortOrder: number, name: st
   });
 }
 
-describe('Spotlight resolver — links sort (Item 9)', () => {
+describe('Spotlight resolver - links sort (Item 9)', () => {
   it('sorts links.results by __Sortorder ascending', () => {
     const dsId = 'aaaaaaaa-0000-0000-0000-000000000001';
     const datasource = makeItem({
@@ -109,7 +109,7 @@ describe('Spotlight resolver — links sort (Item 9)', () => {
   });
 });
 
-describe('Carousel resolver — items ids are canonical lowercase-dashed', () => {
+describe('Carousel resolver - items ids are canonical lowercase-dashed', () => {
   // Prod Edge emits Carousel `items[*].id` in canonical lowercase-dashed
   // form (AnyItem-style), NOT the bare-upper-hex shape used for
   // ComponentQuery executor output. 0.3.3's Fix A over-applied the Edge
@@ -140,7 +140,7 @@ describe('Carousel resolver — items ids are canonical lowercase-dashed', () =>
   });
 });
 
-describe('readSortOrder — SV cascade (0.4.0.28)', () => {
+describe('readSortOrder - SV cascade (0.4.0.28)', () => {
   // Sitecore's ChildListOptions walks item.Fields["__Sortorder"].Value which
   // cascades through the template's Standard Values when the item's own value
   // is absent. Pre-0.4.0.28 mockingbird read only the direct shared field,
@@ -156,7 +156,7 @@ describe('readSortOrder — SV cascade (0.4.0.28)', () => {
       id: 'dddddddd-0000-0000-0000-0000aabbccdd0010',
       template: TEMPLATE_ID,
       path: '/sitecore/content/x',
-      // No __Sortorder on shared — SCS would strip if equal to SV default.
+      // No __Sortorder on shared - SCS would strip if equal to SV default.
     });
     const template = makeItem({
       id: TEMPLATE_ID,

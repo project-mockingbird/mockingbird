@@ -62,7 +62,7 @@ export function getDeclaredPlaceholderKeys(
 }
 
 /**
- * Port of Sitecore's `fields` emission gate — specifically the
+ * Port of Sitecore's `fields` emission gate - specifically the
  * `Contents != null` check in
  * `PlaceholderTransformer.TransformPlaceholderElement`
  * (`Sitecore.LayoutService.decompiled.cs:2686-2689`) backed by
@@ -78,14 +78,14 @@ export function getDeclaredPlaceholderKeys(
  * when we're emitting a rendering); we DO see a null context item when
  * `UseContextItem=false` (default) and the rendering has no datasource.
  *
- * `ItemSelectorQuery` is NOT part of the emission gate — Sitecore evaluates
+ * `ItemSelectorQuery` is NOT part of the emission gate - Sitecore evaluates
  * it only after `contextItem` is already non-null, so having a query set
  * doesn't rescue a null-context rendering. 0.4.0.14 incorrectly included a
  * query branch here that over-emitted on query-carrying RCRs without
  * UseContextItem and without datasource; 0.4.0.15 drops it.
  *
  * ComponentQuery is a pre-resolver (GraphQLAwareRenderingContentsResolver)
- * that short-circuits the whole pipeline — when it produced a result,
+ * that short-circuits the whole pipeline - when it produced a result,
  * Contents is trivially non-null.
  */
 export function shouldEmitFields(
@@ -98,7 +98,7 @@ export function shouldEmitFields(
   if (dsItem) return true;
 
   const rcrRaw = readSharedField(engine, renderingId, RENDERING_CONTENTS_RESOLVER_FIELD_ID);
-  if (!rcrRaw) return false; // default RCR — UseContextItem=false → contextItem=dsItem=null → Contents=null
+  if (!rcrRaw) return false; // default RCR - UseContextItem=false → contextItem=dsItem=null → Contents=null
 
   const rcrId = toCanonicalGuid(rcrRaw);
   if (!rcrId) return false;
@@ -112,7 +112,7 @@ export function shouldEmitFields(
 /**
  * SXA JSS Layout item id (`/sitecore/layout/Layouts/Foundation/JSS Experience
  * Accelerator/Presentation/JSS Layout`). Also defined as `JSS_LAYOUT_ID` in
- * `route-builder.ts` — duplicated here to avoid an import cycle.
+ * `route-builder.ts` - duplicated here to avoid an import cycle.
  */
 const JSS_LAYOUT_ID = '96e5f4ba-a2cf-4a4c-a4e7-64da88226362';
 
@@ -120,7 +120,7 @@ const JSS_LAYOUT_ID = '96e5f4ba-a2cf-4a4c-a4e7-64da88226362';
  * The three top-level placeholder keys the JSS Layout item declares:
  * `headless-header`, `headless-main`, `headless-footer`. Hardcoded as a
  * fallback because the current `extract-registry-spe.ps1` Phase 5 only
- * enriches rendering / placeholder-settings / RCR items — layout items
+ * enriches rendering / placeholder-settings / RCR items - layout items
  * under `/sitecore/layout/Layouts` are present in the registry but carry
  * no `Placeholders` multilist field. Without this fallback,
  * `getDeclaredPlaceholderKeys(JSS_LAYOUT_ID)` returns `[]` and the empty-
@@ -140,7 +140,7 @@ const JSS_LAYOUT_DEFAULT_PLACEHOLDER_KEYS: readonly string[] = Object.freeze([
 /**
  * P3a (0.4.0.14): For a route item that has no own `__Final Renderings`,
  * Sitecore emits a layout with empty placeholders drawn from the layout
- * item's declared slots. `getDeclaredPlaceholderKeys` is reused — the
+ * item's declared slots. `getDeclaredPlaceholderKeys` is reused - the
  * only shape difference is the return type.
  *
  * 0.4.0.18: added the {@link JSS_LAYOUT_DEFAULT_PLACEHOLDER_KEYS} fallback

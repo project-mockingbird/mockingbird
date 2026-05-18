@@ -406,7 +406,7 @@ export async function registerGraphQLRoutes(
   };
 
   // True iff `item` has at least one version in `language`. Mockingbird
-  // analogue of Sitecore's `Item.Versions.Count > 0` — the predicate
+  // analogue of Sitecore's `Item.Versions.Count > 0` - the predicate
   // EdgeSchema's `parent` and `ancestors` resolvers use to hide tree nodes
   // that exist but were never authored in the requested language.
   // (Sitecore.Services.GraphQL.EdgeSchema.decompiled.cs:3549, :3691)

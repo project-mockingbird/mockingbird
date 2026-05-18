@@ -3,7 +3,7 @@ import { renderLinkStub } from '../../../src/engine/render-field/processors/link
 import { walkElementAttrs } from '../../../src/engine/render-field/html-walker.js';
 import { buildEngine, makeItem } from '../layout/_helpers.js';
 
-describe('renderLinkStub — internal-link pointing at media item (0.4.0.8)', () => {
+describe('renderLinkStub - internal-link pointing at media item (0.4.0.8)', () => {
   // Mirrors the layout-side `formatField` tests at the pipeline level.
   // `renderLinkStub` emits `<a ... href="..." />` HTML that
   // `buildJsonValue` walks via `walkElementAttrs(html, 'a')` to produce

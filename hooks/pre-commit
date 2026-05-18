@@ -1,0 +1,51 @@
+#!/bin/sh
+# Block forbidden patterns from staged file content.
+#
+# Currently enforced:
+#   - em-dash (U+2014) and en-dash (U+2013): use hyphen (-) instead.
+#
+# To add consumer-reference / internal-path blocking, append additional
+# `-e PATTERN` calls to the grep invocation below, or extend FORBIDDEN_PATTERNS.
+#
+# Bypass with: git commit --no-verify   (false positives only)
+
+# Build dash chars from UTF-8 byte sequences via printf so the source stays
+# pure ASCII (no em-dash or en-dash literal in the hook itself).
+DASH_EM=$(printf '\xe2\x80\x94')
+DASH_EN=$(printf '\xe2\x80\x93')
+
+# tests/fixtures/ may legitimately contain any character (Sitecore corpus data).
+SKIP_PREFIX='tests/fixtures/'
+
+errors=0
+files=$(git diff --cached --name-only --diff-filter=ACMR)
+
+for f in $files; do
+  case "$f" in
+    $SKIP_PREFIX*) continue ;;
+  esac
+
+  # Read staged content (not working-tree) so a later working-tree edit cannot
+  # confuse the scan.
+  blob=$(git show ":$f" 2>/dev/null) || continue
+
+  matches=$(printf '%s\n' "$blob" | grep -nF -e "$DASH_EM" -e "$DASH_EN" 2>/dev/null)
+  if [ -n "$matches" ]; then
+    if [ "$errors" -eq 0 ]; then
+      echo "pre-commit: forbidden pattern(s) found in staged content"
+      echo ""
+    fi
+    echo "  $f:"
+    echo "$matches" | sed 's/^/    /' | head -10
+    echo ""
+    errors=$((errors + 1))
+  fi
+done
+
+if [ "$errors" -gt 0 ]; then
+  echo "Replace em-dash (U+2014) and en-dash (U+2013) with hyphen (-)."
+  echo "Bypass: git commit --no-verify   (false positives only)"
+  exit 1
+fi
+
+exit 0

@@ -1,7 +1,7 @@
 import type { ScsVersion } from '../types.js';
 
 /**
- * Per-version validity predicate — port of Sitecore's `ItemPublishing.IsValid`
+ * Per-version validity predicate - port of Sitecore's `ItemPublishing.IsValid`
  * (`Sitecore.Kernel.decompiled.cs:377576-377602`). Used by `getLatestVersion`
  * (to select which version's fields to read) and by the item-level
  * `isPublishingValid` helper in `publishing.ts` (to drop draft-datasource
@@ -22,7 +22,7 @@ export const VALID_FROM_FIELD_ID = 'c8f93afe-bfd4-4e8f-9c61-152559854661';
 /** Versioned standard field: `__Valid to`. Sitecore's canonical GUID. */
 export const VALID_TO_FIELD_ID = '4c346442-e859-4efd-89b2-44aedf467d21';
 
-/** Versioned standard field: `Hide version` — excludes this version from publishing. */
+/** Versioned standard field: `Hide version` - excludes this version from publishing. */
 export const HIDE_VERSION_FIELD_ID = 'b8f42732-9cb8-478d-ae95-07e25345fb0f';
 
 /**
@@ -62,7 +62,7 @@ export function isPublishingValidationEnabled(): boolean {
 
 /**
  * Parse a Sitecore ISO date (`YYYYMMDDTHHMMSSZ`) to millis-since-epoch.
- * Returns `undefined` when the value doesn't match — callers treat that
+ * Returns `undefined` when the value doesn't match - callers treat that
  * as "gate not applied".
  */
 export function parseSitecoreDate(raw: string): number | undefined {
@@ -87,7 +87,7 @@ export interface IsVersionValidOptions {
 }
 
 /**
- * Per-version validity — port of Sitecore's `ItemPublishing.IsValid`.
+ * Per-version validity - port of Sitecore's `ItemPublishing.IsValid`.
  *
  * Reads `__Valid from`, `__Valid to`, `Hide version`, and (when
  * `requireApproved`) `__Workflow state` off the version's field list OR
@@ -124,7 +124,7 @@ export function isVersionValid(
   const validToRaw = readVersionedField(VALID_TO_FIELD_ID);
   if (validToRaw) {
     const validTo = parseSitecoreDate(validToRaw);
-    // Sitecore's `InValidRange` uses strict `<` against valid-to — a version
+    // Sitecore's `InValidRange` uses strict `<` against valid-to - a version
     // is valid up to but not including the valid-to moment.
     if (validTo !== undefined && validTo <= dateMs) return false;
   }

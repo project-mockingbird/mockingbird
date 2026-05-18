@@ -3,7 +3,7 @@ import { renderImageStub } from './processors/image-stub.js';
 import { renderLinkStub } from './processors/link-stub.js';
 
 /**
- * Ordered processor chain. First `appliesTo` match wins — mirrors the
+ * Ordered processor chain. First `appliesTo` match wins - mirrors the
  * configured processor list in Sitecore's `cm-config.txt` `renderField`
  * pipeline, where `ImageRendererFieldProcessor` /
  * `LinkRendererFieldProcessor` / `RichTextRendererFieldProcessor` each
@@ -11,7 +11,7 @@ import { renderLinkStub } from './processors/link-stub.js';
  *
  * Phase A ships stubs for Image and General Link; they produce the same
  * rendered-HTML shape that 0.3.7's per-item walk would have emitted as
- * direct jsonValue.value keys — so downstream parity is unchanged. Phase
+ * direct jsonValue.value keys - so downstream parity is unchanged. Phase
  * B replaces these with full SXA-processor behavior (media-item
  * projection for alt/width/height, CDN host injection on src, etc.).
  * Phase C adds Rich Text with `DynamicLinkDatabaseSwitcher`.

@@ -168,7 +168,7 @@ describe('buildPlaceholderTree', () => {
   });
 });
 
-describe('buildPlaceholderTree — 0.4.0.20 single-slot parent-dynId collapse', () => {
+describe('buildPlaceholderTree - 0.4.0.20 single-slot parent-dynId collapse', () => {
   it('collapses a child segment of shape `name-0-<dynId>` to bare literal when the parent owns <dynId>', () => {
     // Real-world Event Streaming Body shape: InteractionContent parent with
     // DynamicPlaceholderId=3, child at `.../parent/event-streaming-placeholder-0-3`.
@@ -236,7 +236,7 @@ describe('buildPlaceholderTree — 0.4.0.20 single-slot parent-dynId collapse', 
   });
 });
 
-describe('buildPlaceholderTree — P3b hidden propagation', () => {
+describe('buildPlaceholderTree - P3b hidden propagation', () => {
   it('forwards entry.hidden onto the placeholder node', () => {
     const entries = [
       {
@@ -267,14 +267,14 @@ describe('buildPlaceholderTree — P3b hidden propagation', () => {
   });
 });
 
-describe('buildPlaceholderTree — 0.4.0.33 orphan-pruning via declared keys', () => {
+describe('buildPlaceholderTree - 0.4.0.33 orphan-pruning via declared keys', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
   it('drops a dynamic-placeholder entry when no sibling has matching DPI', () => {
-    // complex placeholder shape — three Container siblings (DPIs 1, 47, 29) each declaring
+    // complex placeholder shape - three Container siblings (DPIs 1, 47, 29) each declaring
     // `container-{*}`. An entry targeting `container-9` has no owner: no
     // sibling has DPI=9. Sitecore drops it; mockingbird must too.
     const containerRenderingId = 'c1111111-0000-0000-0000-000000000000';
@@ -470,7 +470,7 @@ describe('buildPlaceholderTree — 0.4.0.33 orphan-pruning via declared keys', (
     const tree = buildPlaceholderTree(entries, engine);
     expect(tree.main[0].placeholders?.['event-streaming-placeholder']).toHaveLength(1);
     expect(tree.main[0].placeholders?.['event-streaming-placeholder']?.[0].uid).toBe('{CHILD}');
-    // Rule 3 collapses the full segment — the un-collapsed dynamic-key form
+    // Rule 3 collapses the full segment - the un-collapsed dynamic-key form
     // must NOT also appear (would indicate a double-store bug).
     expect(tree.main[0].placeholders?.['event-streaming-placeholder-0-{*}']).toBeUndefined();
     expect(tree.main[0].placeholders?.['event-streaming-placeholder-{*}']).toBeUndefined();
@@ -480,7 +480,7 @@ describe('buildPlaceholderTree — 0.4.0.33 orphan-pruning via declared keys', (
     // SXA Carousel three-tail form: `carousel-slide-<N>-<instance>-<ownerDPI>`.
     // Rule 4 extracts the `stem-N` prefix (`carousel-slide-5`) and matches it
     // against the parent's literal declared keys. The final storage key comes
-    // from normalizeSegment's three-tail collapse — same `carousel-slide-5`.
+    // from normalizeSegment's three-tail collapse - same `carousel-slide-5`.
     const carouselRenderingId = 'ca110101-0000-0000-0000-000000000000';
     const engine = buildEngine([]);
     seedRenderingPlaceholders(engine, carouselRenderingId, ['carousel-slide-0', 'carousel-slide-5']);
@@ -504,7 +504,7 @@ describe('buildPlaceholderTree — 0.4.0.33 orphan-pruning via declared keys', (
 
   it('falls through to legacy behavior when no engine is passed', () => {
     // Same complex-placeholder-shape fixture as the orphan test, but WITHOUT an engine.
-    // The legacy last-sibling fallback fires — this matches pre-0.4.0.33
+    // The legacy last-sibling fallback fires - this matches pre-0.4.0.33
     // permissive behavior and is what the ~80 existing tests implicitly rely on.
     const entries = [
       entry({ uid: '{A}', placeholder: 'main', params: { DynamicPlaceholderId: '1' } }),

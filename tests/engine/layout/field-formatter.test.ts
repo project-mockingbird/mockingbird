@@ -157,7 +157,7 @@ describe('formatField', () => {
     expect(result.value.href).toBe('https://example.com/x');
   });
 
-  it('formats General Link (media) — resolves media item to href (0.4.0.8)', () => {
+  it('formats General Link (media) - resolves media item to href (0.4.0.8)', () => {
     // SXA Event pages carry `CalendarInvitation` / `EventInformation`
     // General Link fields with `linktype="media"` pointing at an .ics /
     // .pdf in the media library. 0.4.0.8 aligned emission to Sitecore's
@@ -175,7 +175,7 @@ describe('formatField', () => {
     const result = formatField(xml, 'General Link', engine, '', '/sitecore/content') as any;
     expect(result.value.linktype).toBe('media');
     expect(result.value.href).toBe('/-/media/Project/tenant/site/calendar-invitations/ai-office-hours/2023/AI-Office-Hours-2023-08-12.ics');
-    // No computed `url` key — the authored XML has no `url` attribute,
+    // No computed `url` key - the authored XML has no `url` attribute,
     // and 0.4.0.8 dropped the computed-overwrite from the media branch.
     expect(result.value.url).toBeUndefined();
     expect(result.value.text).toBe('Save the Date');
@@ -185,7 +185,7 @@ describe('formatField', () => {
   it('preserves authored Image attributes (hspace/vspace/class/title) when non-empty', () => {
     // SXA-authored <image> XML stores arbitrary HTML attributes for
     // visual layout. Edge emits the complete authored set alongside the
-    // computed src — previously mockingbird dropped everything except
+    // computed src - previously mockingbird dropped everything except
     // src/alt/width/height.
     const mediaItem = makeItem({
       id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
@@ -206,7 +206,7 @@ describe('formatField', () => {
     expect(result.value.vspace).toBe('50');
     expect(result.value.class).toBe('rounded-border');
     expect(result.value.title).toBe('Our Team');
-    // mediaid is the resolution handle — not emitted on the output.
+    // mediaid is the resolution handle - not emitted on the output.
     expect(result.value.mediaid).toBeUndefined();
   });
 
@@ -233,7 +233,7 @@ describe('formatField', () => {
     // width/height back-filled from the media item's shared fields.
     expect(result.value.width).toBe('67');
     expect(result.value.height).toBe('67');
-    // Optional attrs with empty authored value — dropped from the shape.
+    // Optional attrs with empty authored value - dropped from the shape.
     expect(result.value).not.toHaveProperty('hspace');
     expect(result.value).not.toHaveProperty('vspace');
     expect(result.value).not.toHaveProperty('class');
@@ -335,10 +335,10 @@ describe('formatField', () => {
   });
 });
 
-describe('formatField — internal-link pointing at media item (0.4.0.8)', () => {
+describe('formatField - internal-link pointing at media item (0.4.0.8)', () => {
   // Sitecore's `InternalLinkFieldSerializer.GetLinkUrl` dispatches by the
-  // resolved item's `IsMediaItem` flag — not by the authored `linktype`
-  // attribute — with a carve-out for the `MediaFolder` template. Mockingbird
+  // resolved item's `IsMediaItem` flag - not by the authored `linktype`
+  // attribute - with a carve-out for the `MediaFolder` template. Mockingbird
   // now mirrors that: a `linktype="internal"` link whose target resolves to
   // an asset under `/sitecore/media library` (and is NOT a Media Folder)
   // emits a `/-/media/<path>.<ext>` CDN URL in `href`.
@@ -359,9 +359,9 @@ describe('formatField — internal-link pointing at media item (0.4.0.8)', () =>
     const xml = `<link linktype="internal" id="{${mediaId.toUpperCase()}}" url="/sitecore/media library/Project/tenant/site/calendar-invitations/mde-office-hours/2025/MDE Office Hours 2025" target="" text="Save the Date" />`;
     const result = formatField(xml, 'General Link', engine, '', '/sitecore/content') as any;
 
-    // href computed via `buildMediaUrlPath` — space→hyphen + Extension append.
+    // href computed via `buildMediaUrlPath` - space→hyphen + Extension append.
     expect(result.value.href).toBe('/-/media/Project/tenant/site/calendar-invitations/mde-office-hours/2025/MDE-Office-Hours-2025.ics');
-    // Authored XML attrs flow through verbatim — pins the Sitecore
+    // Authored XML attrs flow through verbatim - pins the Sitecore
     // `GeneralLinkFieldSerializer.GetLinkProperties` contract.
     expect(result.value.linktype).toBe('internal');
     expect(result.value.url).toBe('/sitecore/media library/Project/tenant/site/calendar-invitations/mde-office-hours/2025/MDE Office Hours 2025');
@@ -384,7 +384,7 @@ describe('formatField — internal-link pointing at media item (0.4.0.8)', () =>
     const xml = `<link linktype="internal" id="{${folderId.toUpperCase()}}" />`;
     const result = formatField(xml, 'General Link', engine, '', '/sitecore/content') as any;
 
-    // 0.4.0.9: MediaFolder exclusion dropped — folder targets resolve
+    // 0.4.0.9: MediaFolder exclusion dropped - folder targets resolve
     // through the media-URL builder like any other media-library item,
     // matching Edge publish's observed output.
     // 0.4.0.10 item 5: Empty Extension → .ashx (Sitecore's
@@ -393,7 +393,7 @@ describe('formatField — internal-link pointing at media item (0.4.0.8)', () =>
   });
 
   it('linktype=internal pointing at content item still uses site-relative url', () => {
-    // Regression guard — the non-media branch of the dispatch must keep
+    // Regression guard - the non-media branch of the dispatch must keep
     // working for the far larger population of ordinary content-tree links.
     const contentId = 'dddddddd-dddd-dddd-dddd-dddddddddd03';
     const content = makeItem({
@@ -459,7 +459,7 @@ describe('emptyValueForType', () => {
   });
 });
 
-describe('formatField — Date / Datetime → ISO-8601 conversion', () => {
+describe('formatField - Date / Datetime → ISO-8601 conversion', () => {
   const engine = buildEngine([]);
 
   it('expands Sitecore compact form yyyyMMddTHHmmss to ISO yyyy-MM-ddTHH:mm:ssZ', () => {
@@ -502,7 +502,7 @@ describe('formatField — Date / Datetime → ISO-8601 conversion', () => {
   });
 });
 
-describe('formatField — RichText + plain-text passthrough (0.4.0.7)', () => {
+describe('formatField - RichText + plain-text passthrough (0.4.0.7)', () => {
   const engine = buildEngine([]);
 
   it('preserves leading whitespace on Single-Line Text', () => {
@@ -529,7 +529,7 @@ describe('formatField — RichText + plain-text passthrough (0.4.0.7)', () => {
 
   it('preserves internal AND trailing newlines on Rich Text (0.4.0.7)', () => {
     // Multi-paragraph Rich Text / Multiline fields keep every `\n` the
-    // parser produced — internal paragraph breaks and any author-intended
+    // parser produced - internal paragraph breaks and any author-intended
     // trailing newline both flow through to Edge.
     expect(formatField('<p>line one</p>\n<p>line two</p>\n', 'Rich Text', engine, '')).toEqual({
       value: '<p>line one</p>\n<p>line two</p>\n',
@@ -538,7 +538,7 @@ describe('formatField — RichText + plain-text passthrough (0.4.0.7)', () => {
 
   it('preserves trailing whitespace on plain-text fields byte-for-byte (0.4.0.6)', () => {
     // Sitecore's `RenderFieldPipeline.GetTextFieldValue` is a passthrough
-    // for plain-text field types — the stored database value emits
+    // for plain-text field types - the stored database value emits
     // byte-for-byte, trailing whitespace included. Pre-0.4.0.6 code used
     // `.replace(/\s+$/, "")` to trim the run, which stripped ~816 cases'
     // worth of authored trailing space / CRLF / NBSP across the site content tree.
@@ -566,7 +566,7 @@ describe('formatField — RichText + plain-text passthrough (0.4.0.7)', () => {
   });
 });
 
-describe('formatField — SXA "multiroot treelist" (item 7, no hyphen)', () => {
+describe('formatField - SXA "multiroot treelist" (item 7, no hyphen)', () => {
   // SXA's field-type registration uses the two-word spelling `multiroot
   // treelist`. Mockingbird historically only matched the hyphenated form
   // `multi-root treelist` in `MULTILIST_TYPES`, so fields declared with the
@@ -592,7 +592,7 @@ describe('formatField — SXA "multiroot treelist" (item 7, no hyphen)', () => {
 describe('formatReferenceItem', () => {
   it('produces { id, url, name, displayName, fields } shape', () => {
     // Multilist reference-item ids flow out as the item's canonical
-    // lowercase-dashed form — matching prod Edge's wire contract for
+    // lowercase-dashed form - matching prod Edge's wire contract for
     // `MultiListFieldSerializer` → `{id, url, name, displayName, fields}`.
     // The bare-upper-hex Edge form is reserved for ComponentQuery executor
     // result rows (see Spotlight `data.datasource.links.results`).
@@ -704,12 +704,12 @@ describe('formatReferenceItem', () => {
  * Item 11: referenced-item field cascade. Sitecore's MultiListFieldSerializer
  * runs each ref item through `DefaultItemSerializer` → `item.Fields[id].Value`
  * which cascades to `__Standard Values` automatically. Mockingbird's original
- * `formatReferenceItem` read stored values directly, skipping the cascade —
+ * `formatReferenceItem` read stored values directly, skipping the cascade -
  * so a referenced Tag whose template's SV carries `Color = "blue"` would
  * render `Color: {value: ""}` at the reference level even though prod Edge
  * emits `{value: "blue"}`.
  */
-describe('formatReferenceItem — __Standard Values cascade (item 11)', () => {
+describe('formatReferenceItem - __Standard Values cascade (item 11)', () => {
   const REF_TEMPLATE_ID = 'affe0000-0000-0000-0000-aaaaaaaaaaaa';
   const REF_SECTION_ID = 'affe0000-0000-0000-0000-bbbbbbbbbbbb';
   const REF_FIELD_ID = 'affe0000-0000-0000-0000-cccccccccccc';
@@ -808,7 +808,7 @@ describe('formatReferenceItem — __Standard Values cascade (item 11)', () => {
     expect(out.fields.Color).toEqual({ value: 'red' });
   });
 
-  it('honours explicit stored empty as suppression — does NOT cascade to SV', () => {
+  it('honours explicit stored empty as suppression - does NOT cascade to SV', () => {
     // Matches SearchBox.TextBoxText behaviour: author sets "" to override a
     // template SV default; the reference-level emission must honour that.
     const [template, section, field] = buildRefTemplate();
@@ -838,7 +838,7 @@ describe('formatReferenceItem — __Standard Values cascade (item 11)', () => {
   });
 });
 
-describe('resolveItem — registry fallback (0.4.0.11 item 3)', () => {
+describe('resolveItem - registry fallback (0.4.0.11 item 3)', () => {
   it('resolveItem: falls back to registry when item is not in the tree (0.4.0.11 item 3)', () => {
     // Real-world fixture: NavigationFilter on release-listing pages
     // references items under /sitecore/system/Settings/Foundation/Experience
@@ -870,7 +870,7 @@ describe('resolveItem — registry fallback (0.4.0.11 item 3)', () => {
     expect(result[0].name).toBe('Breadcrumb Navigation');
   });
 
-  it('resolveItem: tree-first discipline — tree item wins over registry (0.4.0.11 item 3)', () => {
+  it('resolveItem: tree-first discipline - tree item wins over registry (0.4.0.11 item 3)', () => {
     // Regression guard: items present in the tree must resolve through
     // the tree, not the registry. Synthesis runs only on the fallback
     // branch; a tree-resolved item emits verbatim.
@@ -899,7 +899,7 @@ describe('resolveItem — registry fallback (0.4.0.11 item 3)', () => {
   });
 
   it('resolveItem: returns undefined when neither tree nor registry has the id (0.4.0.11 item 3)', () => {
-    // Unresolvable references silently drop — pre-existing formatMultilist
+    // Unresolvable references silently drop - pre-existing formatMultilist
     // behavior. Registry fallback must not break this.
     const engine = buildEngineWithRegistry({ tree: [], registry: [] });
     const xml = '{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}';
@@ -909,7 +909,7 @@ describe('resolveItem — registry fallback (0.4.0.11 item 3)', () => {
   });
 });
 
-describe('SCT overlay — end-to-end', () => {
+describe('SCT overlay - end-to-end', () => {
   const NAV_TITLE_FIELD_ID = '4e0720e9-9d50-4ddc-87cf-ecd65e8e94c8';
 
   it('resolveFieldValue routes through SCT overlay when present', () => {
@@ -924,7 +924,7 @@ describe('SCT overlay — end-to-end', () => {
       fields: { [NAV_TITLE_FIELD_ID]: 'News Article Page' },
     });
 
-    // Subject item has NO stored NavigationTitle — SCT should provide it.
+    // Subject item has NO stored NavigationTitle - SCT should provide it.
     const subjectItem = makeItem({
       id: 'b0000099-0000-0000-0000-000000000000',
       parent: 'ba000010-0000-0000-0000-000000000000',
@@ -958,7 +958,7 @@ describe('SCT overlay — end-to-end', () => {
       fields: { [NAV_TITLE_FIELD_ID]: 'Default News Title' },
     });
 
-    // Subject item has stored NavigationTitle — should win.
+    // Subject item has stored NavigationTitle - should win.
     const subjectItem = makeItem({
       id: 'b0000099-0000-0000-0000-000000000000',
       parent: 'ba000010-0000-0000-0000-000000000000',

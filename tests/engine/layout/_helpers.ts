@@ -140,7 +140,7 @@ export function buildSctFixture(opts: {
   const tenantId = 'ba000001-0000-0000-0000-000000000000';
   const tenantPath = `/sitecore/content/${opts.tenantName}`;
 
-  // Tenant item — SharedSites resolves to concat of each site's `shared` list,
+  // Tenant item - SharedSites resolves to concat of each site's `shared` list,
   // deduped.
   const sharedSiteRefs: string[] = [];
   for (const site of opts.sites) {
@@ -252,7 +252,7 @@ export function addPerSiteTemplate(
 /**
  * Add an SCT item to a fixture. The SCT's path is
  * `<siteRoot>/Settings/Standard Values/<fileName>`. The SCT's own template
- * equals `subjectTemplateId` directly — that template must inherit from
+ * equals `subjectTemplateId` directly - that template must inherit from
  * `_PerSiteStandardValues` (use `addPerSiteTemplate` to create).
  */
 export function addSctItem(opts: {
@@ -307,7 +307,7 @@ function findFirstChildByName(engine: Engine, parentPath: string, name: string):
  * Used by orphan-pruning tests to seed just enough registry/tree metadata for
  * `getDeclaredPlaceholderKeys(engine, renderingId)` to return `keys` as-is.
  *
- * Multiple renderings can be seeded via repeated keys in the same engine — use
+ * Multiple renderings can be seeded via repeated keys in the same engine - use
  * `seedRenderingPlaceholders(engine, renderingId, keys)` for the mutation form.
  */
 export function seedRenderingPlaceholders(

@@ -101,7 +101,7 @@ function detectOptions(yaml: string): { bom: boolean; newline: '\n' | '\r\n' } {
   };
 }
 
-describe('serializeItem — Rainbow round-trip byte-parity', () => {
+describe('serializeItem - Rainbow round-trip byte-parity', () => {
   it('round-trips a simple template fixture byte-identically', async () => {
     const filePath = resolve(VALID_FIXTURES, 'authoring/items/templates/MyTemplate/MyTemplate.yml');
     const original = await readFile(filePath, 'utf-8');
@@ -253,7 +253,7 @@ describe('serializeItem — Rainbow round-trip byte-parity', () => {
       const original = await readFile(file, 'utf-8');
       try {
         const parsed = parseItemFromString(original);
-        // Role / user / other SCS schemas don't populate `ID` — skip them.
+        // Role / user / other SCS schemas don't populate `ID` - skip them.
         if (!parsed.id) continue;
         itemsChecked++;
         const serialized = serializeItem(parsed, detectOptions(original));

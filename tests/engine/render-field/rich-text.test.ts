@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { rewriteRichText } from '../../../src/engine/render-field/rich-text.js';
 import { buildEngine, makeItem } from '../layout/_helpers.js';
 
-describe('rewriteRichText — Dynamic link tokens', () => {
+describe('rewriteRichText - Dynamic link tokens', () => {
   it('rewrites ~/link.aspx?_id={GUID} to a site-relative URL', () => {
     const targetId = 'af176413-1cfe-4c54-9fcb-4f0545258bff';
     const target = makeItem({ id: targetId, path: '/sitecore/content/site/Home/about' });
@@ -44,7 +44,7 @@ describe('rewriteRichText — Dynamic link tokens', () => {
     // Regression guard: only unresolved-but-valid GUIDs trigger the
     // notfound URL. Malformed tokens (missing/invalid _id) still fall
     // through the `!idMatch` and `!id` branches returning `match`
-    // verbatim — preserves the two existing malformed-token test paths.
+    // verbatim - preserves the two existing malformed-token test paths.
     const engine = buildEngine([]);
     const body = '<a href="~/link.aspx?_other=x">no id</a>';
     expect(rewriteRichText(body, engine, '', '')).toBe(body);
@@ -67,7 +67,7 @@ describe('rewriteRichText — Dynamic link tokens', () => {
   });
 });
 
-describe('rewriteRichText — Dynamic media tokens', () => {
+describe('rewriteRichText - Dynamic media tokens', () => {
   it('rewrites -/media/<32hex>.ashx to the resolved media path, preserving querystring', () => {
     const mediaId = 'eeeeeeee-3333-4444-5555-666666666666';
     const media = makeItem({
@@ -113,7 +113,7 @@ describe('rewriteRichText — Dynamic media tokens', () => {
   });
 });
 
-describe('rewriteRichText — pass-through', () => {
+describe('rewriteRichText - pass-through', () => {
   it('leaves bodies without tokens unchanged', () => {
     const engine = buildEngine([]);
     const body = '<p>Just some plain HTML, no tokens.</p>';
@@ -140,7 +140,7 @@ describe('rewriteRichText - whitespace normalization (0.4.0.10 item 9)', () => {
   });
 
   it('preserves \\r\\n pairs (downstream normalizer collapses them)', () => {
-    // Regression guard: the strip must NOT touch CRLF pairs — removing
+    // Regression guard: the strip must NOT touch CRLF pairs - removing
     // the CR from a `\r\n` sequence would corrupt the downstream
     // normalizer's expected input shape.
     const engine = buildEngine([]);
@@ -149,7 +149,7 @@ describe('rewriteRichText - whitespace normalization (0.4.0.10 item 9)', () => {
   });
 });
 
-describe('rewriteRichText — SXA xa-variable span resolution (0.4.0.29)', () => {
+describe('rewriteRichText - SXA xa-variable span resolution (0.4.0.29)', () => {
   // Sitecore Edge resolves `<span class="xa-variable" data-variableitemid="{ID}">label</span>`
   // by looking up the referenced Content Token item and replacing the entire
   // span with the token's `Value` field. Mockingbird previously passed the
@@ -195,7 +195,7 @@ describe('rewriteRichText — SXA xa-variable span resolution (0.4.0.29)', () =>
   });
 
   it('leaves span unchanged when the referenced item is not in the tree', () => {
-    // Unresolvable reference falls through — preserves existing markup
+    // Unresolvable reference falls through - preserves existing markup
     // rather than silently stripping content, matching the
     // ~/link.aspx malformed-token behaviour.
     const engine = buildEngine([]);
@@ -203,7 +203,7 @@ describe('rewriteRichText — SXA xa-variable span resolution (0.4.0.29)', () =>
     expect(rewriteRichText(body, engine, '', '')).toBe(body);
   });
 
-  it('matches the authored attribute `data-variableid` (no "item") — 0.4.0.30 regex fix', () => {
+  it('matches the authored attribute `data-variableid` (no "item") - 0.4.0.30 regex fix', () => {
     // The actual site authoring attribute is `data-variableid` (no "item"
     // prefix). 0.4.0.29 matched only `data-variableitemid` because the
     // initial spec called for the longer form; a real-world site grep

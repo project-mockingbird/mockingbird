@@ -66,7 +66,7 @@ const F_DISPLAY_NAME = 'b5e02ad9-d56f-4c41-a065-a133db87bdeb';
 const F_DESCRIPTION = '9541e67d-ce8c-4225-803d-33f7f29f09ef';
 // Modules field on _Modules base template.
 const F_MODULES = '1230d2cb-4948-4d43-8a3b-b39978f6f1b3';
-// _Base Tenant.Templates field id — points at /sitecore/templates/Project/<tenant>/
+// _Base Tenant.Templates field id - points at /sitecore/templates/Project/<tenant>/
 // where per-tenant template ITEMS live (created by tenant scaffolding's
 // applyTenantTemplates step).
 const F_TENANT_TEMPLATES = '9c596379-f8d4-45d1-a064-cdf1ede2e7c7';

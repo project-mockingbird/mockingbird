@@ -240,9 +240,9 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
           const itemField = allItemFields.get(schemaField.id);
           // Label resolution preference (Sitecore CE parity):
           //   1. Template Field's Title / __Display name (schemaField.displayName)
-          //      — but only if it differs from the raw item name (otherwise
+          //      - but only if it differs from the raw item name (otherwise
           //      it carries no information).
-          //   2. The item's tree name (schemaField.name) — what SCS writes
+          //   2. The item's tree name (schemaField.name) - what SCS writes
           //      as the YAML Hint and what Sitecore shows when Title is unset.
           // The YAML's per-item Hint is intentionally NOT a label source:
           // SCS auto-writes Hint = field Name on every save, so preferring

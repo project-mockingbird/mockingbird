@@ -59,7 +59,7 @@ describe('intern pool', () => {
     expect(a.sharedFields[0].id).toBe(b.sharedFields[0].id);
     expect(a.sharedFields[0].hint).toBe(b.sharedFields[0].hint);
     expect(a.sharedFields[1].id).toBe(b.sharedFields[1].id);
-    // Values remain distinct — not interned (typically unique per item).
+    // Values remain distinct - not interned (typically unique per item).
     expect(a.sharedFields[0].value).not.toBe(b.sharedFields[0].value);
   });
 
@@ -84,7 +84,7 @@ describe('intern pool', () => {
         ],
       }),
     );
-    // Same id used unversioned and versioned — should share identity after intern.
+    // Same id used unversioned and versioned - should share identity after intern.
     expect(item.languages[0].fields[0].id).toBe(item.languages[0].versions[0].fields[0].id);
     expect(item.languages[0].fields[0].hint).toBe(item.languages[0].versions[0].fields[0].hint);
     // Language code interned.

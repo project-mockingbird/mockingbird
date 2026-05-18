@@ -20,13 +20,13 @@ import { getDeclaredPlaceholderKeys } from './rendering-metadata.js';
 function normalizeSegment(segment: string, ownerDynId?: string): string {
   // SXA uses three distinct tail patterns:
   //
-  //   `name-<N>`            — single numeric tail, the dynamic placeholder
+  //   `name-<N>`            - single numeric tail, the dynamic placeholder
   //                           index. Normalize to `name-{*}`.
-  //   `name-<N>-<M>-<K>`    — three numeric tails (e.g. `carousel-slide-0-0-6`)
+  //   `name-<N>-<M>-<K>`    - three numeric tails (e.g. `carousel-slide-0-0-6`)
   //                           where the trailing `-<M>-<K>` is a dynamic suffix
   //                           and the first N is the literal slot index. Strip
   //                           the last two numerics; keep `name-<N>` literal.
-  //   `name-<N>-<K>`        — two numeric tails where K is the parent
+  //   `name-<N>-<K>`        - two numeric tails where K is the parent
   //                           rendering's DynamicPlaceholderId and N is the
   //                           solo instance index (single-slot declared
   //                           placeholder). SXA renders this to the bare
@@ -34,7 +34,7 @@ function normalizeSegment(segment: string, ownerDynId?: string): string {
   const threeTailMatch = /^(.+?-\d+)-\d+-\d+$/.exec(segment);
   if (threeTailMatch) return threeTailMatch[1];
 
-  // Two-tail parent-dynId collapse — only applies when the owner's dynId is
+  // Two-tail parent-dynId collapse - only applies when the owner's dynId is
   // known and matches the trailing numeric. Without this guard, `widget-0-5`
   // would incorrectly collapse to `widget` for an unrelated owner.
   if (ownerDynId) {
@@ -88,7 +88,7 @@ function dynamicPlaceholderId(segment: string): string | undefined {
  * for tests / items whose rendering lacks Placeholders-field enrichment).
  *
  * `resolvedKey` contract: only set by rule 1 (literal declared key).
- * Rules 2/3/4 MUST omit `resolvedKey` — the caller applies normalizeSegment
+ * Rules 2/3/4 MUST omit `resolvedKey` - the caller applies normalizeSegment
  * to produce the storage key for dynamic/two-tail/three-tail patterns. If a
  * future rule produces a key where normalizeSegment would corrupt it (as rule
  * 1 does for `carousel-slide-5` → `carousel-slide-{*}`), that rule must also
@@ -107,7 +107,7 @@ function resolveByDeclaredKeys(
     if (declared.length === 0) continue;
     hasMetadata = true;
 
-    // 1. literal — segment IS a declared key; store under the literal key
+    // 1. literal - segment IS a declared key; store under the literal key
     if (declared.includes(segment)) {
       return { decided: true, owner: candidate, resolvedKey: segment };
     }
@@ -165,7 +165,7 @@ function logOrphan(entry: RenderingEntry, reason: string, failedSegment: string)
  * or when no match is found (so static placeholders still resolve).
  *
  * When `engine` is provided AND some sibling declares placeholder keys, use
- * the strict declared-keys predicate from {@link resolveByDeclaredKeys} —
+ * the strict declared-keys predicate from {@link resolveByDeclaredKeys} -
  * that path orphans entries whose segment has no structural owner (Sitecore
  * parity). Otherwise (no engine, or no sibling has registry metadata) fall
  * through to the legacy DPI-match + last-sibling behavior so existing tests
@@ -257,7 +257,7 @@ export function buildPlaceholderTree(
       if (!root[ph]) root[ph] = [];
       root[ph].push(node);
     } else {
-      // Nested placement — parse path segments (drop leading empty string from split).
+      // Nested placement - parse path segments (drop leading empty string from split).
       const segments = ph.slice(1).split('/');
       // segments[0]              → top-level placeholder name
       // segments[1..n-2]         → intermediate placeholder names (each on a prior node)
@@ -324,7 +324,7 @@ export function buildPlaceholderTree(
       // `normalizeSegment` can collapse the parent-dynId suffix.
       // When the declared-keys path already resolved a canonical storage key
       // (e.g. a literal enumerated key like `carousel-slide-5`), use it
-      // directly — do NOT let `normalizeSegment` collapse it to `carousel-slide-{*}`.
+      // directly - do NOT let `normalizeSegment` collapse it to `carousel-slide-{*}`.
       const ownerDynId = owner.params?.DynamicPlaceholderId;
       const normalizedFinal = finalResolvedKey ?? normalizeSegment(finalSegment, ownerDynId);
       if (!owner.placeholders) owner.placeholders = {};

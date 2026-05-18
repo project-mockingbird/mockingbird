@@ -14,7 +14,7 @@ import type { ScsField, ScsItem, ScsLanguage, ScsVersion } from './types.js';
  * authored string began with a space (~717 divergences observed in the
  * 0.3.1 parity diff).
  *
- * Rainbow reference — `Rainbow.Storage.Yaml.YamlReader.ReadMapInternal`
+ * Rainbow reference - `Rainbow.Storage.Yaml.YamlReader.ReadMapInternal`
  * (line 455 of the decompiled source):
  *
  *   int num = text.IndexOf(':');
@@ -54,7 +54,7 @@ interface Cursor {
 }
 
 export function parseItemFromString(content: string): ScsItem {
-  // Strip UTF-8 BOM if present — SCS writer emits it, `readFile(..., 'utf-8')`
+  // Strip UTF-8 BOM if present - SCS writer emits it, `readFile(..., 'utf-8')`
   // preserves it in the string, `---` comparison fails without this.
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
   const lines = content.split(/\r?\n/);
@@ -104,7 +104,7 @@ export function parseItemFromString(content: string): ScsItem {
 /**
  * Read a list of field records (ID / Hint / Type / BlobID / Value). The first
  * list-marker token seen at or above `minIndent` establishes the indent
- * level used for all subsequent items — this keeps the parser compatible
+ * level used for all subsequent items - this keeps the parser compatible
  * with both SCS/Rainbow output (list markers at column 0 directly under the
  * parent key) and the Mockingbird serializer's `yaml`-library default
  * (markers indented 2 under the parent). Rainbow's `GetIndent` counts both
@@ -207,7 +207,7 @@ function decode(value: string): string {
 
 /**
  * Read subsequent lines until one appears with indent &lt; the required
- * `indent`. Each retained line contributes `line.slice(indent)` — everything
+ * `indent`. Each retained line contributes `line.slice(indent)` - everything
  * to the left of `indent` is the block-scalar indent marker and discarded.
  *
  * Matches Rainbow's `ReadMultilineString(int indent)` (line 484 of the
@@ -229,7 +229,7 @@ function readBlockScalar(cur: Cursor, indent: number): string {
 /**
  * Rainbow `GetIndent`: loop past leading ` ` or `-`; return the index at the
  * first non-indent char, OR `line.length` if every char is a space/dash.
- * A blank line therefore reports indent 0 — which breaks block-scalar
+ * A blank line therefore reports indent 0 - which breaks block-scalar
  * continuation as expected (SCS writers never emit blank lines inside a
  * block-scalar body, so this matches observed output).
  */

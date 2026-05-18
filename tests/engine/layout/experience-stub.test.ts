@@ -12,7 +12,7 @@ describe('buildExperienceStub', () => {
     });
   });
 
-  it('preserves uid exactly — does not re-case or re-normalize', () => {
+  it('preserves uid exactly - does not re-case or re-normalize', () => {
     const stub = buildExperienceStub('ABCD1234-0000-0000-0000-000000000001');
     expect(stub.uid).toBe('ABCD1234-0000-0000-0000-000000000001');
   });

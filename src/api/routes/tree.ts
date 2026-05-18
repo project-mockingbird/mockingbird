@@ -63,7 +63,7 @@ interface TreeNodeResponse {
 }
 
 export function registerTreeRoutes(app: FastifyInstance, engine: Engine): void {
-  // GET /api/tree — returns top-level nodes (merged registry roots + serialized orphans)
+  // GET /api/tree - returns top-level nodes (merged registry roots + serialized orphans)
   app.get('/api/tree', async (request, reply) => {
     const { root, depth, db } = request.query as { root?: string; depth?: string; db?: string };
     const maxDepth = Math.min(Number(depth ?? 1), 10);
@@ -102,7 +102,7 @@ export function registerTreeRoutes(app: FastifyInstance, engine: Engine): void {
     return nodes;
   });
 
-  // GET /api/tree/ancestors/:id — return parent chain from root down to
+  // GET /api/tree/ancestors/:id - return parent chain from root down to
   // (but not including) the target item, as a list of IDs. Used by the UI
   // to auto-expand the tree when navigation happens outside the tree itself
   // (e.g. clicking the Template field in QuickInfo).
@@ -129,7 +129,7 @@ export function registerTreeRoutes(app: FastifyInstance, engine: Engine): void {
     return ancestors;
   });
 
-  // GET /api/tree/children/:id — lazy-load children of a node
+  // GET /api/tree/children/:id - lazy-load children of a node
   app.get('/api/tree/children/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const { depth, db } = request.query as { depth?: string; db?: string };
@@ -140,7 +140,7 @@ export function registerTreeRoutes(app: FastifyInstance, engine: Engine): void {
     return children;
   });
 
-  // GET /api/databases — list available databases
+  // GET /api/databases - list available databases
   app.get('/api/databases', async () => {
     return engine.getRegistryDatabases();
   });
@@ -282,7 +282,7 @@ function getMergedChildren(parentId: string, engine: Engine, maxDepth: number, c
     }
   }
 
-  // Registry children — filtered by visibility (items in this DB + their ancestors)
+  // Registry children - filtered by visibility (items in this DB + their ancestors)
   // Sort to prefer items tagged with the current database (for name deduplication)
   const registryChildren = engine.getRegistryChildren(parentId, database)
     .sort((a, b) => (a.database === database ? -1 : 1) - (b.database === database ? -1 : 1));

@@ -78,7 +78,7 @@ describe('resolveLayout - InteractionNavigation (Phase D)', () => {
     const readPage = page('00000001-0000-0000-0000-000000000001', 'read', 'Resource.Read', 100);
     const searchPage = page('00000002-0000-0000-0000-000000000002', 'search', 'Resource.Search', 200);
 
-    // The route item — `__Final Renderings` is a versioned field, stored in
+    // The route item - `__Final Renderings` is a versioned field, stored in
     // languages[].versions[].fields (same as the existing route-builder.test.ts fixtures).
     // s:ph must NOT start with "/" for a top-level placeholder (a leading "/" means
     // nested placement and requires a parent slot to already exist in the tree).

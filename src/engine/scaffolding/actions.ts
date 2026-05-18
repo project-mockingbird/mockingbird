@@ -93,8 +93,8 @@ function appendIds(existing: string, toAdd: string[]): string {
   // Brace-normalize all parts (existing + new) to Sitecore's canonical
   // `{GUID}|{GUID}|...` form. Without braces, parseGuidList (which only
   // matches `{...}` runs) treats the value as empty and every
-  // base-template walker — templateInheritsFrom, setTenantTemplate,
-  // SCT resolution — silently returns "no inheritance found".
+  // base-template walker - templateInheritsFrom, setTenantTemplate,
+  // SCT resolution - silently returns "no inheritance found".
   const normalize = (id: string): string => formatGuidBraced(normalizeGuid(id));
   const parts = existing
     ? existing.split('|').filter(Boolean).map(normalize)

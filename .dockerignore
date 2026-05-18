@@ -30,6 +30,6 @@ data/registry.json
 # Local dev scripts (debug probes, extraction helpers) - not part of the
 # runtime image.
 scripts
-# Legacy CLI package cache — kept from the previous .dockerignore.
+# Legacy CLI package cache - kept from the previous .dockerignore.
 content/.sitecore
 

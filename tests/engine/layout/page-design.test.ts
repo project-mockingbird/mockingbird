@@ -111,7 +111,7 @@ describe('resolvePageDesignId', () => {
     });
     const engine = buildEngine([item, derivedTemplate, baseTemplate, pageDesignsRoot]);
     // Only the base template is mapped; the item's direct template isn't.
-    // Sitecore returns `null` for this configuration — no design applies.
+    // Sitecore returns `null` for this configuration - no design applies.
     expect(resolvePageDesignId(item, engine, '/sitecore/content/site/Home')).toBeUndefined();
   });
 
@@ -157,7 +157,7 @@ describe('resolvePageDesignId', () => {
 
   it('does not walk above the site root for Page Design overrides (0.4.0.17)', () => {
     // An override on an item ABOVE the site root (tenant / /sitecore/content)
-    // must NOT bleed into pages under the site — Sitecore stops the walk at
+    // must NOT bleed into pages under the site - Sitecore stops the walk at
     // the site root boundary.
     const aboveRootDesignId = 'feedface-0000-0000-0000-000000000000';
     const pageDesignsRoot = makeItem({
@@ -242,7 +242,7 @@ describe('resolvePageDesignId', () => {
   });
 
   it('resolves by direct template in TemplatesMapping (0.4.0.17)', () => {
-    // Direct template is in the mapping — returns that design id.
+    // Direct template is in the mapping - returns that design id.
     const pageDesignsRoot = makeItem({
       id: 'pdr11111-pppp-pppp-pppp-pppppppppppp',
       path: '/sitecore/content/site/Presentation/Page Designs',
@@ -504,7 +504,7 @@ describe('getPartialRenderingEntries', () => {
 
     const [wrapper, top, nested] = entries;
 
-    // Wrapper lives at the partial's top-level placeholder (bare form — normalised
+    // Wrapper lives at the partial's top-level placeholder (bare form - normalised
     // regardless of the leading-slash convention in the authored YAML).
     expect(wrapper.placeholder).toBe('headless-main');
     expect(wrapper.renderingId).toBe(PARTIAL_DESIGN_DYNAMIC_PLACEHOLDER_RENDERING_ID);
@@ -704,7 +704,7 @@ describe('getPartialRenderingEntries', () => {
           fields: [{
             id: FINAL_RENDERINGS_FIELD_ID,
             hint: '__Final Renderings',
-            // Note: path already contains sxa-full-width-body — this is how
+            // Note: path already contains sxa-full-width-body - this is how
             // SXA serializes page renderings when the page design is applied.
             value:
               `<r xmlns:s="s" xmlns:p="p" p:p="1"><d id="{${DEFAULT_DEVICE}}">` +
@@ -793,7 +793,7 @@ describe('getPartialRenderingEntries', () => {
             id: FINAL_RENDERINGS_FIELD_ID,
             hint: '__Final Renderings',
             // Derived partial's renderings target the base partial's wrapper
-            // directly — they have no top-level (`s:ph="headless-main"`) entry
+            // directly - they have no top-level (`s:ph="headless-main"`) entry
             // of their own.
             value:
               `<r xmlns:s="s" xmlns:p="p" p:p="1"><d id="{${DEFAULT_DEVICE}}">` +
@@ -877,7 +877,7 @@ describe('getPartialRenderingEntries', () => {
       // Real Release Page Design shape: 3 partials all wrap `headless-main`
       // with distinct sigs (sxa-release-page-header / sxa-full-width-body /
       // sxa-release-page-cta). The page's own renderings target paths like
-      // `/headless-main/sxa-full-width-body/container-1` — already correctly
+      // `/headless-main/sxa-full-width-body/container-1` - already correctly
       // routed through the middle wrapper. A naive last-wins map of
       // ph→sig would rewrite this to `/headless-main/sxa-release-page-cta/...`
       // and orphan the entries.
@@ -967,7 +967,7 @@ describe('getPartialRenderingEntries', () => {
       // store `Base Partial Design` as a VERSIONED field (under the language's
       // Version 1 fields) rather than in sharedFields. The 0.1.17 walker only
       // checked sharedFields and silently produced an empty chain for these
-      // partials — causing `_Tutorial Header` to never compose and the
+      // partials - causing `_Tutorial Header` to never compose and the
       // `headless-main` placeholder to be entirely absent from the route.
       const derivedVersionedBase = makeItem({
         id: derivedPartialId,
@@ -1010,7 +1010,7 @@ describe('getPartialRenderingEntries', () => {
   });
 });
 
-describe('getPartialRenderingEntries — default-rule personalization (0.4.0.9)', () => {
+describe('getPartialRenderingEntries - default-rule personalization (0.4.0.9)', () => {
   // Integration test for the parse → personalization pass wiring in
   // page-design.ts:241. A partial design whose __Final Renderings XML
   // carries a default-uid `<rule>/<actions>/<action s:DataSource="...">`
@@ -1078,15 +1078,15 @@ describe('getPartialRenderingEntries — default-rule personalization (0.4.0.9)'
 
     expect(entries).toHaveLength(1);
     // The personalization pass substituted the authored default datasource
-    // with the rule's action datasource, in place — this is the end-to-end
+    // with the rule's action datasource, in place - this is the end-to-end
     // proof that Step 8's wiring runs. Note: the substituted value is the
     // normalized lowercase-dashed form (per `normalizeGuid`), not the
     // braced-upper form of the authored `s:ds`.
     expect(entries[0].dataSource).toBe(substitutedDs);
-    // Also confirm the authored braced-upper form did NOT survive — the
+    // Also confirm the authored braced-upper form did NOT survive - the
     // personalization pass replaced it.
     expect(entries[0].dataSource).not.toBe(`{${defaultDs.toUpperCase()}}`);
-    // Confirm the rule data was also captured (defensive — proves the
+    // Confirm the rule data was also captured (defensive - proves the
     // parser populated `entry.rules` before the personalization pass).
     expect(entries[0].rules?.defaultActionDataSource).toBe(substitutedDs);
   });
@@ -1140,7 +1140,7 @@ describe('getPartialRenderingEntries — default-rule personalization (0.4.0.9)'
   });
 });
 
-describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)', () => {
+describe('getCombinedRenderingEntries - no-own-layout partial merge (0.4.0.15)', () => {
   // Shared path convention for these tests:
   //   siteRootPath = /sitecore/content/p3a/Home
   //   → findPageDesignsNode looks for /sitecore/content/p3a/Presentation/Page Designs
@@ -1149,7 +1149,7 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
   it('emits partial entries when item has no own __Final Renderings but a Page Design matches', () => {
     // Sitecore's FlattenedPlaceholdersResolver.ExtractPlaceholders reads the
     // route item's Layout XML via `new LayoutField(item).Value` (SV-cascade-
-    // aware) and ALWAYS calls `MergePartialDesignsRenderings` — there is no
+    // aware) and ALWAYS calls `MergePartialDesignsRenderings` - there is no
     // "has own __Final Renderings" gate. 0.4.0.14 shipped such a gate by
     // mistake and it wiped the rendering tree on every content page whose
     // layout came via Page Design + SV inheritance (~80% of the site content tree).
@@ -1163,7 +1163,7 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
     const DEFAULT_DEVICE = 'fe5d7fdf-89c0-4d99-9aa3-b5fbd009c9f3';
     const partialRenderingUid = 'cccccccc-0000-0000-0000-000000000001';
     const engine = buildEngine([
-      // Page Designs root — path matches findPageDesignsNode convention.
+      // Page Designs root - path matches findPageDesignsNode convention.
       makeItem({
         id: 'e1000001-0000-0000-0000-000000000001',
         path: '/sitecore/content/p3a/Presentation/Page Designs',
@@ -1204,12 +1204,12 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
           }],
         }],
       }),
-      // Page template (minimal — needs to exist for walkTemplateChain).
+      // Page template (minimal - needs to exist for walkTemplateChain).
       makeItem({
         id: pageTemplateId,
         path: '/sitecore/templates/test/P3aPage',
       }),
-      // The page item itself — no `__Final Renderings` in versioned fields
+      // The page item itself - no `__Final Renderings` in versioned fields
       // and no template SV with one either.
       makeItem({
         id: 'e2000001-0000-0000-0000-000000000001',
@@ -1221,7 +1221,7 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
 
     const pageItem = engine.getItemByPath('/sitecore/content/p3a/Home/empty-page')!.item;
     const result = getCombinedRenderingEntries(pageItem, engine, siteRootPath, 'en');
-    // Partial's rendering entry must be present — the page inherits the Page
+    // Partial's rendering entry must be present - the page inherits the Page
     // Design even though it has no own Layout XML.
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result.some(e => e.uid === partialRenderingUid)).toBe(true);
@@ -1230,7 +1230,7 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
   it('picks up __Final Renderings inherited via template __Standard Values', () => {
     // Sitecore's `LayoutField.Value` walks the SV cascade transparently. When
     // the page template's __Standard Values item carries a `__Final Renderings`
-    // value, the page item inherits it automatically — Sitecore never reads
+    // value, the page item inherits it automatically - Sitecore never reads
     // the literal item-only field for Layout resolution. Regression guard for
     // the 0.4.0.15 switch from `readVersionedField` (literal-only) to
     // `resolveFieldValue` (SV-cascade-aware).
@@ -1263,7 +1263,7 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
           }],
         }],
       }),
-      // Page item with NO own __Final Renderings — must inherit from template SV.
+      // Page item with NO own __Final Renderings - must inherit from template SV.
       makeItem({
         id: 'e2000002-0000-0000-0000-000000000001',
         path: '/sitecore/content/p3a/Home/inherited-layout-page',
@@ -1278,7 +1278,7 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
   });
 
   it('still merges partials when item has own __Final Renderings', () => {
-    // Regression guard for the existing happy path — item with own layout
+    // Regression guard for the existing happy path - item with own layout
     // gets partial merge as before (partials empty here since design has no
     // PartialDesigns; the own-rendering entry must still appear).
     const pageTemplateId = 'ee000001-0000-0000-0000-000000000002';
@@ -1333,7 +1333,7 @@ describe('getCombinedRenderingEntries — no-own-layout partial merge (0.4.0.15)
   });
 });
 
-describe('getCombinedRenderingEntries — default-rule personalization (0.4.0.9)', () => {
+describe('getCombinedRenderingEntries - default-rule personalization (0.4.0.9)', () => {
   // Integration test for the parse → personalization pass wiring in
   // page-design.ts:360 (page-own __Final Renderings path). Mirrors the
   // `getPartialRenderingEntries` integration tests above.

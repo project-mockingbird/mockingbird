@@ -10,7 +10,7 @@ const fixture = resolve(__dirname, '../fixtures/valid');
 /**
  * Generate a synthetic content directory roughly shaped like a production
  * mockingbird mount: many items, many distinct templates, varied field hint
- * names. This exercises the scale-sensitive part of 0.1.3's regression —
+ * names. This exercises the scale-sensitive part of 0.1.3's regression -
  * `collectSchemaCatalog` walks every item and the dynamically-built GraphQL
  * schema has one type per template + one field per distinct hint.
  *
@@ -167,7 +167,7 @@ describe('Engine async initialization', () => {
 
   it('dynamic schema generation picks up templates from the fully-indexed tree (0.1.6 regression)', async () => {
     // 0.1.6 emitted zero template types in production because
-    // registerGraphQLRoutes ran synchronously against an empty tree —
+    // registerGraphQLRoutes ran synchronously against an empty tree -
     // `startInit` fires indexing as a non-awaited background task, so the
     // cache-hit load hadn't completed when the GraphQL route registered.
     // 0.1.7 defers schema generation into `engine.readiness.ready().then()`
@@ -193,7 +193,7 @@ describe('Engine async initialization', () => {
         expect(body.errors).toBeUndefined();
         const typeNames: string[] = body.data.__schema.types.map((t: { name: string }) => t.name);
         // At least one Widget<N> type should appear once indexing finishes
-        // and the extension runs — proves the dynamic generator actually
+        // and the extension runs - proves the dynamic generator actually
         // walked the populated tree.
         const widgetTypes = typeNames.filter(n => /^Widget\d+$/.test(n));
         expect(widgetTypes.length).toBeGreaterThan(0);
@@ -208,7 +208,7 @@ describe('Engine async initialization', () => {
   it('readiness flips to ready on a cache hit with the full server stack (regression from 0.1.3)', async () => {
     // Mirror the production init path: `createServer` wires the readiness
     // gate + GraphQL routes (which run `collectSchemaCatalog` and register
-    // mercurius). The 0.1.3 regression manifested at production scale —
+    // mercurius). The 0.1.3 regression manifested at production scale -
     // mockingbird indexes ~11k items, generates a big dynamic schema, and
     // then readiness never flipped. We use a synthetic fixture of a few
     // hundred items with many templates/hints to reproduce the scale

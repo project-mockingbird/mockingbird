@@ -20,7 +20,7 @@ describe('isPublishingValid (0.4.0.29)', () => {
 
   const savedEnv = { ...process.env };
   beforeEach(() => {
-    // 0.4.0.30: default mode is `none` (pre-0.4.0.29 behaviour — validation
+    // 0.4.0.30: default mode is `none` (pre-0.4.0.29 behaviour - validation
     // off). Tests that exercise the filter must opt in by setting
     // MOCKINGBIRD_PUBLISHING_VALIDATION=approved explicitly.
     delete process.env.MOCKINGBIRD_PUBLISHING_VALIDATION;
@@ -109,7 +109,7 @@ describe('isPublishingValid (0.4.0.29)', () => {
     expect(isPublishingValid(engine, i, { now: FIXED_NOW })).toBe(true);
   });
 
-  it('default (env unset) is disabled — 0.4.0.30 flipped from approved to none', () => {
+  it('default (env unset) is disabled - 0.4.0.30 flipped from approved to none', () => {
     // 0.4.0.29 shipped default=approved which broke SITE parity on ~19,833
     // routes: SITE uses multiple terminal workflow states and items with the
     // same state can be both published and unpublished in prod. Until an

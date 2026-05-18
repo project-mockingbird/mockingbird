@@ -4,7 +4,7 @@ import { toCanonicalGuid, formatGuidEdge } from '../guid.js';
 import { readSharedField } from './item-fields.js';
 
 /**
- * Field ID of the `Json Rendering` template's `ComponentQuery` field — a
+ * Field ID of the `Json Rendering` template's `ComponentQuery` field - a
  * versioned / shared rich-text field that holds a GraphQL query executed by
  * Sitecore's `GraphQLAwareRenderingContentsResolver` at layout resolution
  * time. Sitecore feeds the query variables `{contextItem, datasource,
@@ -18,7 +18,7 @@ export const COMPONENT_QUERY_FIELD_ID = '17bb046a-a32a-41b3-8315-81217947611b';
  * GraphQL query string and a variables object keyed by the Sitecore-known
  * names `contextItem`, `datasource`, and `language`, and resolves to the
  * GraphQL response's `data` payload (NOT the full `{data, errors}` envelope
- * — callers strip `errors` themselves or log them).
+ * - callers strip `errors` themselves or log them).
  *
  * Injected via {@link import('./route-builder.js').LayoutOptions}.
  * `undefined` is the default and disables ComponentQuery dispatch entirely
@@ -31,7 +31,7 @@ export type GraphQLExecutor = (
 
 /**
  * Read the ComponentQuery shared field on a rendering definition item. The
- * field is currently NOT carried in registry v3.0 — only tree-serialised
+ * field is currently NOT carried in registry v3.0 - only tree-serialised
  * rendering items expose it. Registry enrichment (Phase 4 of
  * `scripts/extract-registry-spe.ps1`) would light up OOTB renderings.
  * Returns `undefined` when the field is absent or empty.
@@ -48,7 +48,7 @@ export function readComponentQuery(
 /**
  * A ComponentQuery invocation request collected from the placeholder tree.
  * `uid` is the rendering instance's `uid` (matches {@link PlaceholderNode}
- * and the eventual `ComponentNode.uid`) — used as the lookup key in the
+ * and the eventual `ComponentNode.uid`) - used as the lookup key in the
  * result map that feeds back into `resolveComponents`.
  */
 export interface ComponentQueryRequest {
@@ -100,7 +100,7 @@ function resolveDatasourceId(
 /**
  * Walk the placeholder tree and collect a ComponentQuery request for every
  * rendering whose definition item carries a non-empty ComponentQuery field.
- * Traversal is depth-first and preserves sibling order — the resulting
+ * Traversal is depth-first and preserves sibling order - the resulting
  * request list is a valid execution schedule for a parallel `Promise.all`.
  */
 export function collectComponentQueryRequests(
@@ -205,14 +205,14 @@ export async function executeComponentQueryRequests(
     if (r.status === 'fulfilled') {
       out.set(requests[i].uid, rewriteResultRowIds(r.value));
     } else {
-      // Log but don't throw — a failed ComponentQuery for one rendering
+      // Log but don't throw - a failed ComponentQuery for one rendering
       // shouldn't null the whole route. Caller falls back to default
       // content resolution for this rendering.
       //
       // Mercurius rejects GraphQL validation failures with a FastifyError
       // whose `.errors` array carries the specific messages (e.g. "Cannot
       // query field X on type Y"). The generic stringification of
-      // `r.reason` elides those — surface them so the next schema gap is
+      // `r.reason` elides those - surface them so the next schema gap is
       // diagnosable from the log alone.
       const reason = r.reason as { errors?: Array<{ message?: string }> } | undefined;
       const detail = Array.isArray(reason?.errors) && reason!.errors.length > 0

@@ -18,7 +18,7 @@ const RICHTEXT_FIELD_TYPES = new Set(['rich text']);
  * Read the Sitecore field type for `hint` on an item's template, walking
  * the full template schema (which flattens base-template fields). Returns
  * the lowercased type, or `''` when the field is not declared on the
- * template — callers treat `''` as "no type info available".
+ * template - callers treat `''` as "no type info available".
  */
 export function lookupFieldType(
   item: ScsItem,
@@ -44,7 +44,7 @@ export function lookupFieldType(
 }
 
 /**
- * Empty image jsonValue — prod emits `{value: {}}` when the image field
+ * Empty image jsonValue - prod emits `{value: {}}` when the image field
  * is unauthored or the mediaid does not resolve. The wrapper is always
  * present; the inner object carries no keys.
  */
@@ -53,9 +53,9 @@ function emptyImageJsonValue(): unknown {
 }
 
 /**
- * Empty link jsonValue — prod emits `{value: {href: ""}}` when the link
+ * Empty link jsonValue - prod emits `{value: {href: ""}}` when the link
  * field is unauthored or produces no rendered output. The `href` key is
- * always present on links even when empty — matches the layout-side
+ * always present on links even when empty - matches the layout-side
  * `formatLink` contract and `MultiListFieldSerializer` behavior.
  */
 function emptyLinkJsonValue(): unknown {
@@ -66,11 +66,11 @@ function emptyLinkJsonValue(): unknown {
  * Produce the parsed Experience-Edge-shape `jsonValue` for a stored
  * Sitecore field string. Image and General Link fields route through the
  * `render-field` pipeline (port of `Sitecore.Pipelines.RenderField.
- * RenderFieldPipeline`) — the pipeline's processors return rendered HTML,
+ * RenderFieldPipeline`) - the pipeline's processors return rendered HTML,
  * and {@link walkElementAttrs} extracts attrs off the rendered element
  * exactly like `ImageFieldSerializer.ParseRenderedImage` does with
  * HtmlAgilityPack. Other field types return `{ value: raw }` or `null`
- * for unset — consuming apps don't query `jsonValue` on text/integer/date
+ * for unset - consuming apps don't query `jsonValue` on text/integer/date
  * fields but mercurius may still resolve the inner scalar, so the shape
  * stays stable.
  */
@@ -116,7 +116,7 @@ export function buildJsonValue(
     // that FieldRenderer.RenderField resolves via DynamicLinkDatabaseSwitcher.
     // Rewrite those here so ComponentQuery `spotlightContent.jsonValue`
     // emissions match prod byte-for-byte. Use `raw` (not `trimmed`) as
-    // input so all whitespace is preserved — the Rainbow SCS reader is
+    // input so all whitespace is preserved - the Rainbow SCS reader is
     // byte-faithful and prod Edge is a passthrough on RichText bodies
     // (0.4.0.7 retired the trailing trim).
     return { value: rewriteRichText(raw ?? '', engine, '', siteRootPath) };

@@ -89,7 +89,7 @@ describe('ItemTree', () => {
 
   describe('URL-safe path lookup', () => {
     // Real Sitecore's URL pipeline (ItemResolver) translates incoming URL
-    // segments to item names by reversing two transforms — case-insensitive
+    // segments to item names by reversing two transforms - case-insensitive
     // match and dash↔space. Mockingbird mirrors that here so a sitemap URL
     // like `/.../faq-item-01` resolves to an item whose on-disk name is
     // `Faq Item 01`.
@@ -105,7 +105,7 @@ describe('ItemTree', () => {
       expect(node!.item.id).toBe('faq');
     });
 
-    it('resolves a mixed-case path via its lowercase URL form (regression — already supported)', () => {
+    it('resolves a mixed-case path via its lowercase URL form (regression - already supported)', () => {
       const tree = new ItemTree();
       tree.addItem(
         makeItem({ id: 'home', path: '/sitecore/content/site/Home' }),
@@ -145,7 +145,7 @@ describe('ItemTree', () => {
       // URL-safe lookup returns the first-added item.
       const dashedLookup = tree.getByPath('/sitecore/content/foo-bar');
       expect(dashedLookup).toBeDefined();
-      // Exact lowercase still wins for the dashed item — `foo-bar` is its
+      // Exact lowercase still wins for the dashed item - `foo-bar` is its
       // literal lowercase path so byPath finds it before the URL-safe map.
       expect(dashedLookup!.item.id).toBe('dashed');
 
@@ -208,7 +208,7 @@ describe('ItemTree', () => {
       expect(tree.getOrphans()).toHaveLength(0);
     });
 
-    it('returns all items grouped by canonical parent id — every node in byId shows up under its parent', () => {
+    it('returns all items grouped by canonical parent id - every node in byId shows up under its parent', () => {
       const tree = new ItemTree();
       tree.addItem(makeItem({ id: 'p', path: '/p' }), '/p.yml');
       tree.addItem(makeItem({ id: 'a', parent: 'p', path: '/p/a' }), '/a.yml');
@@ -223,7 +223,7 @@ describe('ItemTree', () => {
       expect(childIds).toEqual(['a', 'b', 'c', 'd']);
     });
 
-    it('is idempotent — rebuilding twice yields the same child set', () => {
+    it('is idempotent - rebuilding twice yields the same child set', () => {
       const tree = new ItemTree();
       tree.addItem(makeItem({ id: 'p', path: '/p' }), '/p.yml');
       tree.addItem(makeItem({ id: 'a', parent: 'p', path: '/p/a' }), '/a.yml');

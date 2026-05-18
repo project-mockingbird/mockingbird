@@ -7,7 +7,7 @@ import { readFieldWithSvFallback } from './item-fields.js';
  * Port of Sitecore's `Sitecore.Kernel.Pipelines.ExpandInitialFieldValue`
  * processor. Expands `$`-prefixed item-context tokens when invoked on a
  * Standard Values-cascaded field. Caller (`resolveFieldValue` in
- * `item-fields.ts`) enforces the cascade-only invariant — stored
+ * `item-fields.ts`) enforces the cascade-only invariant - stored
  * (authored) values never reach this function, preserving any literal
  * `$name` an editor set explicitly.
  *
@@ -22,7 +22,7 @@ import { readFieldWithSvFallback } from './item-fields.js';
  *
  * Date/time tokens emit Sitecore's compact form; `formatDateISO` in
  * `field-formatter.ts` expands compact → ISO when the field type is
- * `date` or `datetime`. Non-date fields pass the compact form through —
+ * `date` or `datetime`. Non-date fields pass the compact form through -
  * mirrors Sitecore's layered architecture where `ExpandInitialFieldValue`
  * is decoupled from `RenderFieldPipeline`'s type-aware formatting.
  */
@@ -33,7 +33,7 @@ export function expandItemTokens(value: string, item: ScsItem, engine: Engine): 
       case 'id':         return `{${item.id.toUpperCase()}}`;
       // Empty-parent asymmetry is deliberate and mirrors Sitecore:
       //   $parentname with no parent → `''` (display-name lookup on null parent
-      //   yields empty string — `parentDisplayName` short-circuits on
+      //   yields empty string - `parentDisplayName` short-circuits on
       //   `!item.parent`).
       //   $parentid with no parent → the literal `$parentid` token returned
       //   verbatim (no safe GUID to emit; callers downstream treat the
@@ -88,7 +88,7 @@ function compactTimeNow(): string {
 }
 
 function compactDateTimeNow(): string {
-  // Single atomic timestamp read — avoids midnight skew if composed from
+  // Single atomic timestamp read - avoids midnight skew if composed from
   // two separate `new Date()` calls. Mirrors Sitecore's `IsoNowWithTicks()`
   // which reads `DateTime.UtcNow` once.
   const d = new Date();

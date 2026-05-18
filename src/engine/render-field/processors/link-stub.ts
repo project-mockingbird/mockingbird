@@ -28,7 +28,7 @@ function siteRelativePath(itemPath: string, siteRootPath: string): string {
  * site path, external → url verbatim, media → CDN path, etc.).
  *
  * Note that Sitecore's actual Link path doesn't route through
- * `FieldRenderer.RenderField` to produce an `<a>` — the serializer
+ * `FieldRenderer.RenderField` to produce an `<a>` - the serializer
  * walks `field.Xml.DocumentElement.Attributes` directly and computes
  * href via `LinkManager`. Mockingbird routes through the pipeline anyway
  * so Phase B/C can swap in a faithful SXA processor without touching the
@@ -36,7 +36,7 @@ function siteRelativePath(itemPath: string, siteRootPath: string): string {
  * {@link import('../html-walker.js').walkElementAttrs} back to the same
  * attr set 0.3.7 emitted.
  *
- * Returns `""` when the authored XML carries no attributes — the caller
+ * Returns `""` when the authored XML carries no attributes - the caller
  * maps that to `{value:{href:''}}`.
  */
 export function renderLinkStub(args: FieldRenderArgs): string {
@@ -55,7 +55,7 @@ export function renderLinkStub(args: FieldRenderArgs): string {
     if (node) {
       // Sitecore dispatches internal links pointing at media items through
       // `MediaManager.GetMediaUrl` regardless of the authored `linktype`
-      // attribute — see 0.4.0.8 spec.
+      // attribute - see 0.4.0.8 spec.
       href = isMediaItem(node.item)
         ? buildMediaUrlPath(node.item)
         : siteRelativePath(node.item.path, args.siteRootPath);

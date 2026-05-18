@@ -5,7 +5,7 @@
  * overlaps AND cross-worker parse CPU runs in parallel.
  *
  * Falls back to synchronous `parseItem` on the main thread when the
- * compiled `parse-worker.js` isn't present on disk — that's the test /
+ * compiled `parse-worker.js` isn't present on disk - that's the test /
  * tsx dev path where only `.ts` sources exist. Production (compiled to
  * `dist/engine/`) always has both `parse-pool.js` and `parse-worker.js`.
  *

@@ -59,15 +59,15 @@ export function parseRenderingXml(
 
   const deviceBlock = deviceMatch[1];
 
-  // Match inner <r ...> elements — they must have a uid attribute. Two
+  // Match inner <r ...> elements - they must have a uid attribute. Two
   // serialisation shapes exist:
   //   • self-closing  `<r ... />`
-  //   • full-form     `<r ...><rls>...</rls></r>` — used when the rendering
+  //   • full-form     `<r ...><rls>...</rls></r>` - used when the rendering
   //     carries SXA personalisation rules. Both shapes must be captured, but
   //     the full-form variant is filtered against `<rls>` content below:
   //     in normal (non-editor) mode Sitecore emits only the baseline /
   //     default-rule variant of a rendering. Personalisation-audience
-  //     variants — `<r>` entries whose `<rls>` carries no default rule — are
+  //     variants - `<r>` entries whose `<rls>` carries no default rule - are
   //     editor-only and must be dropped here.
   // The outer <r> root element has `xmlns:s` / `xmlns:p` and no uid, so the
   // `uid=` requirement excludes it from the match.
@@ -81,7 +81,7 @@ export function parseRenderingXml(
     const body = m[2];
 
     if (body !== undefined && !hasDefaultOrEmptyRules(body)) {
-      // Personalisation variant with only audience-specific rules — prod
+      // Personalisation variant with only audience-specific rules - prod
       // Edge strips these in normal mode via `InsertRenderings.Personalization`
       // (`RunFirstMatching` on the ruleset). Mockingbird has no rules engine;
       // structurally discriminate by default-rule-uid presence instead.
@@ -119,7 +119,7 @@ export function parseRenderingXml(
  *   • `<rls>` with default all-zeros rule uid (anywhere) → keep (default
  *     rule has a TrueCondition and fires for every visitor).
  *   • `<rls>` with only non-default rule uids → drop (personalisation
- *     variant — editor-only; prod layout service omits it).
+ *     variant - editor-only; prod layout service omits it).
  *
  * The default-rule uid matches both the braced form
  * `{00000000-0000-0000-0000-000000000000}` and the unbraced dashed form.
@@ -140,7 +140,7 @@ function hasDefaultOrEmptyRules(body: string): boolean {
  *     whose id matches `HIDE_RENDERING_ACTION_ID` (P3b, 0.4.0.14).
  *   - `undefined` when the body has no default-uid rule.
  *
- * Both conditions can be set simultaneously — when Hide and SetDataSource
+ * Both conditions can be set simultaneously - when Hide and SetDataSource
  * coexist on the default rule, Sitecore's `ExperiencesJsonRenderingProcessor`
  * wins: the rendering is emitted as a stub regardless of the SetDataSource
  * value. Callers treat `hidden=true` as authoritative.
@@ -157,7 +157,7 @@ function extractDefaultRuleMetadata(body: string): {
 
   // Detect HideRenderingAction: `<action s:id="{25F351A1-...}">` within the
   // default rule's <actions>. Real Sitecore YAML namespaces the attribute as
-  // `s:id=` (0.4.0.19 — prior `\sid=` matched only plain `id=` in test
+  // `s:id=` (0.4.0.19 - prior `\sid=` matched only plain `id=` in test
   // fixtures, never fired on real YAML). Accept both forms so the existing
   // 0.4.0.14 plain-`id=` fixtures continue to pass. Case-insensitive, braced
   // or unbraced GUID.

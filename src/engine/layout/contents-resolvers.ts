@@ -11,7 +11,7 @@ import { compareSitecoreSiblings } from './sibling-compare.js';
 
 /**
  * SXA renderings can carry a Rendering Contents Resolver that transforms
- * their datasource into a non-default shape — Edge runs these per-rendering
+ * their datasource into a non-default shape - Edge runs these per-rendering
  * and the result lands in `fields` on the component. This module declares
  * resolvers keyed by componentName, dispatched from `component-resolver.ts`.
  *
@@ -49,7 +49,7 @@ export const DEFAULT_RCR_TYPE = 'Sitecore.LayoutService.ItemRendering.ContentsRe
  * OOTB Sitecore class-based RCR: "Datasource Item Children Resolver".
  * Registry-only item at `/sitecore/system/Modules/Layout Service/
  * Rendering Contents Resolvers/Datasource Item Children Resolver`.
- * Returns `datasource.Children` directly — no `ItemSelectorQuery`.
+ * Returns `datasource.Children` directly - no `ItemSelectorQuery`.
  * Registered by id because the registry extraction doesn't carry the
  * item's `Type` field (0.4.0.11).
  */
@@ -96,7 +96,7 @@ function resolveCarousel(
     const slideIndex = (childFields[CAROUSEL_SLIDE_INDEX_FIELD_NAME] as { value: number } | undefined)?.value ?? 0;
     return { child, slideIndex, sortOrder: readSortOrder(engine, child.item) };
   });
-  // Edge emits carousel items in Sitecore's natural child order — sorted by
+  // Edge emits carousel items in Sitecore's natural child order - sorted by
   // the standard `__Sortorder` field. Slot indices (`CarouselSlideIndex`) are
   // stored on each slide independently and stay attached to their slide,
   // they do NOT drive the array order.
@@ -133,8 +133,8 @@ function resolveSpotlight(
   const dsNode = engine.getItemById(datasource.id);
   // Spotlight link children come out of the tree's Map in insertion (file-
   // system scan) order; prod Edge sorts by Sitecore's natural `__Sortorder`.
-  // Apply the same sort Carousel uses — stable, ascending, zero default for
-  // missing values — so link identity order matches prod byte-for-byte.
+  // Apply the same sort Carousel uses - stable, ascending, zero default for
+  // missing values - so link identity order matches prod byte-for-byte.
   const linkChildren = dsNode
     ? Array.from(dsNode.children.values())
         .filter(c => c.item.template.toLowerCase() === SPOTLIGHT_LINK_TEMPLATE_ID)
@@ -199,12 +199,12 @@ export const CONTENTS_RESOLVERS: Record<string, RenderingContentsResolver> = {
 /**
  * Look up a rendering's configured Rendering Contents Resolver item and run
  * it against the appropriate base item. Returns the resolved `fields` object
- * on success, or `null` when the rendering has no usable RCR configuration —
+ * on success, or `null` when the rendering has no usable RCR configuration -
  * callers treat `null` as "fall through to default emission."
  *
  * Supported RCR type: `Sitecore.LayoutService.ItemRendering.ContentsResolvers.
  * RenderingContentsResolver` (the default class). Query dispatch is
- * string-pattern keyed — see `rcr-queries.ts` for registered entries.
+ * string-pattern keyed - see `rcr-queries.ts` for registered entries.
  */
 export function resolveViaRcrItem(args: {
   renderingId: string;
@@ -222,14 +222,14 @@ export function resolveViaRcrItem(args: {
   const rcrFieldValue = readSharedFieldOnItem(renderingNode.item, RCR_FIELD_ID);
   if (!rcrFieldValue) return null;
 
-  // Field value is stored as braced uppercase GUID like "{7E5919E7-...}" —
+  // Field value is stored as braced uppercase GUID like "{7E5919E7-...}" -
   // strip braces and lowercase for engine lookup.
   const rcrId = rcrFieldValue.replace(/[{}]/g, '').toLowerCase();
 
   // 0.4.0.11 item 2: short-circuit for the OOTB Datasource Item Children
   // Resolver. Its RCR item is registry-only with no Type field in the
   // registry, so the tree lookup + Type-check path below can't dispatch it.
-  // Handle by id instead — the class-based resolver just returns
+  // Handle by id instead - the class-based resolver just returns
   // datasource.Children in Sitecore's native sibling order.
   if (rcrId === DATASOURCE_ITEM_CHILDREN_RCR_ID) {
     if (!datasourceItem) return null;

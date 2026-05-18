@@ -67,7 +67,7 @@ export class Engine {
    * 0.4.0.24 (change A): cache write runs in the background after
    * `markReady`, freeing ~40s from cold-start time-to-ready. The promise
    * is retained so `close()` can await a pending write before the process
-   * exits — preserves the cache-flush contract used by tests that do
+   * exits - preserves the cache-flush contract used by tests that do
    * `await engine.init(); await engine.close();` and then spin up a new
    * engine pointing at the same cache path.
    */
@@ -84,7 +84,7 @@ export class Engine {
   /**
    * Resolves when the file watcher has finished its initial scan and is
    * actively observing for changes. Separated from `readiness` because
-   * queries only need the tree to be loaded — the watcher is a background
+   * queries only need the tree to be loaded - the watcher is a background
    * concern and on slow bind-mounted filesystems (Windows Docker Desktop)
    * chokidar's `ready` event can be slow or never fire at all. Pinning
    * `readiness` on the watcher caused the 0.1.3 container-hang regression.
@@ -164,7 +164,7 @@ export class Engine {
       const onProgress = (scanned: number, total: number) =>
         this.readiness.markProgress(scanned, total);
 
-      // Build the list of roots once — used both by the cache loader and,
+      // Build the list of roots once - used both by the cache loader and,
       // on cache miss, by the full scan below. The primary rootDir is
       // passed through `scanDirectory`, additional content roots through
       // `scanAdditionalRoot`, so we remember which is which.
@@ -180,11 +180,11 @@ export class Engine {
         console.error(`  [index] checking cache at ${this.options.indexCachePath}`);
         const cached = await loadCachedTree(cacheRoots, this.options.indexCachePath);
         if (cached) {
-          console.error(`  [index] cache hit (${cached.entryCount} items) — serving; verifying signature in background`);
+          console.error(`  [index] cache hit (${cached.entryCount} items) - serving; verifying signature in background`);
           this.tree = cached.tree;
           this.readiness.markProgress(cached.entryCount, cached.entryCount);
           // Still load module configs for additional content roots so
-          // modules list stays accurate — we skipped that branch above.
+          // modules list stays accurate - we skipped that branch above.
           for (const root of cacheRoots.filter(r => r.additional)) {
             const contentModules = await discoverModules(root.rootDir).catch(() => []);
             if (contentModules.length > 0) this.modules.push(...contentModules);
@@ -192,7 +192,7 @@ export class Engine {
           cacheHit = true;
           staleVerifyPromise = cached.verifyPromise;
         } else {
-          console.error(`  [index] cache miss — full parse required`);
+          console.error(`  [index] cache miss - full parse required`);
         }
       }
 
@@ -229,7 +229,7 @@ export class Engine {
           }
         }
 
-        // Cache write deferred to post-markReady — see `_cacheWritePromise`
+        // Cache write deferred to post-markReady - see `_cacheWritePromise`
         // assignment below.
       }
 
@@ -297,7 +297,7 @@ export class Engine {
       // are already built at this point. Chokidar's initial-scan `ready`
       // event can be slow or (on slow bind-mounted filesystems on Windows
       // Docker Desktop) may never fire at all; blocking readiness on it
-      // left mockingbird stuck at 503 forever in 0.1.3 — the regression
+      // left mockingbird stuck at 503 forever in 0.1.3 - the regression
       // captured in `tests/engine/async-init.test.ts`.
       if (this._closed) {
         this.readiness.markError(new Error('Engine closed during initialization'));
@@ -308,7 +308,7 @@ export class Engine {
       // 0.4.0.24 (change A): cache write runs in the background post-ready
       // so the ~40s write cost doesn't block time-to-serve on cold start.
       // `writeCachedTree` snapshots `tree.getAllNodes()` at call time, so
-      // subsequent watcher mutations don't corrupt the in-flight write —
+      // subsequent watcher mutations don't corrupt the in-flight write -
       // they just get captured on the next write.
       if (!cacheHit && this.options.indexCachePath) {
         const cachePath = this.options.indexCachePath;
@@ -330,12 +330,12 @@ export class Engine {
       // `_watcherReady` wraps the whole chain so `init()` callers block
       // on the combined "verify + watcher ready" the same way they
       // used to block on the watcher alone. Tests that `await
-      // engine.init()` now also wait for verify — synthetic corpora
+      // engine.init()` now also wait for verify - synthetic corpora
       // make this negligible.
       this._watcherReady = this.runPostReadyBackgroundTasks(staleVerifyPromise);
     } catch (err) {
       // Only swallow the error as a readiness failure if we haven't already
-      // flipped to ready — otherwise the engine is usable and the failure
+      // flipped to ready - otherwise the engine is usable and the failure
       // only affects the post-ready watcher setup, which we ignore.
       if (!this.readiness.isReady()) {
         this.readiness.markError(err instanceof Error ? err : new Error(String(err)));
@@ -354,12 +354,12 @@ export class Engine {
    * scan) don't contend for Windows bind-mount FS IO. Order:
    *
    *   1. Cold path: await cache write (includes its 56s signature glob
-   *      + 17s gzip write — each 20k-file pass is expensive on bind
+   *      + 17s gzip write - each 20k-file pass is expensive on bind
    *      mount).
    *   2. Warm path: await signature verify (20k stats). Handle stale-
    *      cache deletion on mismatch.
    *   3. Chokidar watcher: construct + await `ready`. Its own tree walk
-   *      now runs alone — dropping the signature phase from 56s (racing)
+   *      now runs alone - dropping the signature phase from 56s (racing)
    *      to ~5s (alone) on 0.4.0.26 measurements.
    *
    * Cold and warm are mutually exclusive: warm hits cache → no cache
@@ -385,12 +385,12 @@ export class Engine {
         if (!fresh) {
           this._cacheStale = true;
           console.error(
-            `  [index] cache signature MISMATCH — on-disk YAML drifted from cache. ` +
+            `  [index] cache signature MISMATCH - on-disk YAML drifted from cache. ` +
               `Serving stale tree this session; restart the container to pick up drift.`,
           );
           if (this.options.indexCachePath) {
             await deleteStaleCache(this.options.indexCachePath);
-            console.error(`  [index] stale cache deleted — next container start will rebuild`);
+            console.error(`  [index] stale cache deleted - next container start will rebuild`);
           }
         }
       }
@@ -903,12 +903,12 @@ export class Engine {
    * Change an item's template id. Updates the in-memory `item.template`,
    * rewrites the YAML on disk with the new Template field, and suppresses
    * the watcher echo. Item path, name, children, and field values are
-   * preserved as-is — this is purely a template-id swap.
+   * preserved as-is - this is purely a template-id swap.
    *
    * Mirrors Sitecore's `Item.ChangeTemplate(...)`, which (in real Sitecore)
    * also remaps field values across template schemas. Mockingbird treats
    * field collections as pass-through bags keyed by GUID, so no remap is
-   * needed — the YAML keeps every existing field exactly as it was. Any
+   * needed - the YAML keeps every existing field exactly as it was. Any
    * field whose definition does not exist on the new template stays in the
    * file (Sitecore-faithful: real Sitecore also retains stale field values
    * after a ChangeTemplate; they just aren't surfaced through the schema).
@@ -932,7 +932,7 @@ export class Engine {
     if (node.item.template === newTpl) return node;
 
     // Resolve the new template id against tree-first then registry.
-    // Registry-only templates are valid targets — they're the OOTB
+    // Registry-only templates are valid targets - they're the OOTB
     // Sitecore template corpus and don't need on-disk YAML.
     const known =
       this.tree.getById(newTpl) ?? this.getRegistryItem(newTpl);
@@ -962,7 +962,7 @@ export class Engine {
     const newPath = `${newParentPath}/${itemName}`;
 
     // Relink node (and its subtree) to the new parent, updating all in-memory paths.
-    // Children are preserved — relinkItem does NOT call removeItem.
+    // Children are preserved - relinkItem does NOT call removeItem.
     // TODO: old files on disk are not deleted here; callers should handle cleanup
     //       if needed (e.g. by recording the old filePath before calling moveItem).
     this.tree.relinkItem(node.item.id, newParentNode.item.id, newPath);

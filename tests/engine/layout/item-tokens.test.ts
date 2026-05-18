@@ -15,7 +15,7 @@ describe('expandItemTokens (0.4.0.11 item 4)', () => {
   // Port of Sitecore's `ExpandInitialFieldValue` processor. Substitutes
   // $-prefixed item-context tokens when invoked on SV-cascaded values.
   // Caller (resolveFieldValue in item-fields.ts) enforces the
-  // cascade-only invariant — this function just expands whatever it's given.
+  // cascade-only invariant - this function just expands whatever it's given.
 
   const DISPLAY_NAME_FIELD_ID = FIELD_IDS.displayName;
 
@@ -42,7 +42,7 @@ describe('expandItemTokens (0.4.0.11 item 4)', () => {
 
   it('$name → language-unversioned __Display Name wins over path fallback', () => {
     // The middle branch of itemDisplayName: shared is absent, language-unversioned
-    // fields carry the value. Pinned as a regression guard — Sitecore's
+    // fields carry the value. Pinned as a regression guard - Sitecore's
     // Display Name can be authored as an unversioned language-scoped value.
     const item = makeItem({
       id: 'b1b1b1b1-0000-0000-0000-000000000000',
@@ -80,7 +80,7 @@ describe('expandItemTokens (0.4.0.11 item 4)', () => {
     // Sitecore's `item.Fields["__Display Name"].Value` walks template SV when
     // the item's own value is absent. Pre-0.4.0.28 mockingbird's
     // `itemDisplayName` only walked the item's own shared+versioned fields and
-    // then fell to `itemName(path)` — skipping SV entirely. This test pins
+    // then fell to `itemName(path)` - skipping SV entirely. This test pins
     // the cascade into the SV chain before the path fallback.
     const templateId = 'b3b3b3b3-0000-0000-0000-000000000001';
     const svId = 'b3b3b3b3-0000-0000-0000-000000000002';
@@ -149,7 +149,7 @@ describe('expandItemTokens (0.4.0.11 item 4)', () => {
     // Regression guard: $parentname with no parent returns empty string
     // (matches Sitecore's Item.Parent = null behavior where display-name
     // lookup yields empty). $parentid returns match verbatim in the same
-    // case — the two tokens differ in empty-parent handling, and both
+    // case - the two tokens differ in empty-parent handling, and both
     // behaviors are deliberate.
     const item = makeItem({ id: 'noparent', parent: '', path: '/sitecore/content' });
     const engine = buildEngine([item]);
@@ -199,12 +199,12 @@ describe('expandItemTokens (0.4.0.11 item 4)', () => {
   });
 });
 
-describe('0.4.0.11 cascade-only expansion invariant — preserved in 0.4.0.12', () => {
+describe('0.4.0.11 cascade-only expansion invariant - preserved in 0.4.0.12', () => {
   const NAV_TITLE_FIELD_ID = '4e0720e9-9d50-4ddc-87cf-ecd65e8e94c8';
 
   it('classic __Standard Values cascade STILL expands $name tokens (0.4.0.11 behavior)', () => {
     // Build a page template whose __Standard Values has NavigationTitle = "$name".
-    // No SCT for this template — falls through to classic cascade.
+    // No SCT for this template - falls through to classic cascade.
     const fixture = buildSctFixture({ tenantName: 'tenant', sites: [{ name: 'site' }] });
     const pageTpl = addPerSiteTemplate(fixture.engine, 'Plain Page');
     // Create __Standard Values as a child of the template item.
@@ -243,11 +243,11 @@ describe('0.4.0.11 cascade-only expansion invariant — preserved in 0.4.0.12', 
       fixture.engine,
       '/sitecore/content/tenant/site',
     );
-    // Classic cascade fires — $name expands to the item's name.
+    // Classic cascade fires - $name expands to the item's name.
     expect(value).toBe('cascade-subject');
   });
 
-  it('SCT path does NOT expand tokens — contrasts with classic cascade', () => {
+  it('SCT path does NOT expand tokens - contrasts with classic cascade', () => {
     const fixture = buildSctFixture({ tenantName: 'tenant', sites: [{ name: 'site' }] });
     addSettingsAndSctFolder(fixture, '/sitecore/content/tenant/site');
     const pageTpl = addPerSiteTemplate(fixture.engine, 'SCT Subject');
@@ -275,7 +275,7 @@ describe('0.4.0.11 cascade-only expansion invariant — preserved in 0.4.0.12', 
       fixture.engine,
       '/sitecore/content/tenant/site',
     );
-    // SCT returns literal verbatim — NOT expanded.
+    // SCT returns literal verbatim - NOT expanded.
     expect(value).toBe('$name');
   });
 });

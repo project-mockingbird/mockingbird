@@ -104,7 +104,7 @@ Languages:
     await mkdirF(dir, { recursive: true });
     await writeF(resolve(dir, 'MyRenderingParams.yml'), yaml);
 
-    // Without registry — should report unresolved base template
+    // Without registry - should report unresolved base template
     const engineNoReg = new Engine({ rootDir: tempDir });
     await engineNoReg.init();
     const resultNoReg = engineNoReg.validate();
@@ -114,7 +114,7 @@ Languages:
     expect(unresolvedErrors.length).toBeGreaterThan(0);
     await engineNoReg.close();
 
-    // With registry — should pass (Rendering Parameters is in the registry)
+    // With registry - should pass (Rendering Parameters is in the registry)
     const engineWithReg = new Engine({ rootDir: tempDir, registryPath: REGISTRY_JSON });
     await engineWithReg.init();
     const resultWithReg = engineWithReg.validate();

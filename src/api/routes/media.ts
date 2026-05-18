@@ -9,7 +9,7 @@ import { resolveMediaItem } from '../../engine/media/index.js';
  * to the same handler so rendering hosts can target whichever they
  * emit without config changes.
  *
- * This is a passthrough for local development — no resize, no caching,
+ * This is a passthrough for local development - no resize, no caching,
  * no auth. Query-string resize params (`h`, `w`, `mh`, `mw`, `thn`, `as`)
  * are stripped before resolution and the original bytes are returned.
  * Browsers scale via CSS in local dev; pixel-perfect thumbnails aren't

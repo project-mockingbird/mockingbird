@@ -6,7 +6,7 @@
  * their own readFile inside `parseItem` so IO concurrency is per-worker;
  * main-thread gets one postMessage per batch rather than per file.
  *
- * 0.4.0.24 — ports the Sitecore `DatFilesLoaderAsyncRunner` pattern
+ * 0.4.0.24 - ports the Sitecore `DatFilesLoaderAsyncRunner` pattern
  * (`Task.StartNew` per .dat file → parallel background deserialize). Our
  * analog is one worker per CPU core parsing YAML in parallel; the
  * `scan:root` parse loop was 85% of cold-start time at 25 items/s on

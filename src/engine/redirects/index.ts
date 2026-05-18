@@ -43,7 +43,7 @@ function parseCheckbox(raw: string | undefined): boolean {
  * Parse a SXA `UrlMapping` field value into pattern/target pairs.
  *
  * The field is stored as URL-encoded `pattern=target` pairs joined by `&`.
- * Both sides are individually URL-encoded (mixed case — `%2f` and `%2F`
+ * Both sides are individually URL-encoded (mixed case - `%2f` and `%2F`
  * both appear in real data). Empty pairs (trailing `&`, `&&`) are ignored.
  */
 export function parseUrlMapping(raw: string | undefined): Array<{ pattern: string; target: string }> {
@@ -59,7 +59,7 @@ export function parseUrlMapping(raw: string | undefined): Array<{ pattern: strin
     try {
       out.push({ pattern: decodeURIComponent(rawPattern), target: decodeURIComponent(rawTarget) });
     } catch {
-      // Malformed percent-encoding — skip this pair.
+      // Malformed percent-encoding - skip this pair.
     }
   }
   return out;

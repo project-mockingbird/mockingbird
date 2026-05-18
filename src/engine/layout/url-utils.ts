@@ -1,6 +1,6 @@
 /**
  * JSS-style URL for a referenced item. Strips the site parent (so items that
- * are siblings of the site root — e.g. `<site>/Data/Tags/...` — become
+ * are siblings of the site root - e.g. `<site>/Data/Tags/...` - become
  * `/Data/Tags/...`), then strips a leading `/<siteRootName>` if present, then
  * replaces spaces in segments with hyphens. Returns `/` for the site root
  * itself.

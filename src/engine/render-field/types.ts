@@ -2,7 +2,7 @@ import type { Engine } from '../index.js';
 
 /**
  * The Sitecore field types Mockingbird's RenderFieldPipeline port handles
- * directly. Everything else falls through `renderField` unchanged — the
+ * directly. Everything else falls through `renderField` unchanged - the
  * per-type serializers in `field-json-value.ts` decide what (if anything)
  * to do with a non-renderable field.
  *
@@ -31,9 +31,9 @@ export interface FieldRenderArgs {
 
 /**
  * A single stage in the RenderFieldPipeline. `appliesTo` is the dispatch
- * check — first matching processor wins. `render` returns the HTML string
+ * check - first matching processor wins. `render` returns the HTML string
  * that the field serializer will walk. Empty string signals "nothing to
- * render" (unresolvable mediaid, empty field value, etc.) — callers map
+ * render" (unresolvable mediaid, empty field value, etc.) - callers map
  * that to the type-appropriate empty jsonValue (`{value:{}}` for image,
  * `{value:{href:''}}` for link).
  */

@@ -13,7 +13,7 @@ import {
  * `item-fields.ts`). See that file's docstring for the Sitecore-side
  * mechanism.
  *
- * This module exposes `isPublishingValid(engine, item, options)` — the
+ * This module exposes `isPublishingValid(engine, item, options)` - the
  * entry point callers like `component-resolver.ts` use to decide whether
  * a rendering's datasource is currently publishable. Default-off since
  * 0.4.0.30; opt in with `MOCKINGBIRD_PUBLISHING_VALIDATION=approved`.
@@ -50,7 +50,7 @@ export interface PublishingValidationOptions {
  *
  * Used at rendering datasource resolution to drop renderings whose
  * datasource isn't currently publishable. Does NOT fire when validation
- * is disabled via env var — always returns `true` in that case.
+ * is disabled via env var - always returns `true` in that case.
  */
 export function isPublishingValid(
   _engine: Engine,

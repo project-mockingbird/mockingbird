@@ -247,7 +247,7 @@ describe('locateSctFolder', () => {
   });
 });
 
-describe('resolveSctForTemplateInSite — exact match', () => {
+describe('resolveSctForTemplateInSite - exact match', () => {
   it('returns SCT item when exact template match exists', () => {
     const fixture = buildSctFixture({ tenantName: 'tenant', sites: [{ name: 'site' }] });
     addSettingsAndSctFolder(fixture, '/sitecore/content/tenant/site');
@@ -277,7 +277,7 @@ describe('resolveSctForTemplateInSite — exact match', () => {
   });
 });
 
-describe('resolveSctForTemplateInSite — base-template fallback', () => {
+describe('resolveSctForTemplateInSite - base-template fallback', () => {
   it('returns base-template SCT when no exact match AND no classic SV', () => {
     const fixture = buildSctFixture({ tenantName: 'tenant', sites: [{ name: 'site' }] });
     addSettingsAndSctFolder(fixture, '/sitecore/content/tenant/site');
@@ -370,7 +370,7 @@ describe('readFieldViaSctOverride', () => {
   it('subject-template gate: template NOT inheriting _PerSiteStandardValues returns undefined', () => {
     const fixture = buildSctFixture({ tenantName: 'tenant', sites: [{ name: 'site' }] });
     addSettingsAndSctFolder(fixture, '/sitecore/content/tenant/site');
-    // Plain template — NOT inheriting _PerSiteStandardValues.
+    // Plain template - NOT inheriting _PerSiteStandardValues.
     const plainTplId = 'ad000001-0000-0000-0000-000000000000';
     fixture.engine.getTree().addItem(
       makeItem({
@@ -400,7 +400,7 @@ describe('readFieldViaSctOverride', () => {
       siteRootPath: '/sitecore/content/tenant/site',
       fileName: 'News Article Page',
       subjectTemplateId: pageTpl,
-      fields: { [NAV_TITLE_FIELD_ID]: '$name' }, // literal $name — SCT should NOT expand
+      fields: { [NAV_TITLE_FIELD_ID]: '$name' }, // literal $name - SCT should NOT expand
     });
     const subjectItem = makeItem({
       id: 'b0000099-0000-0000-0000-000000000000',
@@ -592,7 +592,7 @@ describe('SCT resolution cache', () => {
       fields: { [NAV_TITLE_FIELD_ID]: 'A value' },
     });
     const b = buildSctFixture({ tenantName: 'tenant', sites: [{ name: 'site' }] });
-    // Engine B has no SCT — independent cache should miss.
+    // Engine B has no SCT - independent cache should miss.
     const foundA = resolveSctForTemplateInSite(a.engine, '/sitecore/content/tenant/site', pageTplA);
     const foundB = resolveSctForTemplateInSite(b.engine, '/sitecore/content/tenant/site', pageTplA);
     expect(foundA?.id).toBe(sctA.id);

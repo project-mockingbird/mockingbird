@@ -73,10 +73,10 @@ describe('resolveMediaItem', () => {
 
   it('strips query string from the URL before resolving', async () => {
     const engine = buildEngine([makeMediaItem()]);
-    // Query arg — simulate the resize params that h/w would carry. The
+    // Query arg - simulate the resize params that h/w would carry. The
     // resolver shouldn't see them; the route layer is responsible for
     // stripping the query. This test documents that the resolver accepts
-    // the path portion only — callers must not pass a raw ?h=16&w=16.
+    // the path portion only - callers must not pass a raw ?h=16&w=16.
     const result = await resolveMediaItem(engine, '/769db9c9e832465795e6f4efeca10ddd.ashx');
     expect(result).not.toBeNull();
   });
@@ -106,7 +106,7 @@ describe('resolveMediaItem', () => {
     // 0.4.0.25: when the in-memory item lacks Blob, extractBlob falls
     // back to re-parsing `node.filePath`. Test items use a fake path
     // (/fake/<id>.yml) that doesn't exist, so the fallback errors and
-    // extractBlob returns null — confirming the cache-stripped path
+    // extractBlob returns null - confirming the cache-stripped path
     // also handles the "no Blob anywhere" case cleanly.
     const engine = buildEngine([makeMediaItem({
       sharedFields: [
@@ -142,7 +142,7 @@ describe('resolveMediaItem', () => {
     const a = await resolveMediaItem(engine, '/769db9c9e832465795e6f4efeca10ddd.ashx');
     const b = await resolveMediaItem(engine, '/769db9c9e832465795e6f4efeca10ddd.ashx');
     expect(a).not.toBeNull();
-    // Same object reference — served from the LRU, no re-decode.
+    // Same object reference - served from the LRU, no re-decode.
     expect(a).toBe(b);
   });
 });

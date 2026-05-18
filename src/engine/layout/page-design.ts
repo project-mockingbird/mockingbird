@@ -35,8 +35,8 @@ export const SIGNATURE_FIELD_ID = '55faae90-3bba-4f7f-96fe-13c3f40055ff';
  * its own and instead targets placeholders inside the base partial's
  * `sxa-<signature>` wrapper directly (e.g. `Tutorial Body`'s entries
  * target `/headless-main/sxa-_tutorial-header/container-2`). Without
- * following this field the base partial's renderings — including its
- * wrapper — never land in the combined tree and derived entries get
+ * following this field the base partial's renderings - including its
+ * wrapper - never land in the combined tree and derived entries get
  * orphaned under a placeholder nobody ever creates.
  */
 export const BASE_PARTIAL_DESIGN_FIELD_ID = '76a92454-c8be-479b-b260-26aebced5a1a';
@@ -111,9 +111,9 @@ export function findPageDesignsNode(
  * Precedence (0.4.0.18):
  *   1. The item's OWN `Page Design` override shared field.
  *   2. Direct-template match on the Page Designs root `TemplatesMapping`
- *      field — item's concrete template only, no base-template walk.
+ *      field - item's concrete template only, no base-template walk.
  *   3. Content-tree ancestor walk for a `Page Design` override on any
- *      ancestor (first hit wins). Walk stops at `siteRootPath` — never
+ *      ancestor (first hit wins). Walk stops at `siteRootPath` - never
  *      crosses into `/sitecore/content/<tenant>` or above.
  *   4. Otherwise `undefined`.
  *
@@ -160,7 +160,7 @@ export function resolvePageDesignId(
   const directMatch = mapping.size > 0 ? mapping.get(item.template.toLowerCase()) : undefined;
   if (directMatch) return directMatch;
 
-  // 3. Ancestor-chain Page Design override (parents only — own already checked).
+  // 3. Ancestor-chain Page Design override (parents only - own already checked).
   const visited = new Set<string>([item.id]);
   let cursor: ScsItem = item;
   while (cursor.path !== siteRootPath && cursor.parent) {
@@ -195,7 +195,7 @@ const MAX_BASE_PARTIAL_DEPTH = 10;
 /**
  * Read the `Base Partial Design` field value off a partial item. SXA stores
  * this as either a shared field OR a versioned field depending on how the
- * partial was authored — `_Tutorial Header` descendants (Tutorial Body,
+ * partial was authored - `_Tutorial Header` descendants (Tutorial Body,
  * Tutorial List Body) in the reference content set store it under the English
  * version 1 fields, not in `sharedFields`. Check both locations so the
  * base-chain walker doesn't silently produce an empty result.
@@ -273,7 +273,7 @@ export function getPartialRenderingEntries(
 
     // 0.4.0.9: apply default-rule personalization immediately after parse.
     // Sitecore's `InsertRenderings.Personalization` processor mutates
-    // `RenderingReference.DataSource` in place — we mirror that.
+    // `RenderingReference.DataSource` in place - we mirror that.
     const rawParsed = parseRenderingXml(xml);
     applyDefaultRulePersonalization(rawParsed);
     const parsed = rawParsed.map(e => ({
@@ -297,8 +297,8 @@ export function getPartialRenderingEntries(
  * Extract the normalized top-level placeholder name from an `s:ph` value, or
  * `null` if the value is nested (has further path segments beyond the first
  * segment). SXA has two conventions for top-level entries:
- *   • bare            — `"headless-main"`       (majority of partials)
- *   • leading-slash   — `"/headless-main"`      (Faq List Body, Legacy List Body)
+ *   • bare            - `"headless-main"`       (majority of partials)
+ *   • leading-slash   - `"/headless-main"`      (Faq List Body, Legacy List Body)
  * Sitecore's runtime treats both equivalently. Both normalise to the same bare
  * name here so the wrapper-injection logic can recognise either convention.
  * Nested paths like `"/headless-main/container-1"` return `null`.
@@ -317,7 +317,7 @@ function topLevelPlaceholderName(ph: string | undefined): string | null {
  * `sxa-<signature>` placeholder.
  *
  * The top-level placeholder is taken from the first entry whose `placeholder`
- * is a top-level form — either bare (`"headless-main"`) or leading-slash with
+ * is a top-level form - either bare (`"headless-main"`) or leading-slash with
  * no further path (`"/headless-main"`). Both are normalised to the same bare
  * name. If no such entry exists, the original entries are returned unchanged.
  */
@@ -345,7 +345,7 @@ function wrapPartialWithSignature(
     renderingId: PARTIAL_DESIGN_DYNAMIC_PLACEHOLDER_RENDERING_ID,
     placeholder: topPh,
     dataSource: '',
-    // `sid` remains in Edge's braced-uppercase form — it's a raw reference, not a uid.
+    // `sid` remains in Edge's braced-uppercase form - it's a raw reference, not a uid.
     params: { sid: bracedId, ph: topPh, sig },
     ownerItemPath: partialPath,
   };
@@ -370,7 +370,7 @@ function wrapPartialWithSignature(
  *
  * If a partial design at a given top-level placeholder was wrapped in a
  * `PartialDesignDynamicPlaceholder`, the page's own renderings targeting that
- * same top-level placeholder are rewritten to flow through the wrapper —
+ * same top-level placeholder are rewritten to flow through the wrapper -
  * otherwise the page entries would reference `/headless-main/container-1/...`
  * directly and be orphaned since the `headless-main` slot is now occupied by
  * the synthetic wrapper.
@@ -383,7 +383,7 @@ export function getCombinedRenderingEntries(
 ): RenderingEntry[] {
   // Sitecore's FlattenedPlaceholdersResolver.ExtractPlaceholders at
   // `Sitecore.XA.Feature.LayoutServices.Integration.decompiled.cs:1082-1120`
-  // reads the route item's Layout XML via `new LayoutField(item).Value` —
+  // reads the route item's Layout XML via `new LayoutField(item).Value` -
   // the standard field accessor, which walks `__Standard Values` and base
   // templates transparently. There is NO "has own __Final Renderings" gate:
   // the resolver always parses the effective value and always calls
@@ -392,7 +392,7 @@ export function getCombinedRenderingEntries(
   // Layout XML (via SV inheritance) plus partial-design overlay.
   //
   // 0.4.0.14 shipped a "skip when own XML missing" gate that turned out to
-  // be a fundamental misread of the decompile — it wiped the rendering tree
+  // be a fundamental misread of the decompile - it wiped the rendering tree
   // on every content page whose layout came via Page Design + SV
   // inheritance (~80% of the reference content tree). 0.4.0.15 restores the literal
   // Sitecore contract: cascade-read, always merge partials.
@@ -417,7 +417,7 @@ export function getCombinedRenderingEntries(
   // Map of top-level placeholder → set of `sxa-<sig>` values for every
   // wrapper produced by the partial design stage. Real Page Designs (e.g.
   // Release) attach multiple wrappers to the same top-level slot, so we
-  // need a Set per ph — last-wins on a single-string map silently orphaned
+  // need a Set per ph - last-wins on a single-string map silently orphaned
   // every page-own rendering whose `s:ph` already nested through a
   // non-final wrapper sig.
   const wrapperSigsByPh = new Map<string, Set<string>>();
@@ -433,7 +433,7 @@ export function getCombinedRenderingEntries(
   }
 
   // When ownXml is undefined (neither own nor cascaded) or empty, there are
-  // simply no own entries to merge — partials alone drive the route (matches
+  // simply no own entries to merge - partials alone drive the route (matches
   // Sitecore's behavior when LayoutField.Value returns an empty default).
   if (ownXml) {
     const ownEntries = parseRenderingXml(ownXml);
@@ -464,14 +464,14 @@ function rewriteThroughWrapper(
   if (!ph) return entry;
 
   if (!ph.startsWith('/')) {
-    // Top-level entry — if a wrapper sits here, nest inside the first one.
+    // Top-level entry - if a wrapper sits here, nest inside the first one.
     const sigs = wrapperSigsByPh.get(ph);
     if (!sigs || sigs.size === 0) return entry;
     const firstSig = sigs.values().next().value as string;
     return { ...entry, placeholder: `/${ph}/${firstSig}` };
   }
 
-  // Nested entry — inspect the first segment.
+  // Nested entry - inspect the first segment.
   const slash2 = ph.indexOf('/', 1);
   const topSeg = slash2 === -1 ? ph.slice(1) : ph.slice(1, slash2);
   const sigs = wrapperSigsByPh.get(topSeg);
@@ -480,7 +480,7 @@ function rewriteThroughWrapper(
   // If the author-time path already nests through ANY of the wrappers at
   // this top-level placeholder (e.g. SXA Edge emits `sxa-<sig>` as the
   // second segment for the wrapper the entry actually targets), leave it
-  // alone — the path is already correct. Multi-wrapper Page Designs (e.g.
+  // alone - the path is already correct. Multi-wrapper Page Designs (e.g.
   // Release with 3 wrappers in `headless-main`) rely on this to stop a
   // page rendering whose path explicitly selects the middle wrapper from
   // being rerouted through the last-registered sig.

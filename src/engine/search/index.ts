@@ -39,7 +39,7 @@ const MAX_FIRST = 500;
  * dashed, lowercase no-braces no-dashes, bare dashed) and returns the
  * canonical 32-hex-lowercase form that mockingbird's item tree stores.
  *
- * Returns `undefined` for non-GUID input — the search resolver uses this
+ * Returns `undefined` for non-GUID input - the search resolver uses this
  * as a signal that a clause value isn't interpretable as an id (so it
  * should produce zero matches instead of silently matching everything).
  */
@@ -89,7 +89,7 @@ function itemHasLanguageVersion(item: ScsItem, language: string): boolean {
 function resolvePathAncestorPrefix(engine: Engine, rawGuid: string): string | undefined {
   const canonical = normalizeGuid(rawGuid);
   if (!canonical) return undefined;
-  // Engine stores ids in dashed form — rebuild the dashed key.
+  // Engine stores ids in dashed form - rebuild the dashed key.
   const dashed = `${canonical.slice(0, 8)}-${canonical.slice(8, 12)}-${canonical.slice(12, 16)}-${canonical.slice(16, 20)}-${canonical.slice(20)}`;
   const ancestor = engine.getItemById(dashed);
   if (!ancestor) return undefined;
@@ -135,7 +135,7 @@ export function resolveSearch(
         break;
       }
       default:
-        // Unknown clause names are permissive — ignored so future callers
+        // Unknown clause names are permissive - ignored so future callers
         // don't crash on a clause mockingbird hasn't seen.
         break;
     }

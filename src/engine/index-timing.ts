@@ -1,7 +1,7 @@
 /**
  * Minimal phase-timing helper for the indexer. Emits a single line per
  * completed phase so perf regressions and cold/warm-path breakdowns are
- * legible from container logs. No structured export — grep `[index]` to
+ * legible from container logs. No structured export - grep `[index]` to
  * see the sequence.
  *
  * Added 0.4.0.20+ as groundwork for the indexing-perf investigation: the
@@ -55,7 +55,7 @@ export function startPhase(label: string): PhaseTimer {
       const extraStr = extras
         ? ' · ' + Object.entries(extras).map(([k, v]) => `${k}=${v}`).join(' ')
         : '';
-      // stderr, not stdout — CLI commands like `scp validate --format json`
+      // stderr, not stdout - CLI commands like `scp validate --format json`
       // pipe program output on stdout and must stay clean.
       console.error(`  [index] ${label} → ${formatDuration(ms)}${extraStr}`);
       return ms;

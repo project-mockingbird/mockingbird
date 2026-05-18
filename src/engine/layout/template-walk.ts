@@ -10,7 +10,7 @@ import { readSharedField } from './item-fields.js';
  * lowercase before visiting and comparing.
  *
  * Shared by {@link readFieldViaStandardValuesCascade} (classic SV cascade)
- * and the 0.4.0.12 SCT resolution module — both need the same walk.
+ * and the 0.4.0.12 SCT resolution module - both need the same walk.
  */
 export function walkBaseTemplates(
   engine: Engine,
@@ -34,7 +34,7 @@ export function walkBaseTemplates(
 
 /**
  * True when `templateId` inherits from `ancestorId` anywhere in its transitive
- * base-template chain. Strict — identity returns false. Use
+ * base-template chain. Strict - identity returns false. Use
  * {@link templateDescendsFromOrEquals} when identity should match.
  */
 export function templateInheritsFrom(
@@ -80,7 +80,7 @@ export function templateDescendsFromOrEquals(
 /**
  * Direct base-template IDs from the `__Base template` shared field, in
  * declaration order. Mirrors Sitecore's `Template.GetBaseTemplates()` which
- * is direct — not transitive. Used by the SCT base-template fallback walk.
+ * is direct - not transitive. Used by the SCT base-template fallback walk.
  */
 export function getDirectBaseTemplateIds(engine: Engine, templateId: string): string[] {
   if (!templateId) return [];

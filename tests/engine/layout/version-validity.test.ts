@@ -9,9 +9,9 @@ import {
 } from '../../../src/engine/layout/version-validity.js';
 import type { ScsVersion } from '../../../src/engine/types.js';
 
-describe('isVersionValid (0.4.0.31) — Sitecore ItemPublishing.IsValid port', () => {
+describe('isVersionValid (0.4.0.31) - Sitecore ItemPublishing.IsValid port', () => {
   // Decompile ref: Sitecore.Kernel.decompiled.cs:377576-377602. Per-version
-  // predicate — Hide version + __Valid from/__Valid to date range +
+  // predicate - Hide version + __Valid from/__Valid to date range +
   // (when requireApproved) __Workflow state ∈ approved set.
 
   const FIXED_NOW = new Date('2026-04-22T12:00:00Z');
@@ -105,7 +105,7 @@ describe('isVersionValid (0.4.0.31) — Sitecore ItemPublishing.IsValid port', (
   it('reads fields from langFields when absent from the version', () => {
     // Some authoring paths store __Valid from as a language-unversioned
     // field (lang.fields) instead of on the version's field list.
-    // isVersionValid must honor that — version-level takes precedence.
+    // isVersionValid must honor that - version-level takes precedence.
     const v = version([]);
     const langFields = [{ id: VALID_FROM_FIELD_ID, value: '20270101T000000Z' }];
     expect(isVersionValid(v, langFields, FIXED_NOW)).toBe(false);

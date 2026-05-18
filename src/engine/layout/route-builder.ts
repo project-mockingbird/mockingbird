@@ -18,7 +18,7 @@ import {
 const RENDERINGS_FIELD_ID = 'f1a1fe9e-a60c-4ddb-a3a0-bb5b29fe732e';
 
 /**
- * SXA JSS Layout item ID — `/sitecore/layout/Layouts/Foundation/JSS Experience
+ * SXA JSS Layout item ID - `/sitecore/layout/Layouts/Foundation/JSS Experience
  * Accelerator/Presentation/JSS Layout`. Used as a fallback layoutId when an
  * SXA item has no explicit `__Renderings` field (the layout is inherited from
  * the site/standard values but not serialized on the item itself).
@@ -33,7 +33,7 @@ export interface LayoutOptions {
    * When `true`, emit a scaffolded route (empty placeholders + typed route
    * fields) for items whose combined rendering entries are empty. Default
    * `false`: honour the authored presentation and return `null` for such
-   * items — matches prod Edge, which excludes them from the route index
+   * items - matches prod Edge, which excludes them from the route index
    * via `_hasLayout=true`. Flip to `true` only as a dev-convenience when a
    * rendering host needs a non-null response for every bind call.
    */
@@ -43,7 +43,7 @@ export interface LayoutOptions {
    * dispatch. When provided, renderings whose definition item carries a
    * non-empty `ComponentQuery` shared field have their query executed with
    * variables `{contextItem, datasource, language}` and the result emitted
-   * under `fields.data` — matching Sitecore's
+   * under `fields.data` - matching Sitecore's
    * `GraphQLAwareRenderingContentsResolver` behaviour. When undefined, the
    * pipeline falls back to per-componentName resolvers + schema-driven
    * emission (pre-0.3.0 behaviour).
@@ -126,8 +126,8 @@ export async function resolveLayout(
   // `FlattenedPlaceholdersResolver.ExtractPlaceholders` escape hatch
   // (`Sitecore.XA.Feature.LayoutServices.Integration.decompiled.cs:1140-
   // 1148`): when the design produces no renderings, the resolver falls
-  // through to the item's own `GetRenderingsPerRequest` — which also
-  // yields nothing here — and returns an empty PlaceholderDefinition list;
+  // through to the item's own `GetRenderingsPerRequest` - which also
+  // yields nothing here - and returns an empty PlaceholderDefinition list;
   // downstream `RenderPlaceholders` still emits the layout-declared
   // top-level slots as empty arrays.
   //
@@ -174,7 +174,7 @@ export async function resolveLayout(
     const tree = buildPlaceholderTree(entries, engine);
 
     // ComponentQuery pre-scan + batch execute. Keeps the core component
-    // resolver synchronous — only this layer awaits the executor. A failed
+    // resolver synchronous - only this layer awaits the executor. A failed
     // or missing executor leaves `componentQueryResults` empty and each
     // rendering falls through to its default resolver path.
     let componentQueryResults: Map<string, unknown> | undefined;
@@ -197,7 +197,7 @@ export async function resolveLayout(
   // Port of Sitecore's `PlaceholderRenderingService.RenderPlaceholders`
   // (`Sitecore.LayoutService.decompiled.cs:3434-3443`): every
   // PlaceholderDefinition the resolver returns produces a RenderedPlaceholder
-  // — including those with `Elements = []`. The `TransformPlaceholders` step
+  // - including those with `Elements = []`. The `TransformPlaceholders` step
   // emits `{name: []}` for the empty ones; the key is never dropped. At the
   // ROUTE level, the definition set comes from the layout item's own
   // declared `Placeholders` field (headless-header, headless-main,

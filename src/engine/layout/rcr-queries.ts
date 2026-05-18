@@ -3,7 +3,7 @@ import type { ScsItem } from '../types.js';
 import { compareSitecoreSiblings } from './sibling-compare.js';
 
 /**
- * A compiled query — given a base item, returns the items that the
+ * A compiled query - given a base item, returns the items that the
  * Sitecore Query expression would yield. Sorting-in-natural-order is the
  * caller's responsibility of the specific query implementation (mirrors
  * Sitecore's tree-natural ordering by `__Sortorder`).
@@ -13,7 +13,7 @@ export type RcrQuery = (base: ScsItem, engine: Engine) => ScsItem[];
 /**
  * Normalize an ItemSelectorQuery string for table lookup:
  * strip leading/trailing whitespace and collapse whitespace around `=` / `!=`.
- * Template-id casing and brace style must match exactly — the normalization
+ * Template-id casing and brace style must match exactly - the normalization
  * only smooths authoring whitespace, not semantic variations.
  */
 function normalizeQuery(raw: string): string {
@@ -23,7 +23,7 @@ function normalizeQuery(raw: string): string {
 }
 
 /**
- * Implements `"../*[@@templateid!='{GUID}']"` — siblings of `base` (children
+ * Implements `"../*[@@templateid!='{GUID}']"` - siblings of `base` (children
  * of base's parent, including base itself), minus any whose template id
  * matches `excludeTemplateId`. Results sorted by `__Sortorder` ascending.
  */
@@ -46,7 +46,7 @@ export function siblingsExcludingTemplate(excludeTemplateId: string): RcrQuery {
 }
 
 /**
- * Implements `"../*[@@templateid='{GUID}']"` — siblings of `base` (children
+ * Implements `"../*[@@templateid='{GUID}']"` - siblings of `base` (children
  * of base's parent, including base itself) whose template id matches
  * `matchTemplateId`. Results sorted by `__Sortorder` ascending.
  */
@@ -69,7 +69,7 @@ export function siblingsMatchingTemplate(matchTemplateId: string): RcrQuery {
 }
 
 /**
- * Implements `"../*[@@templateid='{GUID}']/*"` — grandchildren of `base`'s
+ * Implements `"../*[@@templateid='{GUID}']/*"` - grandchildren of `base`'s
  * parent via any intermediate sibling whose template id matches
  * `matchTemplateId`. Flattened across all matching intermediates and sorted
  * by `__Sortorder` ascending.
@@ -94,7 +94,7 @@ export function childrenOfSiblingOfTemplate(matchTemplateId: string): RcrQuery {
 }
 
 /**
- * Keys are registered in normalized form — strict equality lookup.
+ * Keys are registered in normalized form - strict equality lookup.
  * `lookupRcrQuery` normalizes caller input before indexing in.
  */
 export const RCR_QUERIES: Record<string, RcrQuery> = {

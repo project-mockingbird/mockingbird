@@ -211,7 +211,7 @@ describe('GraphQL Layout API', () => {
   });
 });
 
-// Content SDK 2.x site queries — schema-only stubs for errorHandling +
+// Content SDK 2.x site queries - schema-only stubs for errorHandling +
 // dictionary, real resolver for redirects.
 
 /**
@@ -301,7 +301,7 @@ const requireableFieldTmpl = buildTemplateFixtureWithId('_Requireable Field', [
 // The real consuming app has concrete form-field templates that implement
 // all three form base interfaces (e.g. FormContactFieldTextbox). Emulate
 // that here by inheriting Form Button from _Labeled Field,
-// _Labeled Field With Placeholder, AND _Requireable Field — the
+// _Labeled Field With Placeholder, AND _Requireable Field - the
 // DynamicForm query spreads inline fragments on all three and needs at
 // least one concrete type to make the spread valid.
 const formButtonTmpl = buildTemplateFixtureWithId('Form Button', ['Form Button Text'], {
@@ -375,7 +375,7 @@ const SITE_TREE_FIXTURES: ScsItem[] = [
   // Include the page/template/rendering fixtures so the app instance built for
   // these tests also has the Home item registered with a full template chain.
   pageTemplate, pageSection, titleField, contentFieldDef, heroBannerRendering,
-  // Project templates (Root Menu Item, Menu Column, ...) — needed so the
+  // Project templates (Root Menu Item, Menu Column, ...) - needed so the
   // dynamic schema generator emits corresponding GraphQL types that the
   // consuming ModularNavigation / StaticNavigation / DynamicForm queries
   // reference via inline fragments.
@@ -496,7 +496,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     // AnyItem/multilist/route-level id projections use canonical
     // lowercase-dashed (`88da64de-28b6-4620-b108-5d8c61564f6f`). The bare
     // 32-hex-uppercase form is reserved for the ComponentQuery executor's
-    // result rows (see Spotlight `data.datasource.links.results[*].id` —
+    // result rows (see Spotlight `data.datasource.links.results[*].id` -
     // covered by the contents-resolvers spec).
     const response = await siteApp.inject({
       method: 'POST',
@@ -535,7 +535,7 @@ describe('GraphQL site queries (Content SDK)', () => {
   });
 
   it('Query.item.url exposes url + path (site-relative) + siteName', async () => {
-    // Prod Edge's ItemUrl carries { url, path, siteName } — ComponentQuery
+    // Prod Edge's ItemUrl carries { url, path, siteName } - ComponentQuery
     // text in OOTB renderings selects these fields (Title/LinkList).
     // Mockingbird's schema previously declared only `url`, causing every
     // ComponentQuery to fail MER_ERR_GQL_VALIDATION.
@@ -835,7 +835,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     // fragment `... on RootMenuItem` is valid syntax because the type is
     // declared as an `AnyItem` implementer, and gets skipped at execution
     // because the runtime type doesn't match. What matters here is that
-    // the query parses cleanly — no "Unknown type" or "Abstract type was
+    // the query parses cleanly - no "Unknown type" or "Abstract type was
     // resolved to a type that does not exist" error.
     const response = await siteApp.inject({
       method: 'POST',
@@ -966,7 +966,7 @@ describe('GraphQL site queries (Content SDK)', () => {
 
   it('parses the consuming ModularNavigation query without errors (nested inline fragments)', async () => {
     // Copy of the real ModularNavigationQuery from the headless app. We don't need
-    // every template item to exist — what matters is that mercurius
+    // every template item to exist - what matters is that mercurius
     // accepts the query: the inline fragments reference RootMenuItem and
     // MenuColumn, both in the permissive allowlist, so the schema is
     // satisfied and empty results are valid.
@@ -1001,7 +1001,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     const body = res.json();
     expect(body.errors).toBeUndefined();
     // The datasource doesn't resolve to an item in the site fixture, so the
-    // outer item is null — that's fine. What matters is the absence of
+    // outer item is null - that's fine. What matters is the absence of
     // "Unknown type" / "Abstract type was resolved to ..." errors.
     expect('modularNavigation' in body.data).toBe(true);
   });
@@ -1043,7 +1043,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     // Fixture: an item whose template id points at a template that is NOT
     // included in the tree. The schema generator therefore never emits a
     // type for it, and the __typename resolver has to fall back to the
-    // generic `Item` — the 0.1.4 regression is that this fallback was
+    // generic `Item` - the 0.1.4 regression is that this fallback was
     // missing and mercurius errored out with "Abstract type X was
     // resolved to a type Y that does not exist inside the schema".
     const orphanTemplateId = 'orp00000-orp0-orp0-orp0-orp000000000';
@@ -1338,7 +1338,7 @@ describe('GraphQL site queries (Content SDK)', () => {
 
     it('dateValue returns ISO-8601 string for a Sitecore compact date', async () => {
       // Sitecore Datetime fields are stored in the compact form
-      // yyyyMMddTHHmmssZ — e.g. 20260115T123456Z. Mockingbird parses this
+      // yyyyMMddTHHmmssZ - e.g. 20260115T123456Z. Mockingbird parses this
       // and emits the expanded ISO-8601 form real Edge returns.
       const holder = makeItem({
         id: 'dv000000-0000-0000-0000-000000000001',
@@ -1511,7 +1511,7 @@ describe('GraphQL site queries (Content SDK)', () => {
 
   describe('0.1.12 empty-shape jsonValue for unset image/link fields', () => {
     // Real Experience Edge never returns `jsonValue: null` for an image or
-    // general-link field on an item whose TEMPLATE declares that field —
+    // general-link field on an item whose TEMPLATE declares that field -
     // it always returns a wrapper with all inner string values empty.
     // Consuming apps rely on the shape existing to distinguish "unset"
     // (href === "") from "set" (href non-empty).
@@ -1565,7 +1565,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     it('unset image field on a template-declared field returns empty-keys-stripped shape', async () => {
       // 0.3.5: prod Edge emits `jsonValue.value` with empty-valued keys
       // stripped. Pre-0.3.5 local code returned all keys populated with
-      // empty strings (Gap 1 from 0.1.12 — Edge never returns null on a
+      // empty strings (Gap 1 from 0.1.12 - Edge never returns null on a
       // template-declared field); the shape is still non-null, it's just
       // the empty object now.
       const app = await buildAppWithFieldOfType('MenuIcon', 'Image', false);
@@ -1637,12 +1637,12 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.3.5 — image jsonValue preserves authored hspace/vspace/class/title/border', async () => {
+    it('0.3.5 - image jsonValue preserves authored hspace/vspace/class/title/border', async () => {
       // The 148-case `hspace=30` gotcha from 0.3.4: prod carries authored
       // image attrs (hspace/vspace/class/title/border) on jsonValue.value,
       // local dropped them because buildImageJsonValue only read mediaid/
       // alt/width/height. Closes a projection gap that is orthogonal to
-      // the strip-when-empty rule — authored *non-empty* attrs must land
+      // the strip-when-empty rule - authored *non-empty* attrs must land
       // in output verbatim.
       const mediaId = 'cccccccc-bbbb-aaaa-9999-888888888888';
       const media = makeItem({
@@ -1686,7 +1686,7 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.4.0.5 — image jsonValue walks authored attrs + projects alt/width/height from media item; dims dropped when absent', async () => {
+    it('0.4.0.5 - image jsonValue walks authored attrs + projects alt/width/height from media item; dims dropped when absent', async () => {
       // Phase B of the 0.4.0 port: the ImageRendererFieldProcessor layers
       // a media-item projection on top of the per-item authored-XML walk.
       // Authored attrs win verbatim. For alt/width/height that the author
@@ -1739,7 +1739,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         expect(v.src).toBe('/-/media/Project/imgs/spot.png?iar=0');
         expect(v).not.toHaveProperty('width');
         expect(v).not.toHaveProperty('height');
-        // border wasn't authored, isn't a projection key — absent.
+        // border wasn't authored, isn't a projection key - absent.
         expect(v).not.toHaveProperty('border');
       } finally {
         await app.close();
@@ -1796,10 +1796,10 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.4.0.2 — authored alt/width/height win over media item projection', async () => {
+    it('0.4.0.2 - authored alt/width/height win over media item projection', async () => {
       // If the author overrides alt/width/height on the field XML, the
       // media item's fields must NOT clobber them. Authored attrs always
-      // win — the projection only fills absent keys.
+      // win - the projection only fills absent keys.
       const mediaId = 'cccccccc-0000-0000-0000-000000000099';
       const media = makeItem({
         id: mediaId,
@@ -1852,7 +1852,7 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.4.0.2 — media item with versioned Alt field surfaces via projection', async () => {
+    it('0.4.0.2 - media item with versioned Alt field surfaces via projection', async () => {
       // Alt lives on the versioned en field of the media item, not a
       // shared field. The projection must walk languages[en].versions
       // not just sharedFields to find it.
@@ -1902,11 +1902,11 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.4.0.3 — RichText jsonValue rewrites ~/link.aspx tokens to resolved URLs', async () => {
+    it('0.4.0.3 - RichText jsonValue rewrites ~/link.aspx tokens to resolved URLs', async () => {
       // Phase C: when a field's declared type is Rich Text, jsonValue.value
       // is the rewritten HTML, not the raw stored string. Dynamic link
       // tokens (`~/link.aspx?_id={GUID}`) become site-relative URLs to
-      // the resolved item — matches FieldRenderer.RenderField's
+      // the resolved item - matches FieldRenderer.RenderField's
       // DynamicLinkDatabaseSwitcher-backed output.
       const targetId = 'cccccccc-0000-4000-a000-000000000001';
       const target = makeItem({ id: targetId, path: '/sitecore/content/site/Home/about/news' });
@@ -1931,9 +1931,9 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.4.0.3 — RichText jsonValue rewrites -/media tokens to resolved CDN paths', async () => {
+    it('0.4.0.3 - RichText jsonValue rewrites -/media tokens to resolved CDN paths', async () => {
       // Media tokens embedded in RichText (e.g. a figure's <img src>) get
-      // resolved the same way — the serializer contract is "pass the
+      // resolved the same way - the serializer contract is "pass the
       // rendered output through". Querystring is preserved verbatim.
       const mediaId = 'dddddddd-0000-4000-a000-000000000002';
       const media = makeItem({
@@ -1964,13 +1964,13 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.4.0.32 — MOCKINGBIRD_XA_VARIABLE_EXPANSION=force expands spans on non-RichText fields', async () => {
+    it('0.4.0.32 - MOCKINGBIRD_XA_VARIABLE_EXPANSION=force expands spans on non-RichText fields', async () => {
       // Opt-in escape hatch for environments where a field carrying
       // xa-variable markup isn't classified as `rich text` by
       // `lookupFieldType`. Default (`sitecore`) remains type-based dispatch;
       // `force` additionally expands xa-variable spans anywhere the marker
-      // appears. Narrow scope — only span expansion, not ~/link.aspx or
-      // -/media rewrites — keeps it safe on plain-text fields.
+      // appears. Narrow scope - only span expansion, not ~/link.aspx or
+      // -/media rewrites - keeps it safe on plain-text fields.
       const tokenId = '51d83b1b-16db-46ac-b6ce-ec0ffe345520';
       const token = makeItem({
         id: tokenId,
@@ -1981,7 +1981,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           value: 'A free software ML library.',
         }],
       });
-      // Declare the field as "Single-Line Text" — deliberately NOT Rich Text,
+      // Declare the field as "Single-Line Text" - deliberately NOT Rich Text,
       // so the default sitecore-mode dispatch does NOT rewrite.
       const app = await buildAppWithFieldOfType(
         'Answer',
@@ -1992,7 +1992,7 @@ describe('GraphQL site queries (Content SDK)', () => {
       );
       const savedEnv = process.env.MOCKINGBIRD_XA_VARIABLE_EXPANSION;
       try {
-        // Default mode — span passes through unchanged.
+        // Default mode - span passes through unchanged.
         delete process.env.MOCKINGBIRD_XA_VARIABLE_EXPANSION;
         const defaultResp = await app.inject({
           method: 'POST',
@@ -2003,7 +2003,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         });
         expect((defaultResp.json().data.item.field.value as string)).toContain('xa-variable');
 
-        // Force mode — span expanded even on a Single-Line Text field.
+        // Force mode - span expanded even on a Single-Line Text field.
         process.env.MOCKINGBIRD_XA_VARIABLE_EXPANSION = 'force';
         const forcedResp = await app.inject({
           method: 'POST',
@@ -2068,7 +2068,7 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('0.4.0.7 — RichText jsonValue passes through leading/internal/trailing whitespace byte-for-byte', async () => {
+    it('0.4.0.7 - RichText jsonValue passes through leading/internal/trailing whitespace byte-for-byte', async () => {
       const app = await buildAppWithFieldOfType('MetaDescription', 'Rich Text', true,
         ' Lead\n\nmiddle  \n\n', []);
       try {
@@ -2082,7 +2082,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         const body = response.json();
         expect(body.errors).toBeUndefined();
         // 0.4.0.7: RichText jsonValue is a pure passthrough after
-        // rewriteRichText runs — the Rainbow SCS reader is byte-faithful,
+        // rewriteRichText runs - the Rainbow SCS reader is byte-faithful,
         // so the emitted value preserves leading / internal / trailing
         // whitespace as authored.
         expect(body.data.item.field.jsonValue.value).toBe(' Lead\n\nmiddle  \n\n');
@@ -2214,7 +2214,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         const body = response.json();
         expect(body.errors).toBeUndefined();
         expect(body.data.item.img.jsonValue.value.src).toBe('/-/media/x/y.png?iar=0');
-        // 0.3.6 — no scImage default; class only present when authored.
+        // 0.3.6 - no scImage default; class only present when authored.
         expect(body.data.item.img.jsonValue.value).not.toHaveProperty('class');
         expect(body.data.item.lnk.jsonValue.value.href).toBe('https://example.com');
         expect(body.data.item.lnk.jsonValue.value.linktype).toBe('external');
@@ -2273,7 +2273,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         expect(body.errors).toBeUndefined();
         const ids = body.data.item.children.results.map((r: { id: string }) => r.id);
         // Three 100-defaulted children tie-break by name ASC:
-        // Getting-Started, Products, Solutions — then the explicitly
+        // Getting-Started, Products, Solutions - then the explicitly
         // ordered ones: Resources(200), About(300), Documentation(400),
         // Contact-Us(500).
         expect(ids).toEqual([
@@ -2335,7 +2335,7 @@ describe('GraphQL site queries (Content SDK)', () => {
   });
 
   describe('0.1.10 field wrappers + jsonValue Edge-shape parsing', () => {
-    // Gap 1 — field wrappers must never be null for a queried field. Real
+    // Gap 1 - field wrappers must never be null for a queried field. Real
     // Experience Edge always returns a non-null wrapper object with the
     // inner scalar set to the type-appropriate "unset" default.
     it('field(name:) returns a non-null wrapper with defaults for an unset field', async () => {
@@ -2393,11 +2393,11 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    // Gap 2 — jsonValue must be the parsed Edge shape for image / link
+    // Gap 2 - jsonValue must be the parsed Edge shape for image / link
     // fields, never the raw field XML string.
     it('image field jsonValue emits authored-XML attrs + src/alt/width/height projections from media item (0.4.0.2)', async () => {
       // 0.4.0.2 (Phase B): jsonValue.value contains the authored attrs
-      // (minus mediaid) plus projections — src always; alt/width/height
+      // (minus mediaid) plus projections - src always; alt/width/height
       // filled from the media item when absent from the authored XML,
       // matching FieldRenderer.RenderField's behavior of pulling media
       // defaults into the rendered <img> element.

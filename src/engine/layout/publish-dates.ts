@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises';
 import { parse as parseYaml } from 'yaml';
 
 /**
- * Per-item publish-date overrides — the input Sitecore's
+ * Per-item publish-date overrides - the input Sitecore's
  * `PublishHelper.GetVersionToPublish` uses to select which version becomes
  * the active Edge snapshot.
  *
@@ -17,7 +17,7 @@ import { parse as parseYaml } from 'yaml';
  * `getEffectivePublishDate(path)` returns, in order:
  *   1. the per-path override from the loaded YAML file (if present);
  *   2. the global `MOCKINGBIRD_PUBLISH_DATE` env var (if set);
- *   3. `new Date()` — real "now".
+ *   3. `new Date()` - real "now".
  *
  * ## File format
  *
@@ -29,7 +29,7 @@ import { parse as parseYaml } from 'yaml';
  * '/sitecore/content/tenant/site/Home/resources/example-section/example-item': '2024-12-01T00:00:00Z'
  * ```
  *
- * Each date is the publish-date `GetValidVersion` uses for that item —
+ * Each date is the publish-date `GetValidVersion` uses for that item -
  * equivalent to "when did you last publish this item to Edge?" For a page
  * whose Edge snapshot is older than V5 of its serialized YAML, set the
  * override to a timestamp before V5's `__Valid from`.
@@ -81,7 +81,7 @@ export async function loadPublishDateOverrides(filePath: string | undefined): Pr
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
     const date = parseIsoDate(value);
     if (!date) {
-      console.error(`[publish-dates] ${filePath}: skipping ${key} — value must be an ISO timestamp, got ${JSON.stringify(value)}`);
+      console.error(`[publish-dates] ${filePath}: skipping ${key} - value must be an ISO timestamp, got ${JSON.stringify(value)}`);
       skipped++;
       continue;
     }
@@ -114,7 +114,7 @@ export function publishDateOverrideCount(): number {
   return overrideMap.size;
 }
 
-/** Test cleanup — resets the override map. */
+/** Test cleanup - resets the override map. */
 export function clearPublishDateOverrides(): void {
   overrideMap = new Map();
 }

@@ -29,14 +29,14 @@ export function templateNameToTypeName(name: string): string {
 
 /**
  * GraphQL reserved word list that field names can't collide with. Kept
- * minimal — `__typename` is the main practical hazard.
+ * minimal - `__typename` is the main practical hazard.
  */
 const GRAPHQL_RESERVED_FIELDS = new Set(['__typename', '__schema', '__type']);
 
 /**
  * Split a mixed-format identifier into word tokens. Handles both
  * space/dash/underscore-separated ("Menu Item Text") AND camelCase /
- * PascalCase ("MenuItemText") inputs — Sitecore project templates
+ * PascalCase ("MenuItemText") inputs - Sitecore project templates
  * mostly use the latter, OOTB templates the former.
  *
  * Splits:
@@ -94,7 +94,7 @@ export interface GeneratedTemplate {
   typeName: string;
   sitecoreName: string;
   templateId: string;
-  /** True if the template name starts with `_` — emitted as an interface too. */
+  /** True if the template name starts with `_` - emitted as an interface too. */
   isBase: boolean;
   /** Pascal-cased base template names this type implements. */
   baseTypeNames: string[];
@@ -127,7 +127,7 @@ function isBaseTemplateName(name: string): boolean {
 
 /**
  * Scan the engine tree for all items whose template is the Sitecore
- * `Template` template — these are the user-authored template definitions
+ * `Template` template - these are the user-authored template definitions
  * whose fields the generator walks. The registry's template items are
  * also picked up since they're merged into the same tree.
  */
@@ -177,7 +177,7 @@ function templateItemName(node: ItemNode): string {
 }
 
 /**
- * Emit a single shared `AnyItem` fields block — every type (generated
+ * Emit a single shared `AnyItem` fields block - every type (generated
  * type, generic `Item`, plus any base-template interface) re-declares
  * this exact text. Keeping it inline instead of factoring to a fragment
  * variable avoids any ambiguity about SDL interpolation order.
@@ -204,7 +204,7 @@ const ANY_ITEM_FIELDS = `    id: ID!
  *   2. A generic `type Item implements AnyItem` fallback for any runtime
  *      item whose template isn't in the generated set.
  *   3. One `interface <BaseName>` per template whose name starts with `_`,
- *      containing only that template's own fields (NOT flattened — bases
+ *      containing only that template's own fields (NOT flattened - bases
  *      stay minimal so an `... on _LabeledField` fragment doesn't pick
  *      up unrelated fields).
  *   4. One `type <Name> implements AnyItem & <bases>` per template, with
@@ -243,7 +243,7 @@ export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResul
   }
 
   // Second pass: resolve base-template references to type names (skipping
-  // any base whose template isn't in the current generation set — those
+  // any base whose template isn't in the current generation set - those
   // get dropped from `implements` since their types don't exist).
   for (const node of templateNodes) {
     const desc = templatesById.get(node.item.id.toLowerCase());
@@ -287,7 +287,7 @@ export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResul
 
   // Build the SDL text. The base interface (`AnyItem`), base concrete type
   // (`Item`) and helper types live in BASE_SCHEMA and are already
-  // registered by the time this runs — the generator only emits the
+  // registered by the time this runs - the generator only emits the
   // dynamic *additions*, delivered via mercurius's `extendSchema` API.
   const parts: string[] = [];
   if (allFieldsBlock) {
@@ -310,14 +310,14 @@ ${fieldLines || '    _placeholder: ItemField'}
   }
 
   // Concrete types. Each type declares the full union of every generated
-  // field name — this lets the shared mercurius resolver map attach once
+  // field name - this lets the shared mercurius resolver map attach once
   // per type without tripping the "Cannot find field X of type Y" check,
   // and lets consuming queries select any field via an inline fragment
   // without knowing whether that specific field was declared on the
   // concrete template (a fallback-to-null is better than a parse error).
   //
   // Base templates (name starts with `_`) are emitted only as interfaces
-  // above — they don't instantiate as concrete items, so no runtime
+  // above - they don't instantiate as concrete items, so no runtime
   // __typename will ever select them.
   for (const desc of templatesById.values()) {
     if (desc.isBase) continue;
@@ -348,13 +348,13 @@ function addField(
   if (!field.name) return;
   const gqlName = fieldNameToGraphQLFieldName(field.name);
   if (!gqlName) return;
-  // Skip anything that collides with a base `AnyItem` field — the concrete
+  // Skip anything that collides with a base `AnyItem` field - the concrete
   // type already declares those with specific types the field-bag would
   // shadow.
   const RESERVED = new Set(['id', 'name', 'displayName', 'path', 'template', 'language', 'url', 'field', 'children', 'parent', 'ancestors', 'hasChildren']);
   if (RESERVED.has(gqlName)) return;
   desc.fields.set(gqlName, field.name);
-  // Last-writer-wins on the global map — fields with the same camelCase
+  // Last-writer-wins on the global map - fields with the same camelCase
   // across templates must map to the same Sitecore name, which is already
   // the case for SXA since the generator derives the gql name FROM the
   // Sitecore name.

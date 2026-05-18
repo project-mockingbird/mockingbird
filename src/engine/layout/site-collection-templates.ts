@@ -17,7 +17,7 @@ import {
  * build fresh engines automatically get fresh caches. Inner map keyed by
  * `${templateId}|${siteRootPath}` stores the resolved SCT (or `null` for a
  * cached miss). Mirrors Sitecore's (database, siteID, templateID)
- * `DictionaryCache` — language dimension omitted because mockingbird's
+ * `DictionaryCache` - language dimension omitted because mockingbird's
  * field-read helpers thread language at read time, not at resolution time.
  */
 const sctResolutionCache = new WeakMap<Engine, Map<string, ScsItem | null>>();
@@ -71,7 +71,7 @@ export function findAncestorOfTemplate(
   const start = engine.getItemByPath(descendantPath);
   if (!start) return undefined;
   // Walk up from the start's parent. Sitecore's GetParentOfTemplate does
-  // not return the item itself — only ancestors.
+  // not return the item itself - only ancestors.
   let node: ItemNode | null = start.parentNode;
   const targetLower = ancestorTemplateId.toLowerCase();
   while (node) {
@@ -86,7 +86,7 @@ export function findAncestorOfTemplate(
 
 /**
  * Resolve the tenant for a given site root path, read its `SharedSites`
- * multilist, and return the paths of sibling site roots — excluding the
+ * multilist, and return the paths of sibling site roots - excluding the
  * current site. Mirrors Sitecore's
  * `SharedSitesContext.GetSharedSitesWithoutCurrent`.
  *
@@ -126,7 +126,7 @@ export function getTenantSharedSiteRoots(engine: Engine, siteRootPath: string): 
  * Sitecore's `MultisiteContext.GetSettingsItem(siteItem).FirstChildInheritingFrom(_BaseSXAStandardValuesFolder)`.
  *
  * Returns the SCT folder's ItemNode, or `undefined` if either the Settings
- * folder or its SCT-folder child is missing. Path-agnostic — `common` site
+ * folder or its SCT-folder child is missing. Path-agnostic - `common` site
  * may use differently-named folders; inheritance lookup handles that.
  */
 export function locateSctFolder(engine: Engine, siteRootPath: string): ItemNode | undefined {
@@ -135,7 +135,7 @@ export function locateSctFolder(engine: Engine, siteRootPath: string): ItemNode 
   if (!start) return undefined;
   // The input `siteRootPath` may point at the true SXA site root (e.g.
   // `/sitecore/content/tenant/site`) OR at the JSS start item nested below it
-  // (e.g. `/sitecore/content/tenant/site/Home`) — JSS apps often set
+  // (e.g. `/sitecore/content/tenant/site/Home`) - JSS apps often set
   // `SITE_ROOT_PATH` to the start item so URL-prefix-stripping works against
   // route paths like `/about/...`. Settings always lives as a direct child of
   // the SXA site root, so walk up first to find the real `_BaseSiteRoot`
@@ -150,7 +150,7 @@ export function locateSctFolder(engine: Engine, siteRootPath: string): ItemNode 
 /**
  * Walk from `start` upward (and inclusively) to find the first item whose
  * own template transitively inherits from (or equals) `_BaseSiteRoot`.
- * Returns `undefined` if no such ancestor exists — caller treats that as an
+ * Returns `undefined` if no such ancestor exists - caller treats that as an
  * SCT-miss and falls through to the classic cascade.
  */
 function resolveRealSiteRoot(engine: Engine, start: ItemNode): ItemNode | undefined {
@@ -226,7 +226,7 @@ export function resolveSctForTemplateInSite(
     if (!templateDescendsFromOrEquals(engine, subjectTemplateId, sctTplId)) return;
     if (sctTplId === subjectLower) {
       exact = node.item;
-      return true; // terminate walk — exact match wins
+      return true; // terminate walk - exact match wins
     }
     candidates.set(sctTplId, node.item);
   });
@@ -240,7 +240,7 @@ export function resolveSctForTemplateInSite(
     return undefined;
   }
 
-  // Classic-SV suppression — matches Sitecore's StandardValueHolderId check.
+  // Classic-SV suppression - matches Sitecore's StandardValueHolderId check.
   if (subjectTemplateHasClassicSV(engine, subjectTemplateId)) {
     cache.set(cacheKey, null);
     return undefined;
@@ -301,14 +301,14 @@ function subjectTemplateHasClassicSV(engine: Engine, templateId: string): boolea
  *
  *   1. Subject-template opt-in gate (`_PerSiteStandardValues` inheritance).
  *   2. Site chain: current site first, then shared sites (tenant's SharedSites field).
- *   3. Per-site `resolveSctForTemplateInSite` — exact match, then base-template
+ *   3. Per-site `resolveSctForTemplateInSite` - exact match, then base-template
  *      fallback with classic-SV suppression.
  *   4. Post-Resolve self-reference gate: if resolved SCT IS the subject item, skip.
  *   5. Read SCT field value (shared then versioned en/v1-or-latest).
  *   6. Empty/whitespace → miss; try next site; ultimately `undefined` (caller
  *      falls through to classic SV cascade).
  *
- * SCT values are NOT passed through `expandItemTokens` — Sitecore stores
+ * SCT values are NOT passed through `expandItemTokens` - Sitecore stores
  * expanded literals at SCT-item creation time via `ExpandInitialFieldValue`.
  */
 export function readFieldViaSctOverride(
@@ -325,22 +325,22 @@ export function readFieldViaSctOverride(
     return undefined;
   }
 
-  // Step 2: build site chain — current first, shared sites after.
+  // Step 2: build site chain - current first, shared sites after.
   const sharedSites = getTenantSharedSiteRoots(engine, siteRootPath);
   const chain = [siteRootPath, ...sharedSites];
 
-  // Step 3–5: iterate chain, return first non-empty hit.
+  // Step 3-5: iterate chain, return first non-empty hit.
   for (const thisSiteRoot of chain) {
     const sct = resolveSctForTemplateInSite(engine, thisSiteRoot, subjectItem.template);
     if (!sct) continue;
-    // Self-reference gate — post-Resolve per Sitecore contract.
+    // Self-reference gate - post-Resolve per Sitecore contract.
     if (sct.id.toLowerCase() === subjectItem.id.toLowerCase()) continue;
     // Read field value (shared → versioned).
     const shared = readSharedFieldOnItem(sct, fieldId);
     if (shared !== undefined && shared.trim() !== '') return shared;
     const versioned = readVersionedField(sct, fieldId, language);
     if (versioned !== undefined && versioned.trim() !== '') return versioned;
-    // SCT hit but value empty/whitespace — Sitecore semantic: do NOT abort
+    // SCT hit but value empty/whitespace - Sitecore semantic: do NOT abort
     // pipeline. Continue to next site (or classic cascade if chain exhausts).
   }
   return undefined;

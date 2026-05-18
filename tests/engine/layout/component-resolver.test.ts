@@ -202,7 +202,7 @@ describe('resolveComponents', () => {
   it('cascades param Value through template __Standard Values when item has no own value (0.4.0.28)', () => {
     // Sitecore's param-item Value resolution walks `item.Fields["Value"].Value`
     // which cascades to template SV. Pre-0.4.0.28 mockingbird read only the
-    // item's own sharedFields and fell to path-name/grid-class — losing any
+    // item's own sharedFields and fell to path-name/grid-class - losing any
     // SV-defined defaults.
     const templateId = 'abbbbbbb-0000-0000-0000-000000000001';
     const svId = 'abbbbbbb-0000-0000-0000-000000000002';
@@ -210,7 +210,7 @@ describe('resolveComponents', () => {
       id: 'ffff2222-ffff-ffff-ffff-ffffffffffff',
       template: templateId,
       path: '/sitecore/content/site/Presentation/Styles/from-sv',
-      // No own Value sharedField — SCS would strip if equal to SV.
+      // No own Value sharedField - SCS would strip if equal to SV.
     });
     const template = makeItem({ id: templateId, path: '/sitecore/templates/Style' });
     const sv = makeItem({
@@ -479,7 +479,7 @@ describe('resolveComponents', () => {
         ownerItemPath: '/sitecore/content/site/Presentation/Partial Designs/Header',
       }],
     };
-    // Page path points somewhere else — the local: must ignore it and use
+    // Page path points somewhere else - the local: must ignore it and use
     // ownerItemPath so the datasource resolves to the partial's own data.
     const result = resolveComponents(tree, engine, '', '/sitecore/content/site/Home', '');
     expect(result['headless-header'][0].fields['Title']).toEqual({ value: 'From Partial' });
@@ -488,7 +488,7 @@ describe('resolveComponents', () => {
   it('drops rendering entirely when renderingId is unresolvable (0.4.0.29)', () => {
     // Pre-0.4.0.29 emitted `{componentName: "Unknown", uid, ...}` as a
     // fallback. Prod Edge emits nothing at IAR/client-side rendering slots
-    // so mockingbird now follows suit — unresolvable renderings drop.
+    // so mockingbird now follows suit - unresolvable renderings drop.
     const engine = buildEngine([]);
     const tree: Record<string, PlaceholderNode[]> = {
       'main': [{
@@ -548,7 +548,7 @@ describe('resolveComponents', () => {
   });
 });
 
-describe('resolveNode — RCR dispatch (InteractionNavigation-style)', () => {
+describe('resolveNode - RCR dispatch (InteractionNavigation-style)', () => {
   it('populates fields.items when rendering has a registered RCR and no componentName resolver', () => {
     // Use the same synthetic fixture pattern as contents-resolvers-rcr.test.ts.
 
@@ -629,7 +629,7 @@ describe('resolveNode — RCR dispatch (InteractionNavigation-style)', () => {
   });
 });
 
-describe('resolveNode — P1/P2 emission contract', () => {
+describe('resolveNode - P1/P2 emission contract', () => {
   it('omits fields key when rendering has no datasource and default RCR', () => {
     const engine = buildEngine([
       makeItem({
@@ -677,7 +677,7 @@ describe('resolveNode — P1/P2 emission contract', () => {
         template: TEMPLATE_FIELD_TEMPLATE_ID,
         sharedFields: [{ id: FIELD_IDS.type, hint: 'Type', value: 'Single-Line Text' }],
       }),
-      // Route/context page item — Title value "Home".
+      // Route/context page item - Title value "Home".
       makeItem({
         id: 'ff000004-0000-0000-0000-000000000001',
         path: '/site/home',
@@ -791,7 +791,7 @@ describe('resolveNode — P1/P2 emission contract', () => {
         path: '/sitecore/layout/placeholder settings/slot-b',
         sharedFields: [{ id: PLACEHOLDER_KEY_FIELD_ID, hint: 'Placeholder Key', value: 'slot-b' }],
       }),
-      // A child rendering with no datasource and no RCR — emits a minimal node.
+      // A child rendering with no datasource and no RCR - emits a minimal node.
       makeItem({
         id: 'aa000001-0000-0000-0000-000000000211',
         path: '/sitecore/layout/renderings/test/child',
@@ -848,7 +848,7 @@ describe('resolveNode — P1/P2 emission contract', () => {
   });
 });
 
-describe('resolveNode — P3b hidden stub emission', () => {
+describe('resolveNode - P3b hidden stub emission', () => {
   it('emits experience stub shape when node.hidden is true', () => {
     const engine = buildEngine([
       makeItem({
@@ -877,7 +877,7 @@ describe('resolveNode — P3b hidden stub emission', () => {
     });
   });
 
-  it('ignores hidden flag false — resolves normally', () => {
+  it('ignores hidden flag false - resolves normally', () => {
     const engine = buildEngine([
       makeItem({
         id: 'aa000001-0000-0000-0000-000000000302',
@@ -901,10 +901,10 @@ describe('resolveNode — P3b hidden stub emission', () => {
   });
 });
 
-describe('resolveComponents — composite-field placeholder suppression (0.4.0.29)', () => {
+describe('resolveComponents - composite-field placeholder suppression (0.4.0.29)', () => {
   // FaqList (and similar) absorb their children into a composite field
   // (`FaqGroups`) via the RCR. Sitecore prod emits the FaqList with
-  // populated `fields.FaqGroups` and NO `placeholders` — the accordion
+  // populated `fields.FaqGroups` and NO `placeholders` - the accordion
   // children never reach the layout response as distinct renderings.
   // Mockingbird previously walked the placeholder tree for FaqList, which
   // double-emitted FAQ entries (once as FaqGroups, once as accordion-N
@@ -933,7 +933,7 @@ describe('resolveComponents — composite-field placeholder suppression (0.4.0.2
         placeholders: {
           'accordion-0': [{
             uid: '{A0}',
-            renderingId: FAQ_LIST_RENDERING_ID, // reuse for the test — any resolvable id works
+            renderingId: FAQ_LIST_RENDERING_ID, // reuse for the test - any resolvable id works
             dataSource: '',
             params: {},
           }],
@@ -954,7 +954,7 @@ describe('resolveComponents — composite-field placeholder suppression (0.4.0.2
   });
 
   it('does not suppress placeholders for non-composite components', () => {
-    // Regression guard: the suppression must be narrow — an ordinary
+    // Regression guard: the suppression must be narrow - an ordinary
     // rendering with children should continue emitting placeholders.
     const engine = buildEngine([renderingItem]);
     const tree: Record<string, PlaceholderNode[]> = {
@@ -979,10 +979,10 @@ describe('resolveComponents — composite-field placeholder suppression (0.4.0.2
   });
 });
 
-describe('resolveComponents — datasource publishing filter (opt-in from 0.4.0.30)', () => {
+describe('resolveComponents - datasource publishing filter (opt-in from 0.4.0.30)', () => {
   // Port of Sitecore's `Database.GetItem`-returns-null-on-draft behaviour.
   //
-  // 0.4.0.30: default flipped to off — the predicate is opt-in via
+  // 0.4.0.30: default flipped to off - the predicate is opt-in via
   // `MOCKINGBIRD_PUBLISHING_VALIDATION=approved` because site's actual Edge
   // preview doesn't filter by `__Workflow state` alone (items in the same
   // state can have different publish status). Tests explicitly enable the
@@ -1000,7 +1000,7 @@ describe('resolveComponents — datasource publishing filter (opt-in from 0.4.0.
     process.env = { ...savedEnv };
   });
 
-  it('is OFF by default — draft datasource emits normally with no env var set', () => {
+  it('is OFF by default - draft datasource emits normally with no env var set', () => {
     // 0.4.0.30 regression guard against the 0.4.0.29 default-on breakage.
     delete process.env.MOCKINGBIRD_PUBLISHING_VALIDATION;
     const dsId = 'dfaf3333-0000-0000-0000-000000000001';
@@ -1098,7 +1098,7 @@ describe('resolveComponents — datasource publishing filter (opt-in from 0.4.0.
 
   it('passes through renderings with no datasource (UseContextItem fallback)', () => {
     // A rendering with no `s:ds` attribute isn't affected by the datasource
-    // filter — it binds to the context item via `UseContextItem=true`.
+    // filter - it binds to the context item via `UseContextItem=true`.
     const engine = buildEngine([renderingItem]);
     const tree: Record<string, PlaceholderNode[]> = {
       'headless-main': [{
@@ -1113,9 +1113,9 @@ describe('resolveComponents — datasource publishing filter (opt-in from 0.4.0.
   });
 });
 
-describe('resolveComponents — unresolvable renderings (0.4.0.29)', () => {
+describe('resolveComponents - unresolvable renderings (0.4.0.29)', () => {
   // Sitecore Edge emits nothing at a placeholder slot when a rendering's
-  // s:id cannot be resolved to a component definition — client-side / IAR-
+  // s:id cannot be resolved to a component definition - client-side / IAR-
   // shipped renderings (SXA OOTB SearchResults, etc.) never reach the layout
   // pipeline because they're resolved at render time by the CSDK. Mockingbird
   // previously emitted `{componentName: "Unknown", uid, ...}` which created

@@ -15,8 +15,8 @@ import type { ScsItem } from './types.js';
 /**
  * Cache format version.
  *
- * v2: gzipped NDJSON — one header line + one JSON-encoded entry per line.
- * v3 (0.4.0.22): one-shot `v8.serialize` (reverted in 0.4.0.23 — slower).
+ * v2: gzipped NDJSON - one header line + one JSON-encoded entry per line.
+ * v3 (0.4.0.22): one-shot `v8.serialize` (reverted in 0.4.0.23 - slower).
  * v4 (0.4.0.23): back to NDJSON.
  * v5 (0.4.0.25): NDJSON with `Blob` fields (`40e50ed9-…`) stripped from
  *     cache entries to cut size ~89% (media-item audit found Blob is
@@ -40,7 +40,7 @@ export interface CacheRoot {
  * `verifyPromise` resolves asynchronously after the signature check against
  * the on-disk source tree completes.
  *
- * 0.4.0.23 — separated from the sync verify path so callers can markReady
+ * 0.4.0.23 - separated from the sync verify path so callers can markReady
  * immediately on cache hit (warm-start budget was 63% signature verify on
  * instrumented runs). Callers that want old synchronous semantics can
  * `await` the promise before using the tree; the typical path is to serve
@@ -72,7 +72,7 @@ interface CacheEntry {
  * for cache invalidation and to skip re-parsing when nothing changed.
  *
  * 0.4.0.24 change B: optional `prefetchedStats` map short-circuits the
- * stat pass — the scanner already captured `{mtimeMs, size}` per file
+ * stat pass - the scanner already captured `{mtimeMs, size}` per file
  * alongside `parseItem`, and those are hot in the OS page cache. Warm
  * (verify) path doesn't populate this, so it still stats from scratch.
  */
@@ -111,7 +111,7 @@ async function gatherTargetsAndSignature(
     }
     reuseTimer.end({ files: all.length, missingFallback: missing });
   } else {
-    // Parallelise stats in chunks — each stat is fast, the sum is what hurts.
+    // Parallelise stats in chunks - each stat is fast, the sum is what hurts.
     const statTimer = startPhase('cache signature: stat all files');
     const CHUNK = 200;
     for (let i = 0; i < all.length; i += CHUNK) {
@@ -166,7 +166,7 @@ export function shouldSkipSignatureVerify(
 
 /**
  * Try to load a cached tree from `cachePath`. Streams the file through
- * gunzip + readline, decoding one NDJSON entry per line — parse overlaps
+ * gunzip + readline, decoding one NDJSON entry per line - parse overlaps
  * with decompress so we never materialize the full decompressed payload.
  *
  * Signature verification is deferred to a background Promise so the caller
@@ -182,7 +182,7 @@ export async function loadCachedTree(
   roots: CacheRoot[],
   cachePath: string,
 ): Promise<CachedTree | null> {
-  // Check file exists first — stat is cheap and the common miss path.
+  // Check file exists first - stat is cheap and the common miss path.
   let cacheSize = 0;
   let cacheMtimeMs = 0;
   try {
@@ -237,7 +237,7 @@ export async function loadCachedTree(
     internPool: `+${internPoolSize() - poolSizeBefore}`,
   });
 
-  // Verify signature in the background — tree is usable immediately, and
+  // Verify signature in the background - tree is usable immediately, and
   // the promise resolves to `false` iff on-disk YAMLs drifted from the
   // cache's recorded signature. Caller handles the mismatch path.
   //
@@ -269,7 +269,7 @@ export async function loadCachedTree(
 
 /**
  * Delete a stale cache file. Called by the engine when `verifyPromise`
- * resolves false — removes the stale cache so the next container start
+ * resolves false - removes the stale cache so the next container start
  * does a cold parse instead of re-serving stale data.
  */
 export async function deleteStaleCache(cachePath: string): Promise<void> {
@@ -279,7 +279,7 @@ export async function deleteStaleCache(cachePath: string): Promise<void> {
 }
 
 /**
- * Serialise the given tree to `cachePath` as gzipped NDJSON — one header
+ * Serialise the given tree to `cachePath` as gzipped NDJSON - one header
  * line, then one `CacheEntry` per line. This keeps each `JSON.stringify`
  * call bounded to a single item so we never hit V8's max string length,
  * and the write pipeline streams naturally through gzip with no full-

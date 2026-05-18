@@ -51,7 +51,7 @@ describe('compareSitecoreSiblings (0.4.0.11)', () => {
     expect(compareSitecoreSiblings(engine, a, b)).toBeLessThan(0);
   });
 
-  it('name tiebreak ignores punctuation — "Deep Learning" < "De-Identified Data" (0.4.0.29)', () => {
+  it('name tiebreak ignores punctuation - "Deep Learning" < "De-Identified Data" (0.4.0.29)', () => {
     // Sitecore sorts ContentTokenList items by item-name with punctuation-ignoring
     // collation: stripping non-alphanumeric characters before comparing. Default
     // localeCompare treats `-` as a low-weight character so "De-" sorts before
@@ -65,12 +65,12 @@ describe('compareSitecoreSiblings (0.4.0.11)', () => {
     expect(compareSitecoreSiblings(engine, b, a)).toBeGreaterThan(0);
   });
 
-  it('hyphenated name sorts after space-containing peer cluster — "Cloud SQL" < "Cloud-native" (0.4.0.37)', () => {
+  it('hyphenated name sorts after space-containing peer cluster - "Cloud SQL" < "Cloud-native" (0.4.0.37)', () => {
     // Prod emits `/resources/glossary` ContentTokenList with `Cloud-native`
     // AFTER the entire `Cloud <word>` cluster (Cloud Run, Cloud Scheduler,
     // Cloud SQL). 0.4.0.29's `ignorePunctuation: true` stripped both hyphens
     // AND spaces, collapsing `Cloud-native` and `Cloud Run` to the same
-    // `Cloud*` prefix-compare — placing `Cloud-native` mid-cluster (between
+    // `Cloud*` prefix-compare - placing `Cloud-native` mid-cluster (between
     // `Cloud Landing Zone` and `Cloud Run`).
     //
     // 0.4.0.37 switches to hyphen-only preprocessing + default space-sortable
@@ -85,9 +85,9 @@ describe('compareSitecoreSiblings (0.4.0.11)', () => {
     expect(compareSitecoreSiblings(engine, native, sql)).toBeGreaterThan(0);
   });
 
-  it('hyphenated name still sorts before its space-containing peer when strip produces an ASCII-lower prefix — "Cloud App Factory" < "Cloud-native" (0.4.0.37)', () => {
+  it('hyphenated name still sorts before its space-containing peer when strip produces an ASCII-lower prefix - "Cloud App Factory" < "Cloud-native" (0.4.0.37)', () => {
     // Confirm the full Cloud cluster ordering: the first entry in the cluster
-    // (`Cloud App Factory`) sorts before `Cloud-native` — position 5 space <
+    // (`Cloud App Factory`) sorts before `Cloud-native` - position 5 space <
     // position 5 `n`. This pins the "whole cluster before `Cloud-native`"
     // invariant at both ends.
     const app = withSortOrder({ id: 'aa', path: '/x/Cloud App Factory', sortOrder: '100' });

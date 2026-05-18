@@ -5,9 +5,9 @@
 # Sources a registry.json from EITHER:
 #   1. A pre-staged local file at $OutputDir\registry.json (skips web download).
 #      Use this when a dev has already run the SPE extractor and handed off
-#      the raw JSON directly — e.g. dropped it in .\data\registry.json.
+#      the raw JSON directly - e.g. dropped it in .\data\registry.json.
 #   2. The CM's /temp/registry.json endpoint (web download). This is the
-#      original flow — run extract-registry-spe.ps1 inside SPE ISE first so
+#      original flow - run extract-registry-spe.ps1 inside SPE ISE first so
 #      the CM publishes registry.json under the webroot's /temp.
 #
 # Either way, this script compresses the JSON to $OutputDir\registry.json.gz
@@ -35,7 +35,7 @@ try {
         New-Item -ItemType Directory -Path $OutputDir | Out-Null
     }
 
-    # Prefer a pre-staged local registry.json when one is present — lets a
+    # Prefer a pre-staged local registry.json when one is present - lets a
     # dev hand-deliver a fresh extract by dropping the raw file into
     # $OutputDir without having to expose it over the CM webroot.
     $localJsonPath = Join-Path $OutputDir "registry.json"
@@ -44,10 +44,10 @@ try {
     if (Test-Path $localJsonPath) {
         $localSize = (Get-Item $localJsonPath).Length
         Write-Host "  Found local registry.json at: $localJsonPath" -ForegroundColor Yellow
-        Write-Host "  Size: $([math]::Round($localSize / 1MB, 2)) MB — using it (skipping CM download)" -ForegroundColor Yellow
+        Write-Host "  Size: $([math]::Round($localSize / 1MB, 2)) MB - using it (skipping CM download)" -ForegroundColor Yellow
 
         if ($localSize -lt 100) {
-            throw "Local registry.json is too small ($localSize bytes) — looks empty or truncated"
+            throw "Local registry.json is too small ($localSize bytes) - looks empty or truncated"
         }
 
         $jsonContent = [System.IO.File]::ReadAllText($localJsonPath, [System.Text.Encoding]::UTF8)
@@ -56,7 +56,7 @@ try {
         # because the SPE extractor can't write to the webroot under the default
         # IIS app pool identity (Access Denied).
         $registryUrl = "$CmUrl/temp/registry.json"
-        Write-Host "  No local registry.json found — downloading from: $registryUrl" -ForegroundColor Yellow
+        Write-Host "  No local registry.json found - downloading from: $registryUrl" -ForegroundColor Yellow
 
         # Allow self-signed certs
         [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
@@ -65,7 +65,7 @@ try {
         $jsonContent = $json.Content
 
         if ($jsonContent.Length -lt 100) {
-            throw "Response too small — registry.json may not exist on the CM yet"
+            throw "Response too small - registry.json may not exist on the CM yet"
         }
     }
 
@@ -84,7 +84,7 @@ try {
 
     # Parse to surface version + item count + SV-versioned-fields coverage.
     # Coverage matters because Phase 3 (versioned fields on __Standard Values
-    # items) is what lets the engine cascade template defaults — a v2.0
+    # items) is what lets the engine cascade template defaults - a v2.0
     # extract has no versionedFields and leaves ~1,700 SV-inherited field
     # divergences on the table.
     $data = $jsonContent | ConvertFrom-Json
@@ -95,7 +95,7 @@ try {
     $svWithVersioned = @($svItems | Where-Object { $_.versionedFields })
 
     # Phase 4 coverage: Json Rendering items that carry ComponentQuery. Added
-    # in registry schema 3.1 — without this, Mockingbird's in-process
+    # in registry schema 3.1 - without this, Mockingbird's in-process
     # ComponentQuery executor (0.3.0 Item 8) never fires on OOTB renderings
     # and the `fields.data` category stays divergent vs prod Edge.
     $jsonRenderingTemplateId = "04646a89-996f-4ee7-878a-ffdbf1f0ef0d"
@@ -125,7 +125,7 @@ try {
     if ($renderingsWithCq.Count -eq 0 -and $renderingItems.Count -gt 0) {
         Write-Host ""
         Write-Host "  WARNING: 0 Json Renderings carry ComponentQuery." -ForegroundColor Yellow
-        Write-Host "  This is a pre-3.1 extract — Phase 4 did not run." -ForegroundColor Yellow
+        Write-Host "  This is a pre-3.1 extract - Phase 4 did not run." -ForegroundColor Yellow
         Write-Host "  OOTB rendering data fields (Spotlight, Title case-study, etc.)" -ForegroundColor Yellow
         Write-Host "  will not resolve through the in-process ComponentQuery executor." -ForegroundColor Yellow
     }

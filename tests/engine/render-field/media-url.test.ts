@@ -98,13 +98,13 @@ describe('buildMediaUrlPath (0.4.0.10)', () => {
     // Regression guard: `readSharedString` returns `''` for both absent
     // and empty-string Extension fields, so both paths must land on
     // `.ashx`. This case exercises the "field entirely absent from
-    // sharedFields" path — e.g. an author-misconfigured media item that
+    // sharedFields" path - e.g. an author-misconfigured media item that
     // never had the field set, distinct from the "field set to empty
     // string" case covered above.
     const item = makeMedia({
       id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
       path: '/sitecore/media library/Project/some-folder/leaf-without-ext-field',
-      // `extension` omitted — `sharedFields` will be empty.
+      // `extension` omitted - `sharedFields` will be empty.
     });
     expect(buildMediaUrlPath(item)).toBe('/-/media/Project/some-folder/leaf-without-ext-field.ashx');
   });

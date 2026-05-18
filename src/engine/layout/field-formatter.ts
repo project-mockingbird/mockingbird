@@ -34,7 +34,7 @@ function xmlAttr(xml: string, name: string): string {
  * undefined when neither tree nor registry has the id.
  *
  * Used by formatMultilist / formatSingleRef / formatLink / formatImage /
- * formatReferenceItem — any path that dereferences a GUID to an item.
+ * formatReferenceItem - any path that dereferences a GUID to an item.
  */
 function resolveItem(id: string, engine: Engine): ScsItem | undefined {
   const node = engine.getItemById(id);
@@ -66,7 +66,7 @@ const MULTILIST_TYPES = new Set([
   'treelist with search',
   'treelistex',
   // SXA's field-type registration uses both spellings across different
-  // fields/releases — keep both as aliases to avoid falling through to the
+  // fields/releases - keep both as aliases to avoid falling through to the
   // text branch (which would emit the raw pipe-separated GUID string).
   'multi-root treelist',
   'multiroot treelist',
@@ -86,10 +86,10 @@ const LINK_TYPES = new Set([
   'general link with search',
 ]);
 
-/** Sitecore's `DateTime.MinValue` in ISO-8601 — the unset default for Date / Datetime fields. */
+/** Sitecore's `DateTime.MinValue` in ISO-8601 - the unset default for Date / Datetime fields. */
 const DATE_MIN_VALUE_ISO = '0001-01-01T00:00:00Z';
 
-/** Sitecore's `TimeSpan.Zero` as Edge serializes it — the unset default for Time fields. */
+/** Sitecore's `TimeSpan.Zero` as Edge serializes it - the unset default for Time fields. */
 const TIME_ZERO = '00:00:00';
 
 /**
@@ -98,7 +98,7 @@ const TIME_ZERO = '00:00:00';
  * value for, so consumers can rely on a stable shape.
  *
  * Date / Datetime / Time fields mirror .NET's `DateTime.MinValue` /
- * `TimeSpan.Zero` rather than `""` — components bind to these as
+ * `TimeSpan.Zero` rather than `""` - components bind to these as
  * parseable strings and crash on empty. SXA Event / Release pages have
  * `PlayFrom` / `PlayTo` (Time) and `EndDate` / `StartDate` (Date)
  * fields where the unset default must be `"00:00:00"` / `"0001-01-01
@@ -192,7 +192,7 @@ export function formatField(
   // Rich Text is post-processed by Edge: dynamic link/media references
   // stored as `~/link.aspx?_id={GUID}` / `-/media/<id>.ashx?...` are
   // rewritten to their resolved URLs by `rewriteRichText`. Leading,
-  // internal, and trailing whitespace all pass through verbatim — the
+  // internal, and trailing whitespace all pass through verbatim - the
   // Rainbow SCS reader (src/engine/parser.ts, 0.3.3) is byte-faithful,
   // and Sitecore's `RenderFieldPipeline` for RichText is a passthrough
   // after processor transforms. 0.4.0.7 retired the trailing-whitespace
@@ -202,7 +202,7 @@ export function formatField(
   }
 
   // Default: text-like fields (Single-Line Text, Multiline Text, Droplist,
-  // unknown). Emit stored value byte-for-byte — Sitecore's
+  // unknown). Emit stored value byte-for-byte - Sitecore's
   // `RenderFieldPipeline.GetTextFieldValue` is a passthrough for plain-text
   // types; only HTML/RichText field types run additional processing. The
   // Rainbow SCS reader (src/engine/parser.ts, 0.3.3) preserves leading
@@ -240,7 +240,7 @@ function formatImage(
   if (!mediaId) return { value: {} } as unknown as JssFieldValue;
 
   const authored = parseImageAttrs(xml);
-  // `mediaid` is the resolution handle — used to look up the media item,
+  // `mediaid` is the resolution handle - used to look up the media item,
   // not emitted on the output shape.
   delete authored.mediaid;
 
@@ -260,10 +260,10 @@ function formatImage(
 
   // Start from every authored attribute (carries `hspace`, `vspace`,
   // `class`, `title`, etc.) and layer derived / back-filled values over
-  // the top. `src` is always derived from the media item — never
+  // the top. `src` is always derived from the media item - never
   // authored. Optional authored attrs whose value is empty string are
   // dropped from the emitted shape: prod Edge's rule is "present-only-
-  // if-authored" — SXA stores every image XML with hspace="" / vspace=""
+  // if-authored" - SXA stores every image XML with hspace="" / vspace=""
   // / class="" / title="" but Edge omits empty-valued optional keys.
   // Required attrs (src, alt, width, height) are handled explicitly
   // below and may stay even when empty.
@@ -276,7 +276,7 @@ function formatImage(
   out.src = src;
   out.alt = alt;
   // Width / height drop out of the shape when neither the authored XML
-  // nor the media item carries a dimension — matches Edge's SVG /
+  // nor the media item carries a dimension - matches Edge's SVG /
   // dimensionless output. Other authored attrs (hspace, vspace, etc.)
   // still pass through when non-empty.
   if (width) out.width = width;
@@ -288,7 +288,7 @@ function formatImage(
 /**
  * Parse all attributes of a `<link ... />` XML element in source order.
  * Edge emits exactly the set of attributes that were stored in the source
- * XML — different General Link fields serialize different attribute subsets
+ * XML - different General Link fields serialize different attribute subsets
  * (some have `anchor/class/title`, others have `url` instead), and Edge's
  * output shape mirrors that. Returning an ordered list lets formatLink
  * preserve both membership AND order without guessing.
@@ -309,7 +309,7 @@ function formatLink(
   siteRootPath: string,
   mediaBaseUrl: string,
 ): JssFieldValue {
-  // Empty link XML → `{value: {href: ''}}` — Edge emits at minimum the href
+  // Empty link XML → `{value: {href: ''}}` - Edge emits at minimum the href
   // key on all general-link values, even when the field is empty.
   if (!xml || !xml.trim()) return { value: { href: '' } } as unknown as JssFieldValue;
 
@@ -357,7 +357,7 @@ function formatLink(
 
   // 0.4.0.8: Sitecore's `GeneralLinkFieldSerializer.GetLinkProperties`
   // emits computed `href` + authored XML attrs verbatim. No computed
-  // overwrites — in particular `url` is kept as authored, never derived
+  // overwrites - in particular `url` is kept as authored, never derived
   // from the resolved item's path.
   const value: Record<string, string> = {};
   for (const [k, v] of attrs) value[k] = v;
@@ -399,7 +399,7 @@ function formatSingleRef(
 /**
  * Build a JssReferenceItem from a resolved ScsItem. Uses the same schema-
  * driven field emission as route-level items so every field declared on the
- * item's template (including inherited fields) is present — with typed
+ * item's template (including inherited fields) is present - with typed
  * empty defaults for unset fields. This matches real Experience Edge's
  * contract that consuming components can bind to `fields.Foo.value`
  * without guarding on the wrapper itself.
@@ -413,14 +413,14 @@ export function formatReferenceItem(
   const name = itemName(item.path);
   const url = referenceUrl(item.path, siteRootPath);
 
-  // Schema-driven field emission with `__Standard Values` cascade — same
+  // Schema-driven field emission with `__Standard Values` cascade - same
   // resolution rules as `formatItemFields` in utils.ts (shared via
   // `resolveFieldValue` in item-fields.ts to DRY the three-branch rule).
   // Pre-0.2.1 behaviour read stored values directly here, skipping the SV
-  // cascade — so a referenced Tag whose template SV carried `Color = "blue"`
+  // cascade - so a referenced Tag whose template SV carried `Color = "blue"`
   // rendered `Color: {value: ""}` at the reference level and diverged from
   // prod Edge (`MultiListFieldSerializer` uses `DefaultItemSerializer` which
-  // hits `item.Fields[id].Value` — cascades to SV automatically).
+  // hits `item.Fields[id].Value` - cascades to SV automatically).
   const fields: Record<string, JssFieldValue> = {};
   const index = buildItemValueIndex(item, 'en');
 
@@ -438,7 +438,7 @@ export function formatReferenceItem(
       }
     }
   } catch {
-    // Template not in the tree — fall back to stored fields only (pre-
+    // Template not in the tree - fall back to stored fields only (pre-
     // 0.1.15 behavior) so we don't crash on items whose template was
     // never serialized.
     const latest = getLatestVersion(item, 'en');

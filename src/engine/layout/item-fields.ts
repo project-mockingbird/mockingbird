@@ -13,7 +13,7 @@ import { getEffectivePublishDate } from './publish-dates.js';
 
 /**
  * Read a shared field value directly off an `ScsItem`. Returns `undefined`
- * if the field is absent (NOT `''` — callers can distinguish).
+ * if the field is absent (NOT `''` - callers can distinguish).
  */
 export function readSharedFieldOnItem(item: ScsItem, fieldId: string): string | undefined {
   const id = fieldId.toLowerCase();
@@ -46,16 +46,16 @@ export function readSharedField(
 }
 
 /**
- * Read a shared field by its authored hint (field name) — case-insensitive.
+ * Read a shared field by its authored hint (field name) - case-insensitive.
  *
  * Tree path: the serialized `ScsField.hint` stored on each shared field is
- * used directly — fast and authoritative for items in the tree.
+ * used directly - fast and authoritative for items in the tree.
  *
  * Registry fallback: registry `sharedFields` is keyed by field ID and does
  * not preserve hints. For registry-only items (e.g. OOTB RCR settings items
  * under `/sitecore/system/Settings/Rendering Contents Resolvers/*`) the hint
  * is resolved to a field ID by walking the item's template definition children
- * — mirroring Sitecore's `Item.Fields["UseContextItem"]` contract where the
+ * - mirroring Sitecore's `Item.Fields["UseContextItem"]` contract where the
  * template is the source of truth for name→ID mapping.
  *
  * Used by the P1 RCR settings read (`UseContextItem`, `ItemSelectorQuery`),
@@ -69,7 +69,7 @@ export function readSharedFieldByHint(
   if (!itemId || !hint) return undefined;
   const target = hint.toLowerCase();
 
-  // Tree item: authored hint stored on the field itself — preferred authoritative path.
+  // Tree item: authored hint stored on the field itself - preferred authoritative path.
   const node = engine.getItemById(itemId);
   if (node) {
     const match = node.item.sharedFields.find(
@@ -80,7 +80,7 @@ export function readSharedFieldByHint(
 
   // Registry-only item: resolve the hint to a field ID via the template's
   // field-definition children (mirrors Sitecore's `Item.Fields["UseContextItem"]`
-  // contract — the template is the source of truth for name→ID mapping).
+  // contract - the template is the source of truth for name→ID mapping).
   const reg = engine.getRegistryItem(itemId);
   if (!reg?.template) return undefined;
   const fieldId = resolveFieldIdByHintOnTemplate(engine, reg.template, target);
@@ -104,13 +104,13 @@ export function readSharedFieldByHint(
  *
  * ## Inputs mockingbird threads in
  *
- * - `publishDate` — `getEffectivePublishDate(item.path)`: per-path override
+ * - `publishDate` - `getEffectivePublishDate(item.path)`: per-path override
  *   from the overrides file, then `MOCKINGBIRD_PUBLISH_DATE` env var, then
  *   real `now`. Matches Sitecore's per-item publish history.
- * - `requireApproved` — `MOCKINGBIRD_PUBLISHING_VALIDATION=approved` flips
- *   on the workflow-state gate. Default off (0.4.0.30 — the reference
+ * - `requireApproved` - `MOCKINGBIRD_PUBLISHING_VALIDATION=approved` flips
+ *   on the workflow-state gate. Default off (0.4.0.30 - the reference
  *   apparently persists a `__Published` marker that this gate can't see).
- * - `approvedStates` — `MOCKINGBIRD_APPROVED_WORKFLOW_STATES` env list.
+ * - `approvedStates` - `MOCKINGBIRD_APPROVED_WORKFLOW_STATES` env list.
  *
  * ## Default behaviour when no date overrides or env are set
  *
@@ -121,7 +121,7 @@ export function readSharedFieldByHint(
  * Sitecore's gates (valid-from/to, Hide version, workflow state) actually
  * carry values.
  *
- * Returns `undefined` when no version in the requested language passes —
+ * Returns `undefined` when no version in the requested language passes -
  * matches Sitecore's `null` return, which in Edge means "item not
  * published, Edge has nothing." Downstream callers (resolveFieldValue etc.)
  * already handle this path.
@@ -184,7 +184,7 @@ function getStandardValuesItem(
   const tplId = templateId.toLowerCase();
 
   // Tree first. If the template itself is serialized, the SV is one of its
-  // direct children. Match by name — canonical in Sitecore.
+  // direct children. Match by name - canonical in Sitecore.
   const treeNode = engine.getItemById(tplId);
   if (treeNode) {
     for (const child of treeNode.children.values()) {
@@ -234,7 +234,7 @@ function readFieldOnStandardValues(
   const shared = sv.item.sharedFields[id];
   if (shared !== undefined && shared !== '') return shared;
   // Registry versioned fields are keyed language → version → fieldId. We
-  // only ever need version "1" for SV defaults — newer versions aren't
+  // only ever need version "1" for SV defaults - newer versions aren't
   // authored on SV items in practice, and the extraction is en/v1-only.
   const versioned = sv.item.versionedFields?.[language]?.['1']?.[id];
   if (versioned !== undefined && versioned !== '') return versioned;
@@ -244,7 +244,7 @@ function readFieldOnStandardValues(
 /**
  * Indexed view of an item's fields keyed by field id and by field hint name.
  * The index folds shared → language-unversioned → latest-version in order, so
- * more-specific values (versioned) overwrite less-specific ones (shared) —
+ * more-specific values (versioned) overwrite less-specific ones (shared) -
  * matching Sitecore's field-resolution precedence.
  */
 export interface ItemValueIndex {
@@ -281,11 +281,11 @@ export function buildItemValueIndex(item: ScsItem, language: string): ItemValueI
  *   3. Stored missing     → walk the `__Standard Values` cascade across the
  *      item's template and base-template chain. First non-empty hit wins.
  *      Apply {@link expandItemTokens} to the cascaded value (Sitecore's
- *      `ExpandInitialFieldValue` pipeline fires only on SV-sourced values —
+ *      `ExpandInitialFieldValue` pipeline fires only on SV-sourced values -
  *      authored literals reach branch 1 and pass through verbatim).
  *
  * Shared between `formatItemFields` (route-level) and `formatReferenceItem`
- * (multilist reference-level) — both need the same precedence.
+ * (multilist reference-level) - both need the same precedence.
  *
  * Signature: the `item` parameter (was `templateId: string` pre-0.4.0.11)
  * gives the token expander access to item-context for `$name`/`$id`/
@@ -314,7 +314,7 @@ export function resolveFieldValue(
   if (cascaded === undefined || cascaded === '') return undefined;
   // 0.4.0.11 item 4: expand $-prefixed item-context tokens on
   // SV-cascaded values only. Authored literal `$name` reached the
-  // early `stored` branch above and was returned verbatim — preserving
+  // early `stored` branch above and was returned verbatim - preserving
   // Sitecore's `ExpandInitialFieldValue`-on-SV-defaults rule.
   return expandItemTokens(cascaded, item, engine);
 }
@@ -327,7 +327,7 @@ export function resolveFieldValue(
  * Thin adapter over {@link readFieldViaStandardValuesCascade} that prepends
  * the "item's own authored value" check. Use at call sites that need
  * `item.Fields[fieldId].Value` semantics on content fields with meaningful
- * SV defaults — e.g. `__Sortorder`, `__Display Name`, and param-item `Value`.
+ * SV defaults - e.g. `__Sortorder`, `__Display Name`, and param-item `Value`.
  * Do NOT use for override fields where absence is an intentional signal
  * (Page Design override, component-name override, RCR-per-rendering, etc.).
  *
@@ -355,14 +355,14 @@ export function readFieldWithSvFallback(
 
 /**
  * Walk an item's template and base-template chain looking for a field value
- * on each template's `__Standard Values` item. First non-empty hit wins —
+ * on each template's `__Standard Values` item. First non-empty hit wins -
  * most-derived template's SV takes precedence over base templates' SVs, so
  * a page template can override a shared-base-template default just by
  * setting its own SV field.
  *
  * This mirrors Sitecore's classic field-value resolution order for an item
  * whose own serialization omits a field (omission means "inherit from SV"
- * — serializers deliberately skip values equal to SV to keep serialized
+ * - serializers deliberately skip values equal to SV to keep serialized
  * YAML lean).
  *
  * Returns `undefined` when neither the direct template's SV nor any base
@@ -398,7 +398,7 @@ export function readFieldViaStandardValuesCascade(
  * `versionedFields` as `Record<lang, Record<version, Record<fieldId, value>>>`.
  * Both are converted to the `ScsField[]` shape ScsItem callers expect.
  *
- * `hint` is emitted as `''` — the registry doesn't carry human-readable
+ * `hint` is emitted as `''` - the registry doesn't carry human-readable
  * field names. Downstream byHint lookups degrade to byId; fields-by-id
  * (the template-schema-driven path used by `formatItemFields`) still
  * resolve correctly.
@@ -408,10 +408,10 @@ export function readFieldViaStandardValuesCascade(
  * (e.g. Navigation Filters under `/sitecore/system/Settings/Foundation/
  * Experience Accelerator/Navigation`).
  *
- * Note: `reg.name` is not mapped — `ScsItem` has no `name` field; callers
+ * Note: `reg.name` is not mapped - `ScsItem` has no `name` field; callers
  * derive item name from `path` (last segment) via `itemName()`. Task D's
  * parent-display-name lookup reads `RegistryItem.name` directly from the
- * registry for registry-only parents, bypassing synthesis — intentional
+ * registry for registry-only parents, bypassing synthesis - intentional
  * asymmetry.
  */
 export function synthesizeItemFromRegistry(reg: RegistryItem): ScsItem {

@@ -65,7 +65,7 @@ function buildTemplateStructure(): ScsItem[] {
   return [template, section, fieldX, fieldY];
 }
 
-describe('Standard Values cascade — tree-serialized SV', () => {
+describe('Standard Values cascade - tree-serialized SV', () => {
   it('inherits an SV shared-field value when the item has no entry for the field', () => {
     const [template, section, fieldX, fieldY] = buildTemplateStructure();
     const svItem = makeItem({
@@ -85,7 +85,7 @@ describe('Standard Values cascade — tree-serialized SV', () => {
     const fields = formatItemFields(item, engine, '', '/sitecore/content', 'en');
 
     expect(fields.X).toEqual({ value: 'from SV shared' });
-    // Y has no value anywhere — falls through to empty default for Text.
+    // Y has no value anywhere - falls through to empty default for Text.
     expect(fields.Y).toEqual({ value: '' });
   });
 
@@ -117,7 +117,7 @@ describe('Standard Values cascade — tree-serialized SV', () => {
     expect(fields.X).toEqual({ value: 'from SV versioned' });
   });
 
-  it('does NOT cascade to SV when the item has an explicit empty value — empty is a deliberate override', () => {
+  it('does NOT cascade to SV when the item has an explicit empty value - empty is a deliberate override', () => {
     // Matches Example's Global Search Box item pattern: `TextBoxText` is
     // serialized with empty value to suppress SXA's "Search here..."
     // default. Without this check, mockingbird would emit the SV default
@@ -179,7 +179,7 @@ describe('Standard Values cascade — tree-serialized SV', () => {
     expect(fields.X).toEqual({ value: 'item' });
   });
 
-  it('walks base templates — SV on a base template resolves when the derived template has no SV entry', () => {
+  it('walks base templates - SV on a base template resolves when the derived template has no SV entry', () => {
     // Template A -> base template BASE. BASE's SV carries X; A's SV carries Y.
     // Item of template A has no stored values. Expect X from BASE, Y from A.
     const BASE_ID = '00001111-2222-3333-4444-555566667777';
@@ -189,7 +189,7 @@ describe('Standard Values cascade — tree-serialized SV', () => {
       template: TEMPLATE_TEMPLATE_ID,
       // Sitecore serializes `__Base template` as brace-wrapped uppercase
       // GUIDs, pipe-delimited for multiple bases. parseGuidList requires
-      // that form — bare dashed input is not recognized.
+      // that form - bare dashed input is not recognized.
       sharedFields: [{ id: FIELD_IDS.baseTemplate, hint: '__Base template', value: `{${BASE_ID.toUpperCase()}}` }],
     });
     const section = makeItem({
@@ -245,7 +245,7 @@ describe('Standard Values cascade — tree-serialized SV', () => {
   });
 });
 
-describe('Standard Values cascade — registry-carried SV (v3.0 versioned fields)', () => {
+describe('Standard Values cascade - registry-carried SV (v3.0 versioned fields)', () => {
   it('inherits from registry SV.versionedFields when the item has no entry for the field', () => {
     // Mirrors the SXA Search Box case: OOTB template has its SV in the
     // registry with versioned fields (en/v1) carrying `SearchButtonText
@@ -316,7 +316,7 @@ describe('Standard Values cascade — registry-carried SV (v3.0 versioned fields
       template: TEMPLATE_A_ID,
     });
     const engine = buildEngine([template, section, fieldX, fieldY, item]);
-    // No SV registered — neither tree nor registry.
+    // No SV registered - neither tree nor registry.
 
     const fields = formatItemFields(item, engine, '', '/sitecore/content', 'en');
 

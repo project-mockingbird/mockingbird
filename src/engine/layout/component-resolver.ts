@@ -14,7 +14,7 @@ import {
 } from './rendering-metadata.js';
 import { buildExperienceStub } from './experience-stub.js';
 
-/** SXA `Value` shared field — used by Style and similar settings items. */
+/** SXA `Value` shared field - used by Style and similar settings items. */
 const VALUE_FIELD_ID = '09147fb2-ebfb-4949-8c8e-26a424409d5e';
 
 /**
@@ -37,14 +37,14 @@ const BREAKPOINT_ABBR: Record<string, string> = {
  * Components whose RCR absorbs their children into a composite field on
  * the parent rendering (e.g. `FaqList` emits each FAQ item as an entry in
  * `fields.FaqGroups`). Sitecore's LayoutService does not re-emit these
- * children as distinct renderings under the parent's placeholders — the
+ * children as distinct renderings under the parent's placeholders - the
  * composite field IS the children. Mockingbird suppresses placeholder-
  * resolution on these parents to match prod.
  *
  * 0.4.0.29: introduced for FaqList (digital-pathology regression). If more
  * composite-RCR components surface, add to this set. A generic predicate
  * via RCR configuration is preferable long-term but requires indexing each
- * RCR item's output schema — deferred until more cases justify the work.
+ * RCR item's output schema - deferred until more cases justify the work.
  */
 const COMPOSITE_FIELD_COMPONENTS = new Set<string>([
   'FaqList',
@@ -107,7 +107,7 @@ function computeBootstrapGridClass(itemPath: string): string | undefined {
 function safeDecode(s: string): string {
   // Sitecore serializes rendering params using application/x-www-form-urlencoded,
   // so a literal space is encoded as `+`. `decodeURIComponent` follows RFC 3986
-  // and does NOT decode `+` — convert it manually first.
+  // and does NOT decode `+` - convert it manually first.
   const plusDecoded = s.replace(/\+/g, ' ');
   try { return decodeURIComponent(plusDecoded); } catch { return plusDecoded; }
 }
@@ -131,7 +131,7 @@ function resolveParamItemValue(id: string, engine: Engine): string | undefined {
   }
   const reg = engine.getRegistryItem(id);
   if (reg) {
-    // Registry items don't walk SV via this path — `readSharedField` resolves
+    // Registry items don't walk SV via this path - `readSharedField` resolves
     // registry entries by id and returns any stored Value; registry-sourced
     // items are typically leaf data (no SV cascade intended).
     const v = readSharedField(engine, id, VALUE_FIELD_ID);
@@ -145,7 +145,7 @@ function resolveParamItemValue(id: string, engine: Engine): string | undefined {
 
 /**
  * Match a pipe-delimited list of braced GUIDs, tolerating a leading pipe
- * (SXA serializes `|{GUID}|{GUID}...` for some param fields — the leading
+ * (SXA serializes `|{GUID}|{GUID}...` for some param fields - the leading
  * pipe is a marker that any inherited defaults should be cleared; it doesn't
  * represent a real entry).
  */
@@ -156,7 +156,7 @@ const GUID_LIST_RE = /^\|?\{[0-9a-fA-F-]{36}\}(\|\{[0-9a-fA-F-]{36}\})*$/;
  *   1. URL-decode once (params come doubly escaped from __Final Renderings XML).
  *   2. If the decoded value is a pipe-separated list of braced GUIDs, resolve
  *      each GUID to its referenced item's `Value` field (or item name as a
- *      fallback) and space-join them — this mirrors Edge's output for Styles,
+ *      fallback) and space-join them - this mirrors Edge's output for Styles,
  *      GridParameters, FieldNames, etc.
  *   3. Otherwise return the decoded value as-is.
  */
@@ -202,7 +202,7 @@ const PARAMETERS_TEMPLATE_FIELD_ID = 'a77e8568-1ab3-44f1-a664-b7c37ec7810d';
 
 /**
  * Sitecore "Json Rendering" (SXA/JSS) template id. Every SXA/JSS rendering
- * definition inherits from this and therefore has a Parameters Template —
+ * definition inherits from this and therefore has a Parameters Template -
  * distinct from the abstract `RENDERING_TEMPLATE_ID` in `constants.ts` that
  * classifies user-authored rendering items in this codebase.
  */
@@ -215,7 +215,7 @@ function renderingHasParametersTemplate(renderingId: string, engine: Engine): bo
   // Registry fallback: the baked registry does not enrich Parameters Template
   // on rendering items, so SXA renderings (Container, etc.) read back empty.
   // Assume any registry item whose template IS Json Rendering has a Parameters
-  // Template — true for all SXA module renderings in practice; over-defaulting
+  // Template - true for all SXA module renderings in practice; over-defaulting
   // FieldNames on a rare non-SXA rendering is a minor mismatch, not a bug.
   const reg = engine.getRegistryItem(renderingId);
   if (reg?.template && reg.template.toLowerCase() === JSON_RENDERING_TEMPLATE_ID) return true;
@@ -231,7 +231,7 @@ function decodeParams(
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(raw)) {
     if (RAW_GUID_PARAM_KEYS.has(k)) {
-      // URL-decode, but pass the GUID through unresolved — Edge emits
+      // URL-decode, but pass the GUID through unresolved - Edge emits
       // these as literal braced GUIDs, not as the referenced item's value.
       out[k] = safeDecode(v);
       continue;
@@ -241,7 +241,7 @@ function decodeParams(
   }
   // SXA components inherit `FieldNames` from the Rendering Parameters base
   // template with a default of `Default` (the SXA "Default" Variants item).
-  // Edge emits this even when the rendering has no stored value — which
+  // Edge emits this even when the rendering has no stored value - which
   // shows up in the source XML as either a missing `FieldNames` key OR as
   // `FieldNames&` with an empty string value. Skip when:
   // - the rendering is a synthetic PartialDesignDynamicPlaceholder wrapper
@@ -260,7 +260,7 @@ function decodeParams(
 
 /**
  * If a param value is a Sitecore `<image mediaid="{GUID}" />` XML snippet,
- * inject a `mediaurl` attribute pointing to the resolved media item — Edge
+ * inject a `mediaurl` attribute pointing to the resolved media item - Edge
  * does this enrichment on rendering params (HamburgerMenuIcon, BackgroundImage,
  * etc.) so the rendering host can render the image without a second lookup.
  */
@@ -289,7 +289,7 @@ function enrichImageParam(value: string, engine: Engine, mediaBaseUrl: string): 
  *
  * The `componentName` field value wins if set; item name is the fallback.
  *
- * 0.4.0.29: `"Unknown"` fallback removed — caller now omits the rendering
+ * 0.4.0.29: `"Unknown"` fallback removed - caller now omits the rendering
  * entirely when resolution fails. Matches prod-preview behaviour for SXA
  * OOTB renderings shipped via IAR packages (SearchResults, etc.) that are
  * never serialised to YAML and never reach the server-side layout response.
@@ -324,7 +324,7 @@ function resolveComponentName(renderingId: string, engine: Engine): string | und
  * Supports: {GUID}, absolute path, local:relative/path, or empty string.
  *
  * `ownerItemPath` is the path of the item whose __Final Renderings produced
- * this rendering — partial designs resolve `local:` relative to themselves,
+ * this rendering - partial designs resolve `local:` relative to themselves,
  * not the page.
  */
 export function resolveDatasourceItem(
@@ -334,7 +334,7 @@ export function resolveDatasourceItem(
 ): ScsItem | undefined {
   if (!dataSource) return undefined;
 
-  // Any valid GUID form (braced, dashed 36-char, or 32-hex — each lower- or
+  // Any valid GUID form (braced, dashed 36-char, or 32-hex - each lower- or
   // uppercase) resolves through the id lookup.
   const canonical = toCanonicalGuid(dataSource);
   if (canonical) {
@@ -359,9 +359,9 @@ export function resolveDatasourceItem(
 /**
  * Resolve a single PlaceholderNode into a ComponentNode.
  *
- * `componentQueryResults` — optional map from rendering uid → GraphQL query
+ * `componentQueryResults` - optional map from rendering uid → GraphQL query
  * result. When the current node's uid has an entry, the rendering's fields
- * collapse to `{ data: <queryResult> }` — matching Sitecore's
+ * collapse to `{ data: <queryResult> }` - matching Sitecore's
  * `GraphQLAwareRenderingContentsResolver` which replaces the default
  * datasource-item serialization with the ComponentQuery's JSON envelope.
  */
@@ -389,11 +389,11 @@ function resolveNode(
   const dsItem = resolveDatasourceItem(node.dataSource, engine, ownerItemPath);
 
   // 0.4.0.29: datasource publishing filter. Port of Sitecore's
-  // `Database.GetItem`-returns-null-on-draft behaviour — when a rendering's
+  // `Database.GetItem`-returns-null-on-draft behaviour - when a rendering's
   // datasource item fails `Publishing.IsValid(now, requireApproved)`, the
   // rendering is dropped. Matches prod preview's SXA-site emission. Does
   // NOT fire when `node.dataSource` is empty (no datasource attribute at
-  // all — UseContextItem fallback) nor when resolution returned undefined
+  // all - UseContextItem fallback) nor when resolution returned undefined
   // for non-publishing reasons (the rendering still emits with the context
   // item per the existing behaviour at line ~400).
   if (node.dataSource && dsItem && !isPublishingValid(engine, dsItem)) {
@@ -401,7 +401,7 @@ function resolveNode(
   }
 
   // ComponentQuery-driven rendering: Sitecore's GraphQLAwareRenderingContentsResolver
-  // replaces default content resolution entirely — no per-field emission, only
+  // replaces default content resolution entirely - no per-field emission, only
   // the `data` blob from the query result.
   let fields: Record<string, JssFieldValue> | undefined;
   const componentQueryResult = componentQueryResults?.get(node.uid);
@@ -433,7 +433,7 @@ function resolveNode(
         //   `UseContextItem ? Context.Item : GetDataSourceItem(rendering)`.
         // When `UseContextItem=true` and the rendering has no datasource,
         // Sitecore's `ProcessItem(Context.Item)` serializes the ROUTE item's
-        // typed fields — not `{}`. 0.4.0.14 emitted `{}` here, which under-
+        // typed fields - not `{}`. 0.4.0.14 emitted `{}` here, which under-
         // reported populated fields on Navigation / Breadcrumb / Page Title
         // -style renderings that draw content from the page context rather
         // than a discrete datasource.
@@ -469,7 +469,7 @@ function resolveNode(
   // rendering item's Placeholders field.
   //
   // 0.4.0.29: composite-field components (FaqList etc.) skip placeholder
-  // resolution entirely — their children are absorbed into a field on this
+  // resolution entirely - their children are absorbed into a field on this
   // rendering and must not re-emit as separate renderings under it.
   const declaredKeys = getDeclaredPlaceholderKeys(engine, node.renderingId);
   const suppressPlaceholders = COMPOSITE_FIELD_COMPONENTS.has(componentName);
@@ -499,7 +499,7 @@ function resolveNode(
  * Walk the placeholder tree and resolve rendering GUIDs to component names
  * and datasource references to formatted item fields.
  *
- * `componentQueryResults` — optional map keyed by rendering uid with
+ * `componentQueryResults` - optional map keyed by rendering uid with
  * GraphQL query results, collected and batch-executed by
  * `route-builder.ts` before this function runs. See
  * {@link import('./component-query.js').collectComponentQueryRequests}.

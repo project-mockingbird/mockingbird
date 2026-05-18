@@ -58,7 +58,7 @@ describe('validateInheritance', () => {
 });
 
 describe('validateInheritance with registry', () => {
-  it('treats registry items as terminal nodes — no false cycle', async () => {
+  it('treats registry items as terminal nodes - no false cycle', async () => {
     const registry = new Registry();
     await registry.loadFromJson(REGISTRY_JSON);
 

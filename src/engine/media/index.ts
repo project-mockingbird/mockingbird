@@ -55,7 +55,7 @@ export function clearBlobCache(): void {
 /**
  * Minimal extension→MIME fallback used when the item has no `Mime Type`
  * shared field but does have an `Extension`. Only types mockingbird is
- * likely to serve locally — Edge CDN handles everything else in prod.
+ * likely to serve locally - Edge CDN handles everything else in prod.
  */
 const EXTENSION_MIME: Record<string, string> = {
   png: 'image/png',
@@ -71,7 +71,7 @@ const EXTENSION_MIME: Record<string, string> = {
 /**
  * Detect whether a URL path segment is a 32-hex Sitecore media ID,
  * optionally containing a single `-` splitting the hex into two halves of
- * 16 chars each (both real-world formats — Sitecore emits no-hyphen, some
+ * 16 chars each (both real-world formats - Sitecore emits no-hyphen, some
  * callers inject one). Returns the canonical dashed GUID, or `undefined`
  * if the segment isn't a valid ID.
  */
@@ -98,14 +98,14 @@ function pickContentType(item: ScsItem): string {
 }
 
 /**
- * Resolve a `/-/media/*` URL (path portion only — strip the query string
+ * Resolve a `/-/media/*` URL (path portion only - strip the query string
  * before calling) to the media item's decoded blob and Content-Type. Two
  * URL formats are supported:
  *
- *   1. ID form — a single segment of 32 hex chars (optionally with one
+ *   1. ID form - a single segment of 32 hex chars (optionally with one
  *      `-` splitting it in half) followed by `.ashx`. Example:
  *      `/769DB9C9E8324657-95E6F4EFECA10DDD.ashx`.
- *   2. Path form — a Sitecore-ish path under the media library, with the
+ *   2. Path form - a Sitecore-ish path under the media library, with the
  *      last segment carrying a file extension. The
  *      `/sitecore/media library/` prefix is prepended automatically.
  *      Example: `/Project/site/icons/four-squares-white.svg`.

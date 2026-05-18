@@ -1,7 +1,7 @@
 /**
  * Decode the XML entities Sitecore uses inside field values. Parity with
  * what `HtmlAttribute.Value` gets after `HttpUtility.HtmlDecode` in
- * `ImageFieldSerializer.ParseRenderedImage` — entities arrive decoded,
+ * `ImageFieldSerializer.ParseRenderedImage` - entities arrive decoded,
  * so we do the same here before the serializer sees the value.
  */
 export function decodeEntities(s: string): string {
@@ -15,7 +15,7 @@ export function decodeEntities(s: string): string {
 
 /**
  * Escape a value for embedding in an HTML attribute's double-quoted
- * context. Used when the renderer emits `<img src="...">` — the rendered
+ * context. Used when the renderer emits `<img src="...">` - the rendered
  * HTML must round-trip cleanly through {@link walkElementAttrs}.
  */
 export function escapeAttr(s: string): string {
@@ -32,7 +32,7 @@ export function escapeAttr(s: string): string {
  * preserves insertion order for string keys). Values are
  * {@link decodeEntities}-processed.
  *
- * This is the authored-XML parser — different from
+ * This is the authored-XML parser - different from
  * {@link walkElementAttrs} only in that it doesn't look for a tag opener;
  * callers hand it the raw XML string. Shared with the per-item walk in
  * `field-json-value.ts`.

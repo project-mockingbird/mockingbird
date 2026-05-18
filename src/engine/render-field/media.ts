@@ -8,7 +8,7 @@ export const MEDIA_ALT_FIELD_ID = '65885c44-8fcd-4a7f-94f1-ee63703fe193';
 
 /**
  * Read a shared field's trimmed string value, returning `""` when absent.
- * Scoped to this module — the per-type field renderers rely on it for
+ * Scoped to this module - the per-type field renderers rely on it for
  * media-item field access (`Extension`, later `Width`/`Height`/`Alt`).
  */
 export function readSharedString(item: ScsItem, fieldId: string): string {
@@ -18,11 +18,11 @@ export function readSharedString(item: ScsItem, fieldId: string): string {
 
 /**
  * Build the Edge-shape media URL path segment for a media item. The sole
- * URL-path builder used by every media-URL call site in the engine — layout
+ * URL-path builder used by every media-URL call site in the engine - layout
  * field-formatter's image/link branches, render-field pipeline processors,
  * and the rich-text media-token rewriter.
  *
- * Returns the bare path form `/-/media/<path>.<ext>` — no host prefix, no
+ * Returns the bare path form `/-/media/<path>.<ext>` - no host prefix, no
  * querystring. Callers that need a CDN-host-prefixed URL compose themselves:
  * `${mediaBaseUrl}${buildMediaUrlPath(item)}`.
  *
@@ -41,7 +41,7 @@ export function readSharedString(item: ScsItem, fieldId: string): string {
  */
 export function buildMediaUrlPath(item: ScsItem): string {
   const ext = readSharedString(item, MEDIA_EXTENSION_FIELD_ID);
-  // Sitecore's Settings.Media.RequestExtension default — applied when the
+  // Sitecore's Settings.Media.RequestExtension default - applied when the
   // Extension field is empty. MediaFolders naturally have no Extension →
   // naturally get `.ashx`, matching Edge's observed emission. Also the
   // `.toLowerCase()` formerly applied here is dropped; `MediaItem.Extension`
@@ -68,7 +68,7 @@ export function buildMediaUrlPath(item: ScsItem): string {
  * Read a media item's versioned `Alt` field. `Alt` is language/version-
  * scoped on Sitecore's Image template (unlike `Width`/`Height` which are
  * shared), so walk en's language fields first, then each version,
- * latest-first. Falls back to `""` when unset — matches
+ * latest-first. Falls back to `""` when unset - matches
  * `FieldRenderer.RenderField`'s `<img alt="">` emission for images whose
  * media item carries no authored Alt.
  */
@@ -97,7 +97,7 @@ export const MEDIA_FOLDER_TEMPLATE_ID = 'fe5dd826-48c6-436d-b87a-7c4210c7413b';
 /**
  * Decide whether a resolved item should route through the media-URL
  * builder (CDN form) rather than the site-relative URL builder. Path-
- * prefix only — any item under `/sitecore/media library` qualifies,
+ * prefix only - any item under `/sitecore/media library` qualifies,
  * including `MediaFolder`-templated folders.
  *
  * This diverges from Sitecore's LayoutService
@@ -120,10 +120,10 @@ export function isMediaItem(item: ScsItem): boolean {
 }
 
 /**
- * Build the full Edge-shape `src` URL for a media item — `/-/media/<path>.<ext>?h=<h>&iar=0&w=<w>`.
+ * Build the full Edge-shape `src` URL for a media item - `/-/media/<path>.<ext>?h=<h>&iar=0&w=<w>`.
  * The `iar=0` param is always emitted. Height and width are emitted only when
  * the authored XML or media item carries a non-empty value for the corresponding
- * field — matches prod Edge's `MediaUrlBuilder` behavior: SVGs and other assets
+ * field - matches prod Edge's `MediaUrlBuilder` behavior: SVGs and other assets
  * without stored dimensions produce just `?iar=0`.
  *
  * Two call sites share this helper:

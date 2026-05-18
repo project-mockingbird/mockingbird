@@ -2,13 +2,13 @@ import type { ScsField, ScsItem, ScsLanguage, ScsVersion } from './types.js';
 import { parseItemFromString } from './parser.js';
 
 /**
- * SCS .yml writer. Inverse of parser.ts — emits bytes the parser reads
+ * SCS .yml writer. Inverse of parser.ts - emits bytes the parser reads
  * back to a structurally-identical ScsItem, matching the output format
  * of `Rainbow.Storage.Yaml.YamlWriter` byte-for-byte so round-trips
  * through the parser/serializer pair are stable and git diffs against
  * Rainbow-written SCS files are clean.
  *
- * Rainbow reference (decompile lines 612–625):
+ * Rainbow reference (decompile lines 612-625):
  *
  *   protected virtual void WriteMapInternal(string key, string value) {
  *       if (value.IndexOfAny(new char[4] {'\n','\r','"','\\'}) > -1) {
@@ -102,7 +102,7 @@ function writeVersionList(lines: string[], versions: ScsVersion[]): void {
 }
 
 /**
- * Emit `<indent><listPrefix><key>: <value>` — the universal shape of
+ * Emit `<indent><listPrefix><key>: <value>` - the universal shape of
  * `WriteMapInternal`. `listPrefix` adds `- ` for the first key of a
  * list entry; everything else is emitted without it. Value encoding
  * picks plain / quoted / block-scalar based on Rainbow's char triggers.
@@ -152,7 +152,7 @@ function quoted(value: string): string {
 /**
  * Update a single field's `Value` within an existing YAML document.
  * Parses via the grammar-faithful reader, mutates the `ScsItem`, and
- * re-serializes via the writer — so leading-space values, block
+ * re-serializes via the writer - so leading-space values, block
  * scalars, and Rainbow's quoting conventions all survive edits.
  * BOM and line-ending style are detected from the input so the file
  * stays format-consistent with how it was written.

@@ -54,7 +54,7 @@ function detectCycle(
   // Skip already-verified or known terminal templates
   if (verified.has(templateId) || KNOWN_BUILTIN_TEMPLATE_IDS.has(templateId) || registry?.has(templateId)) return;
 
-  // Skip templates not in tree (unresolved reference — referential validator handles that)
+  // Skip templates not in tree (unresolved reference - referential validator handles that)
   if (!tree.getById(templateId)) return;
 
   path.add(templateId);

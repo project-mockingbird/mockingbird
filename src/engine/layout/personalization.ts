@@ -9,7 +9,7 @@ import type { RenderingEntry } from './types.js';
  *
  * Sitecore's Kernel, when evaluating a default-uid rule
  * (`{00000000-...}`), overrides the declared condition with
- * `TrueCondition<...>` and runs `RunFirstMatching` — so the default
+ * `TrueCondition<...>` and runs `RunFirstMatching` - so the default
  * rule's action always applies. See decompile at
  * `Sitecore.Personalization.decompiled.cs:716-723`.
  *
@@ -18,7 +18,7 @@ import type { RenderingEntry } from './types.js';
  * implementation covers every personalization-driven datasource
  * substitution the content tree needs. A full rules-engine condition-predicate
  * evaluator (for non-default rules with real conditions, `HideAction`,
- * variant renderings, etc.) is out of scope — deferred alongside other
+ * variant renderings, etc.) is out of scope - deferred alongside other
  * 0.4.0.x items.
  *
  * Mutation matches Sitecore exactly: `rule.Apply(ruleContext)` mutates

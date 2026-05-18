@@ -23,7 +23,7 @@ export function registerValidateCommand(program: Command): void {
         console.log(JSON.stringify(output, null, 2));
       } else {
         if (result.valid) {
-          console.log('Validation passed — no errors');
+          console.log('Validation passed - no errors');
         } else {
           for (const error of result.errors) {
             const prefix = error.severity === 'error' ? 'ERROR' : 'WARN';

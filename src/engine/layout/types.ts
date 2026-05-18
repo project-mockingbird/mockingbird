@@ -7,7 +7,7 @@ export interface RenderingEntry {
   params: Record<string, string>;
   /**
    * Sitecore path of the item whose __Final Renderings this entry came from.
-   * Used as the resolution root for `local:` datasource references — a partial
+   * Used as the resolution root for `local:` datasource references - a partial
    * design's renderings must resolve `local:` paths relative to the partial,
    * not the page. Set by the composer after parseRenderingXml; undefined when
    * the entry was not tagged (callers should fall back to the page path).
@@ -17,7 +17,7 @@ export interface RenderingEntry {
    * Parsed `<rls>/<ruleset>/<rule>` data on the rendering, populated by
    * `parseRenderingXml` when the body carries rules.
    * `applyDefaultRulePersonalization` (in `personalization.ts`) is the
-   * sole consumer — it reads `rules.defaultActionDataSource` and mutates
+   * sole consumer - it reads `rules.defaultActionDataSource` and mutates
    * `dataSource` in place, mirroring Sitecore's
    * `InsertRenderings.Personalization` processor (0.4.0.9).
    */
@@ -31,7 +31,7 @@ export interface RenderingEntry {
     defaultActionDataSource?: string;
   };
   /**
-   * 0.4.0.14 — Set by `parseRenderingXml` when the default rule's `<actions>`
+   * 0.4.0.14 - Set by `parseRenderingXml` when the default rule's `<actions>`
    * block contains a `HideRenderingAction`. Consumers (component-resolver)
    * emit the experience-stub shape `{uid, componentName:null, dataSource:null,
    * experiences:{}}` for these renderings, matching Sitecore's
@@ -41,7 +41,7 @@ export interface RenderingEntry {
   hidden?: boolean;
 }
 
-/** Nested placeholder node — intermediate representation before GUID resolution. */
+/** Nested placeholder node - intermediate representation before GUID resolution. */
 export interface PlaceholderNode {
   uid: string;
   renderingId: string;
@@ -50,7 +50,7 @@ export interface PlaceholderNode {
   ownerItemPath?: string;
   placeholders?: Record<string, PlaceholderNode[]>;
   /**
-   * 0.4.0.14 — Forwarded from `RenderingEntry.hidden` by the placeholder tree
+   * 0.4.0.14 - Forwarded from `RenderingEntry.hidden` by the placeholder tree
    * builder. Emission-side consumers check this flag before resolving fields/
    * placeholders.
    */
@@ -75,7 +75,7 @@ export interface ComponentNode {
    */
   params?: Record<string, string>;
   /**
-   * 0.4.0.14 — Optional per Sitecore's emission contract. Absent when no
+   * 0.4.0.14 - Optional per Sitecore's emission contract. Absent when no
    * datasource AND no context-item resolver (`fields` key dropped from JSON).
    * Present (even as `{}`) when RCR resolved a context item. `{ data: ... }`
    * for ComponentQuery-driven renderings. `{ items: [...] }` for
@@ -85,14 +85,14 @@ export interface ComponentNode {
   fields?: Record<string, JssFieldValue>;
   placeholders?: Record<string, ComponentNode[]>;
   /**
-   * 0.4.0.14 — Experience-stub emission for hidden-by-default renderings.
+   * 0.4.0.14 - Experience-stub emission for hidden-by-default renderings.
    * Currently always emitted as `{}` when set; full variant serialization is
    * out of scope for this release.
    */
   experiences?: Record<string, unknown>;
 }
 
-/** JSS field value — text, rich text, multiline text. */
+/** JSS field value - text, rich text, multiline text. */
 export interface JssTextField {
   value: string;
 }
@@ -152,7 +152,7 @@ export type JssFieldValue =
   | JssReferenceItem
   | null;
 
-/** Full layout route — matches the sitecore.route shape from JSS GraphQL layout query. */
+/** Full layout route - matches the sitecore.route shape from JSS GraphQL layout query. */
 export interface LayoutRoute {
   name: string;
   displayName: string;

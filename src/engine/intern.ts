@@ -7,7 +7,7 @@
  * Drastically shrinks heap when thousands of items share the same template
  * IDs, field IDs, language codes, and hints.
  *
- * V8 doesn't auto-intern arbitrary strings — each allocates a fresh `One
+ * V8 doesn't auto-intern arbitrary strings - each allocates a fresh `One
  * Byte String` or `Two Byte String` object. For an 11k-item content tree with
  * ~20 fields per item, that's ~220k field objects carrying ~660k field-
  * id + hint + type strings. Most collapse to <1,000 unique values.
@@ -52,7 +52,7 @@ export function clearInternPool(): void {
  *
  * Interned: template ID, parent ID, each field's `id`/`hint`/`type`,
  * each language's `language` code. NOT interned: `item.id` (unique per
- * item by definition — pooling would grow the pool to the size of the
+ * item by definition - pooling would grow the pool to the size of the
  * content tree with no compression benefit), field values (most are unique),
  * item paths (unique).
  */

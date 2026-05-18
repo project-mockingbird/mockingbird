@@ -21,7 +21,7 @@ export interface ScsVersion {
 /** A language entry containing unversioned fields and numbered versions. */
 export interface ScsLanguage {
   language: string;
-  /** Unversioned fields — per-language, same across all versions. */
+  /** Unversioned fields - per-language, same across all versions. */
   fields: ScsField[];
   versions: ScsVersion[];
 }
@@ -152,7 +152,7 @@ export interface EngineOptions {
   /** Path to persistent index cache (gzipped JSON). When set, startInit will
    *  try to load from the cache before re-parsing all YAML files, and write
    *  back after a full rebuild. Cache is invalidated by (path, mtime, size)
-   *  signature — any file change triggers a full rebuild. */
+   *  signature - any file change triggers a full rebuild. */
   indexCachePath?: string;
   /** Called after the engine processes a file change. */
   onItemChange?: (event: ItemChangeEvent) => void;

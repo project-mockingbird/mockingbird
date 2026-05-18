@@ -3,13 +3,13 @@ export const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
 export const TEMPLATE_SECTION_TEMPLATE_ID = 'e269fbb5-3750-427a-9149-7aa950b49301';
 export const TEMPLATE_FIELD_TEMPLATE_ID = '455a3e98-a627-4b40-8035-e683a0331ac7';
 export const STANDARD_TEMPLATE_ID = '1930bbeb-7805-471a-a3be-4858ac7cf696';
-// Sitecore's abstract `Rendering` template — every user-authored rendering
+// Sitecore's abstract `Rendering` template - every user-authored rendering
 // item in this editor gets this template. Distinct from the SXA/JSS
 // `Json Rendering` template (`04646a89-...`) which real SXA renderings
-// actually inherit from — see `JSON_RENDERING_TEMPLATE_ID` in component-resolver.
+// actually inherit from - see `JSON_RENDERING_TEMPLATE_ID` in component-resolver.
 export const RENDERING_TEMPLATE_ID = '99f8905d-e352-41e0-aff4-8d3a5f66f3f0';
 
-// SXA Redirects — each `Redirect Map` item holds many pattern=target pairs
+// SXA Redirects - each `Redirect Map` item holds many pattern=target pairs
 // in its `UrlMapping` field, plus flags applied to all entries in the map.
 // `Redirect Map Grouping` is a folder template used to nest Redirect Maps
 // under the `Redirects` container; walk through but do not emit.
@@ -25,18 +25,18 @@ export const REDIRECT_FIELD_IDS = {
 // Sitecore media item shared fields. Blob is a base64-encoded binary payload;
 // Mime Type / Extension drive the HTTP Content-Type when the media item is
 // served via the `/-/media/*` passthrough. The Blob field ID has the third
-// GUID group as `4702`, not `0702` — verified against every real reference
+// GUID group as `4702`, not `0702` - verified against every real reference
 // content tree media yml in the content mount.
 export const BLOB_FIELD_ID = '40e50ed9-ba07-4702-992e-a912738d32dc';
 export const MIME_TYPE_FIELD_ID = '6f47a0a5-9c94-4b48-abeb-42d38def6054';
 export const EXTENSION_FIELD_ID = 'c06867fe-9a43-4c7d-b739-48780492d06f';
 export const MEDIA_LIBRARY_PATH_PREFIX = '/sitecore/media library';
 
-// SXA Standard Values Overlay — per-site Site Collection Templates.
+// SXA Standard Values Overlay - per-site Site Collection Templates.
 // Subject-template opt-in marker: only templates that inherit from this
 // participate in SCT resolution (mirrors SXA's `GetStandardValue.TestInheritance`).
 export const PER_SITE_STANDARD_VALUES_TEMPLATE_ID = '44a022db-56d3-419a-b43b-e27e4d8e9c41';
-// Folder marker templates — SCT folder is located by `FirstChildInheritingFrom`
+// Folder marker templates - SCT folder is located by `FirstChildInheritingFrom`
 // of these under each site's Settings item.
 export const BASE_SXA_STANDARD_VALUES_FOLDER_TEMPLATE_ID = 'f2141646-b989-4f4d-936d-f25acaa28c8d';
 export const BASE_SETTINGS_TEMPLATE_ID = '6d8ff35b-49fa-4896-b370-eb35d6b99f3f';
@@ -55,7 +55,7 @@ export const BASE_DATA_FOLDER_TEMPLATE_ID = '66fb7845-4523-42db-9b31-b79c64d7253
 // Experience Accelerator/Local Datasources/Page Data`. Hardcoded as a
 // second anchor for the Page Data folder predicate (see above).
 export const PAGE_DATA_TEMPLATE_ID = '1c82e550-ebcd-4e5d-8abd-d50d0809541e';
-// `_BaseTenant.Fields.SharedSites` — multilist of sibling site items whose
+// `_BaseTenant.Fields.SharedSites` - multilist of sibling site items whose
 // SCT folders serve as fallback when current site has no match.
 export const SHARED_SITES_FIELD_ID = '7d29b525-8118-45c6-a89b-773a6a576ec7';
 
@@ -110,7 +110,7 @@ export const LINK_SETTINGS_FIELD_ID = 'e41d2d4b-4c5d-4467-a8d6-0cfa23577501';
 /** Field ID of `__Final Renderings` - the versioned SXA layout field used across pages, partials, and page designs. */
 export const FINAL_RENDERINGS_FIELD_ID = '04bf00db-f5fb-41f7-8ab7-22408372a981';
 
-// Rendering item (shared): Multilist of Placeholder Settings references —
+// Rendering item (shared): Multilist of Placeholder Settings references -
 // declares which placeholder slots Sitecore emits for this rendering,
 // even when empty. `Sitecore.LayoutService.decompiled.cs:4398` reads
 // `item.Fields["Placeholders"]`.
@@ -138,7 +138,7 @@ export const PLACEHOLDER_KEY_FIELD_ID = '7256bdab-1fd2-49dd-b205-cb4873d2917c';
 // 0.4.0.16: corrected from `56ca26f1-...` (a different template's RCR field)
 // to the actual Rendering Options.Layout Service.Rendering Contents Resolver
 // field at `/sitecore/templates/System/Layout/Sections/Rendering Options/Layout Service/Rendering Contents Resolver`.
-// Same cause as PLACEHOLDERS_FIELD_ID — the old ID never resolved on SXA
+// Same cause as PLACEHOLDERS_FIELD_ID - the old ID never resolved on SXA
 // rendering items, so 0.4.0.14's P1 RCR-gate and 0.4.0.15's Fix 2 were
 // effectively inert on real data.
 export const RENDERING_CONTENTS_RESOLVER_FIELD_ID = 'b0b15510-b138-470e-8f33-8da2e228aafe';
@@ -148,7 +148,7 @@ export const RENDERING_CONTENTS_RESOLVER_FIELD_ID = 'b0b15510-b138-470e-8f33-8da
 // `Initialize.GetComponentName`:
 //   string text = renderingItem[FieldIDs.JsonRendering.ComponentName];
 //   if (string.IsNullOrWhiteSpace(text)) text = renderingItem.Name;
-// This is the field on the SXA Json Rendering template's `Data` section —
+// This is the field on the SXA Json Rendering template's `Data` section -
 // item at `/sitecore/templates/Foundation/JavaScript Services/Json Rendering/Data/componentName`.
 // 0.4.0.16: added so renderings whose item name ≠ intended componentName
 // (e.g. renamed-in-Sitecore / aliased) emit Sitecore's value.
@@ -156,7 +156,7 @@ export const COMPONENT_NAME_FIELD_ID = '037fe404-dd19-4bf7-8e30-4dadf68b27b0';
 
 // Action ID for `Sitecore.Rules.ConditionalRenderings.HideRenderingAction`.
 // Used in the default-rule `<actions>` block inside `<rls>` to mark a rendering
-// hidden by default — prod emits `{uid, componentName:null, dataSource:null, experiences:{}}`.
+// hidden by default - prod emits `{uid, componentName:null, dataSource:null, experiences:{}}`.
 // `Sitecore.Kernel.decompiled.cs:106832-106850`.
 export const HIDE_RENDERING_ACTION_ID = '25f351a1-712d-45f8-857d-8ad95bb2ace9';
 

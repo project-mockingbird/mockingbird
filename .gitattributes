@@ -1,0 +1,4 @@
+# Hook scripts must use LF line endings on every checkout. CRLF in a shebang
+# script breaks `sh` / `bash` on macOS / Linux and Git Bash on Windows.
+hooks/*           text eol=lf
+*.sh              text eol=lf

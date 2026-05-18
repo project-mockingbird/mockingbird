@@ -175,7 +175,7 @@ describe('parseRenderingXml', () => {
   it('keeps renderings whose <rls> contains both default and non-default rules (item 10)', () => {
     // A `<rls>` that mixes the default rule with audience variants still
     // evaluates the default rule first (TrueCondition) in Sitecore's
-    // RunFirstMatching — the rendering is kept.
+    // RunFirstMatching - the rendering is kept.
     const xml = `<r xmlns:s="s" xmlns:p="p" p:p="1">
       <d id="{${DEFAULT_DEVICE_ID}}">
         <r uid="{A}" s:id="{11111111-1111-1111-1111-111111111111}" s:ph="main" s:ds="" s:par="">
@@ -193,7 +193,7 @@ describe('parseRenderingXml', () => {
   });
 });
 
-describe('parseRenderingXml — default rule action extraction (0.4.0.9)', () => {
+describe('parseRenderingXml - default rule action extraction (0.4.0.9)', () => {
   // Parser captures `<rule uid="{00000000-...}">/<actions>/<action s:DataSource="...">`
   // into `entry.rules.defaultActionDataSource`. The personalization pass
   // (`applyDefaultRulePersonalization` in `personalization.ts`) consumes it.
@@ -226,7 +226,7 @@ describe('parseRenderingXml — default rule action extraction (0.4.0.9)', () =>
     const entries = parseRenderingXml(xml);
     expect(entries).toHaveLength(1);
     expect(entries[0].rules?.defaultActionDataSource).toBe('17b42ad7-a3f3-4f8d-a4ec-fa98fd57660c');
-    // `dataSource` is the un-substituted authored value — the personalization
+    // `dataSource` is the un-substituted authored value - the personalization
     // pass (applied downstream in `page-design.ts`) mutates this.
     expect(entries[0].dataSource).toBe('{DB1987D3-1740-45E3-AD83-988DFF315677}');
   });
@@ -271,7 +271,7 @@ describe('parseRenderingXml — default rule action extraction (0.4.0.9)', () =>
     // regex would capture the variant's `</rule>` as the default's
     // closing tag and mis-attribute the variant's action datasource to
     // the default. The regex's `[^/>]*>` tail excludes `/` so self-
-    // closing forms don't match at all — the default correctly falls
+    // closing forms don't match at all - the default correctly falls
     // through to `undefined`, and the personalization pass leaves
     // dataSource unchanged.
     const xml = `<r xmlns:s="http://www.sitecore.net/xmlconfig/" xmlns:p="p">
@@ -295,12 +295,12 @@ describe('parseRenderingXml — default rule action extraction (0.4.0.9)', () =>
     </r>`;
     const entries = parseRenderingXml(xml);
     expect(entries).toHaveLength(1);
-    // Must NOT capture the variant's datasource — default is self-closing.
+    // Must NOT capture the variant's datasource - default is self-closing.
     expect(entries[0].rules).toBeUndefined();
   });
 });
 
-describe('parseRenderingXml — P3b HideRenderingAction detection', () => {
+describe('parseRenderingXml - P3b HideRenderingAction detection', () => {
   it('flags rendering hidden when default rule contains HideRenderingAction', () => {
     const actionId = `{${HIDE_RENDERING_ACTION_ID.toUpperCase()}}`;
     const xml = `<r xmlns:s="s" xmlns:p="p"><d id="{FE5D7FDF-89C0-4D99-9AA3-B5FBD009C9F3}"><r uid="{AABBCCDD-0000-0000-0000-000000000001}" s:id="{AA000001-0000-0000-0000-000000000001}" s:ph="main"><rls><ruleset><rule uid="{00000000-0000-0000-0000-000000000000}"><conditions /><actions><action id="${actionId}" /></actions></rule></ruleset></rls></r></d></r>`;
@@ -334,7 +334,7 @@ describe('parseRenderingXml — P3b HideRenderingAction detection', () => {
 
   it('does not flag hidden when only variant rules have HideAction (no default rule)', () => {
     const actionId = `{${HIDE_RENDERING_ACTION_ID.toUpperCase()}}`;
-    // Non-default rule uids — this body gets dropped by `hasDefaultOrEmptyRules`
+    // Non-default rule uids - this body gets dropped by `hasDefaultOrEmptyRules`
     // so the entry won't surface at all. Confirm the drop still happens.
     const xml = `<r xmlns:s="s" xmlns:p="p"><d id="{FE5D7FDF-89C0-4D99-9AA3-B5FBD009C9F3}"><r uid="{AABBCCDD-0000-0000-0000-000000000005}" s:id="{AA000001-0000-0000-0000-000000000005}" s:ph="main"><rls><ruleset><rule uid="{11111111-0000-0000-0000-000000000001}"><conditions /><actions><action id="${actionId}" /></actions></rule></ruleset></rls></r></d></r>`;
     const entries = parseRenderingXml(xml);

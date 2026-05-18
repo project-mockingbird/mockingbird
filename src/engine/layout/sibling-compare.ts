@@ -5,7 +5,7 @@ import { readSortOrder } from './contents-resolvers.js';
 /**
  * Collator for sibling name tiebreak. `sensitivity: 'base'` collapses case
  * + accent variations. Hyphens are stripped BEFORE comparison (see
- * {@link stripHyphens}) while spaces and other characters are kept — this
+ * {@link stripHyphens}) while spaces and other characters are kept - this
  * matches prod's observed ordering on `/resources/glossary` where:
  *
  *   - `"Deep Learning"` sorts before `"De-Identified Data"` (0.4.0.29/H.2)
@@ -37,7 +37,7 @@ function stripHyphens(s: string): string {
  *
  * Shared between the RCR query factories (`rcr-queries.ts`) and
  * `resolveItemChildren` (`item-query/index.ts`). Name is pulled from the
- * last path segment — matches Sitecore item-name semantics (the same
+ * last path segment - matches Sitecore item-name semantics (the same
  * derivation previously used by both sites' inline comparators).
  *
  * 0.4.0.28: `engine` threaded so the underlying `readSortOrder` can cascade

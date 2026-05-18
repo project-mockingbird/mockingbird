@@ -1,0 +1,38 @@
+#!/bin/sh
+# Block forbidden patterns from commit messages.
+#
+# Currently enforced:
+#   - em-dash (U+2014) and en-dash (U+2013): use hyphen (-) instead.
+#   - Co-Authored-By: trailers: project rule forbids these.
+#
+# To add consumer-reference / internal-name blocking, append additional
+# `grep` checks below.
+#
+# Bypass with: git commit --no-verify   (false positives only)
+
+msg_file="$1"
+
+# Build dash chars from UTF-8 byte sequences via printf so the source stays
+# pure ASCII (no em-dash or en-dash literal in the hook itself).
+DASH_EM=$(printf '\xe2\x80\x94')
+DASH_EN=$(printf '\xe2\x80\x93')
+
+errors=0
+
+if grep -qF -e "$DASH_EM" -e "$DASH_EN" "$msg_file" 2>/dev/null; then
+  echo "commit-msg: em-dash or en-dash in message - use hyphen (-) instead."
+  errors=$((errors + 1))
+fi
+
+if grep -qiE '^Co-Authored-By:' "$msg_file"; then
+  echo "commit-msg: Co-Authored-By: trailer found - project rule forbids these."
+  errors=$((errors + 1))
+fi
+
+if [ "$errors" -gt 0 ]; then
+  echo ""
+  echo "Bypass: git commit --no-verify   (false positives only)"
+  exit 1
+fi
+
+exit 0

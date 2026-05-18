@@ -2,7 +2,7 @@ import type { Engine } from '../index.js';
 
 /**
  * Sections defined by SXA SiteMetadata base templates (Sitemap settings,
- * robots, etc.) are not emitted by Edge — they're site-level configuration,
+ * robots, etc.) are not emitted by Edge - they're site-level configuration,
  * not per-item content. Identify them by the source template's path.
  *
  * Shared between `formatItemFields` (utils.ts) and `formatReferenceItem`

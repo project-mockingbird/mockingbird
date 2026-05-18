@@ -17,20 +17,20 @@ const XA_VARIABLE_SPAN_RE =
 /** True when `value` contains at least one SXA Content Token span. */
 export function containsXaVariableSpan(value: string): boolean {
   if (!value) return false;
-  // Reset lastIndex since the constant regex is /g — stateful across calls.
+  // Reset lastIndex since the constant regex is /g - stateful across calls.
   XA_VARIABLE_SPAN_RE.lastIndex = 0;
   return XA_VARIABLE_SPAN_RE.test(value);
 }
 
 /**
- * Expand only SXA Content Token spans — no dynamic-link, no media, no CR
+ * Expand only SXA Content Token spans - no dynamic-link, no media, no CR
  * stripping. Used by the opt-in `MOCKINGBIRD_XA_VARIABLE_EXPANSION=force`
  * path so non-RichText-typed fields that carry xa-variable markup still
  * resolve their tokens, without applying the broader RichText rewrites
  * that could false-positive on plain-text content.
  *
  * Default behaviour (mode=`sitecore`) is still the Sitecore-contract type-
- * based dispatch — this function is strictly additive, called only when the
+ * based dispatch - this function is strictly additive, called only when the
  * opt-in env var is set.
  */
 export function expandXaVariableSpans(
@@ -49,7 +49,7 @@ export function expandXaVariableSpans(
 }
 
 /**
- * Rewrite Sitecore's dynamic link/media tokens inside a Rich Text body —
+ * Rewrite Sitecore's dynamic link/media tokens inside a Rich Text body -
  * the mockingbird port of `FieldRenderer.RenderField` under
  * `DynamicLinkDatabaseSwitcher(Context.Database)`:
  *
@@ -96,7 +96,7 @@ export function rewriteRichText(
   // and did not fire on real-world site authoring. Accept both defensively;
   // matching both costs nothing and guards against SXA-version variance.
   // Reuses the same expander as the opt-in `MOCKINGBIRD_XA_VARIABLE_EXPANSION=force`
-  // path (DRY — one regex, one resolver).
+  // path (DRY - one regex, one resolver).
   out = expandXaVariableSpans(out, engine);
 
   out = out.replace(/-\/media\/([0-9a-fA-F]{32})\.ashx([^"'\s)]*)/gi, (_match, hex, query) => {
@@ -128,7 +128,7 @@ export function rewriteRichText(
  * language=`en`. URL-encoded via `.NET`'s `HttpUtility.UrlEncode`
  * (lowercase-hex), matching prod's observed `%3a` / `%7b` / `%7d` / `%40`.
  *
- * Language is hardcoded `en` — the reference content tree is English-only and the
+ * Language is hardcoded `en` - the reference content tree is English-only and the
  * engine doesn't thread per-page language through this code path. If a
  * future content tree adds other languages, extend `rewriteRichText`'s
  * signature to accept language and thread it through.

@@ -77,7 +77,7 @@ function makePage(opts: { id: string; parentId: string; name: string; title: str
   });
 }
 
-describe('resolveViaRcrItem — happy path (InteractionNavigation / UseContextItem=1)', () => {
+describe('resolveViaRcrItem - happy path (InteractionNavigation / UseContextItem=1)', () => {
   function scenario() {
     const templateItems = makePageTemplate();
 
@@ -93,7 +93,7 @@ describe('resolveViaRcrItem — happy path (InteractionNavigation / UseContextIt
     const searchPage = makePage({ id: 'srch0000-0000-0000-0000-000000000002', parentId: folder.id, name: 'search', title: 'Search', sortOrder: 200 });
     const eventPage = makePage({ id: 'evnt0000-0000-0000-0000-000000000003', parentId: folder.id, name: 'event-streaming', title: 'Event Streaming', sortOrder: 300 });
 
-    // A metadata-ish sibling with the EXCLUDED template — must not appear in items.
+    // A metadata-ish sibling with the EXCLUDED template - must not appear in items.
     const excludedSibling = makeItem({
       id: 'excl0000-0000-0000-0000-000000000001',
       parent: folder.id,
@@ -169,7 +169,7 @@ describe('resolveViaRcrItem — happy path (InteractionNavigation / UseContextIt
   });
 });
 
-describe('resolveViaRcrItem — fall-through cases return null', () => {
+describe('resolveViaRcrItem - fall-through cases return null', () => {
   function minimalEngine() {
     const folder = makeItem({
       id: 'fold0001-0000-0000-0000-000000000001',
@@ -288,11 +288,11 @@ describe('resolveViaRcrItem — fall-through cases return null', () => {
   });
 });
 
-describe('resolveViaRcrItem — Datasource Item Children Resolver (0.4.0.11)', () => {
+describe('resolveViaRcrItem - Datasource Item Children Resolver (0.4.0.11)', () => {
   // OOTB Sitecore class-based RCR "Datasource Item Children Resolver" at
   // /sitecore/system/Modules/Layout Service/Rendering Contents Resolvers/
   // Datasource Item Children Resolver (id {2F5C334E-5615-423C-8281-9FC180191302}).
-  // Returns datasource.Children directly — no ItemSelectorQuery. Registered
+  // Returns datasource.Children directly - no ItemSelectorQuery. Registered
   // by id because the registry extraction doesn't carry the item's Type field.
 
   const RCR_FIELD_ID = 'b0b15510-b138-470e-8f33-8da2e228aafe';
@@ -314,7 +314,7 @@ describe('resolveViaRcrItem — Datasource Item Children Resolver (0.4.0.11)', (
       path: '/sitecore/content/tokens',
     });
 
-    // Three children in non-alphabetical insertion order — expect alphabetical emission.
+    // Three children in non-alphabetical insertion order - expect alphabetical emission.
     const c1 = makeItem({ id: 'c1', path: '/sitecore/content/tokens/Zeta', parent: datasourceId });
     const c2 = makeItem({ id: 'c2', path: '/sitecore/content/tokens/Alpha', parent: datasourceId });
     const c3 = makeItem({ id: 'c3', path: '/sitecore/content/tokens/Beta', parent: datasourceId });

@@ -15,7 +15,7 @@ interface FormatItemFieldsOptions {
   /** Skip fields from standard template sections (default: true). */
   skipStandardSections?: boolean;
   /**
-   * Reserved for backwards compatibility — schema-driven emission only iterates
+   * Reserved for backwards compatibility - schema-driven emission only iterates
    * fields known to the template schema, so unknown fields are inherently skipped.
    */
   skipUnknownFields?: boolean;
@@ -27,7 +27,7 @@ interface FormatItemFieldsOptions {
  * Stored values come from the YAML; missing fields get a typed empty default
  * so consumers (JSS rendering host) see a stable shape.
  *
- * Edge mirrors this behaviour — components bind to `fields.Foo` even when the
+ * Edge mirrors this behaviour - components bind to `fields.Foo` even when the
  * item has never been authored with a value for `Foo`.
  */
 export function formatItemFields(
@@ -38,13 +38,13 @@ export function formatItemFields(
   language: string,
   options: FormatItemFieldsOptions = {},
 ): Record<string, JssFieldValue> {
-  // Default to skipping standard sections (Statistics, Workflow, etc.) — Edge
+  // Default to skipping standard sections (Statistics, Workflow, etc.) - Edge
   // never emits those system fields.
   const { skipStandardSections = true } = options;
   const fields: Record<string, JssFieldValue> = {};
 
-  // Build the per-item value index once — shared → unversioned → versioned,
-  // later entries overwrite — and re-use it for every schema field below.
+  // Build the per-item value index once - shared → unversioned → versioned,
+  // later entries overwrite - and re-use it for every schema field below.
   const index = buildItemValueIndex(item, language);
 
   // Walk the schema and emit one entry per field defined on the template.

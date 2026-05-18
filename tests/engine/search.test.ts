@@ -73,7 +73,7 @@ describe('resolveSearch', () => {
         languages: [{ language: 'en', fields: [], versions: [{ version: 1, fields: [] }] }],
       }));
     }
-    // One item with a different template — should be excluded by the template filter.
+    // One item with a different template - should be excluded by the template filter.
     const other = makeItem({
       id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
       path: '/sitecore/content/site/other',

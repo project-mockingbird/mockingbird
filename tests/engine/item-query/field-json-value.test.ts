@@ -8,7 +8,7 @@ import {
   FIELD_IDS,
 } from '../../../src/engine/constants.js';
 
-describe('buildJsonValue — empty-field jsonValue shape', () => {
+describe('buildJsonValue - empty-field jsonValue shape', () => {
   const engine = buildEngine([]);
 
   it('returns { value: { href: "" } } for an empty general-link field', () => {
@@ -22,7 +22,7 @@ describe('buildJsonValue — empty-field jsonValue shape', () => {
   });
 
   it('returns { value: {} } for an empty image field', () => {
-    // Image empty contract stays `{}` — prod does not inject `src:""` when
+    // Image empty contract stays `{}` - prod does not inject `src:""` when
     // the field is wholly unauthored. Confirms the split doesn't regress
     // the image side.
     expect(buildJsonValue('', engine, '', 'image')).toEqual({ value: {} });

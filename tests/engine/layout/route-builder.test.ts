@@ -141,7 +141,7 @@ describe('resolveLayout', () => {
 
   it('does not default FieldNames for renderings without a Parameters Template', async () => {
     // Non-SXA renderings (e.g. Tealium) have no Parameters Template set and
-    // therefore no FieldNames field — Edge does NOT emit the default for them.
+    // therefore no FieldNames field - Edge does NOT emit the default for them.
     const tealiumRendering = makeItem({
       id: 'rend4444-rend-rend-rend-rendrendrend',
       path: '/sitecore/layout/Renderings/Project/site/Tealium',
@@ -366,7 +366,7 @@ describe('resolveLayout', () => {
     });
     // Provide a minimal own entry so there's a page-level rendering in the
     // merged tree alongside the override partial's contribution. (Pre-0.4.0.15
-    // this also worked around the P3a own-layout gate — that gate has since
+    // this also worked around the P3a own-layout gate - that gate has since
     // been removed; the own entry is still useful here for the merge check.)
     const homeWithOverride = makeItem({
       id: 'home2222-home-home-home-homehomehome',
@@ -635,7 +635,7 @@ describe('resolveLayout', () => {
         emptyPage, pageTemplate, pageSection, titleField, contentField, heroBannerRendering,
       ]);
       // Fixture has a __Final Renderings field but the device block is empty
-      // — zero rendering entries. Default policy returns null; flip the flag
+      // - zero rendering entries. Default policy returns null; flip the flag
       // so the test can assert route-field emission on an empty layout.
       const result = await resolveLayout('/empty-page', engine, { siteRootPath, mediaBaseUrl: '', allowScaffoldForEmptyLayout: true });
       expect(result).not.toBeNull();
@@ -682,7 +682,7 @@ describe('resolveLayout', () => {
     });
   });
 
-  describe('resolveLayout — P3a three-state null-route', () => {
+  describe('resolveLayout - P3a three-state null-route', () => {
     // Shared layout item: JSS Layout with three empty slots.
     function layoutItemFixture() {
       return [

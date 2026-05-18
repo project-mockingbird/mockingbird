@@ -15,7 +15,7 @@ function item(id: string, parent: string, template: string, name: string, sortOr
   });
 }
 
-describe('lookupRcrQuery — normalization', () => {
+describe('lookupRcrQuery - normalization', () => {
   it('returns undefined for an unregistered query', () => {
     expect(lookupRcrQuery("./bogus[@@x='y']")).toBeUndefined();
   });
@@ -90,7 +90,7 @@ describe('childrenOfSiblingOfTemplate', () => {
     const otherSibling = item('othe0000-0000-0000-0000-000000000002', PARENT_ID, TMPL_OTHER, 'parent/other', 200);
     const leaf1 = item('leaf0001-0000-0000-0000-000000000001', container.id, TMPL_LEAF, 'parent/container/leaf1', 300);
     const leaf2 = item('leaf0002-0000-0000-0000-000000000002', container.id, TMPL_LEAF, 'parent/container/leaf2', 100);
-    // child of the non-matching sibling — must NOT appear in results
+    // child of the non-matching sibling - must NOT appear in results
     const strayLeaf = item('stra0000-0000-0000-0000-000000000001', otherSibling.id, TMPL_LEAF, 'parent/other/stray', 50);
     return {
       engine: buildEngine([parent, container, otherSibling, leaf1, leaf2, strayLeaf]),
@@ -208,7 +208,7 @@ describe('RCR_QUERIES - registered entries', () => {
   });
 });
 
-describe('RCR comparators — name tiebreak on equal __Sortorder (0.4.0.11)', () => {
+describe('RCR comparators - name tiebreak on equal __Sortorder (0.4.0.11)', () => {
   // All three RCR factories previously sorted by `__Sortorder` only.
   // When all siblings share the default sort order, the emission order
   // came from NTFS-enumerated insertion (reverse-alphabetical on the

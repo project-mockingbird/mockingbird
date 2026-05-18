@@ -77,7 +77,7 @@ describe('validateReferential', () => {
 });
 
 describe('validateReferential with registry', () => {
-  it('resolves base template from registry — no error', async () => {
+  it('resolves base template from registry - no error', async () => {
     const registry = new Registry();
     await registry.loadFromJson(REGISTRY_JSON);
 

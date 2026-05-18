@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { resolveItemChildren } from '../../../src/engine/item-query/index.js';
 import { makeItem, buildEngine } from '../layout/_helpers.js';
 
-describe('resolveItemChildren — Sitecore-native ordering (0.4.0.11)', () => {
+describe('resolveItemChildren - Sitecore-native ordering (0.4.0.11)', () => {
   // Shared comparator via `compareSitecoreSiblings`: `__Sortorder`
   // ascending, case-insensitive name tiebreak. Before 0.4.0.11 this site
   // used a local decorate-sort-undecorate pattern with the same semantics;

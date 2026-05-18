@@ -116,10 +116,10 @@ describe('synthesizeItemFromRegistry (0.4.0.11)', () => {
   });
 });
 
-describe('resolveFieldValue — cascade-only token expansion (0.4.0.11 item 4)', () => {
+describe('resolveFieldValue - cascade-only token expansion (0.4.0.11 item 4)', () => {
   // resolveFieldValue's new signature takes `item` (not templateId) so
   // expandItemTokens has item context. Token expansion runs ONLY on the
-  // cascaded branch — stored (authored) values flow through unchanged,
+  // cascaded branch - stored (authored) values flow through unchanged,
   // preserving literal `$name` / `$date` / etc. set by editors.
 
   const DISPLAY_NAME_FIELD_ID = FIELD_IDS.displayName;
@@ -128,7 +128,7 @@ describe('resolveFieldValue — cascade-only token expansion (0.4.0.11 item 4)',
 
   it('expands $name when the value comes from SV cascade', () => {
     // Fixture: template with a NavigationTitle field whose SV default is
-    // "$name". Item has no stored NavigationTitle — cascade supplies "$name"
+    // "$name". Item has no stored NavigationTitle - cascade supplies "$name"
     // → expander substitutes with item's display name.
     const templateId = 'cccccccc-0000-0000-0000-000000000001';
     const svItemId = 'cccccccc-0000-0000-0000-000000000002';
@@ -190,11 +190,11 @@ describe('readFieldWithSvFallback (0.4.0.28)', () => {
   // Thin adapter for "value-with-cascade" field reads off a specific item:
   //   own shared → own versioned → template SV (shared then versioned) → base SV chain.
   // Used by sibling-ordering (__Sortorder), token expansion ($name display name),
-  // and param-item display-value resolution — all places where Sitecore's
+  // and param-item display-value resolution - all places where Sitecore's
   // standard `item.Fields[...].Value` cascade semantics apply.
   //
   // NOT a replacement for `resolveFieldValue` (which also applies SCT overlay
-  // and token expansion on cascaded values — those are layout-pipeline concerns).
+  // and token expansion on cascaded values - those are layout-pipeline concerns).
 
   const FIELD_ID = 'bbbbbbbb-0000-0000-0000-00000000000f';
   const TEMPLATE_A = 'aaaaaaaa-0000-0000-0000-000000000010';
@@ -335,11 +335,11 @@ describe('readSharedFieldByHint', () => {
     expect(readSharedFieldByHint(engine, 'aa000001-0000-0000-0000-000000000004', 'usecontextitem')).toBe('1');
   });
 
-  // Registry-only path — 0.4.0.14 fix: falls through to template-walk resolution.
+  // Registry-only path - 0.4.0.14 fix: falls through to template-walk resolution.
 
   it('registry-only item: returns value via template-walk resolution', () => {
     // RCR settings items baked into the registry by Task 13 (SPE extraction).
-    // The registry carries sharedFields keyed by field ID — not hint.
+    // The registry carries sharedFields keyed by field ID - not hint.
     // readSharedFieldByHint must resolve the hint to the field ID via the
     // template's field-definition children.
     const rcrTemplateId = 'dd000001-0000-0000-0000-000000000001';
@@ -444,12 +444,12 @@ describe('readSharedFieldByHint', () => {
       registry: [rcrTemplate, rcrSection, useCtxFieldDef, rcrSettingsItem],
     });
 
-    // 'ItemSelectorQuery' is not defined on this template — must return undefined.
+    // 'ItemSelectorQuery' is not defined on this template - must return undefined.
     expect(readSharedFieldByHint(engine, rcrItemId, 'ItemSelectorQuery')).toBeUndefined();
   });
 });
 
-describe('getLatestVersion — Sitecore GetValidVersion port (0.4.0.31)', () => {
+describe('getLatestVersion - Sitecore GetValidVersion port (0.4.0.31)', () => {
   // Integration test for the core Finding-E port: when a page's versions
   // carry __Valid from values and a deployment has set a per-item publish-
   // date in the overrides file, getLatestVersion returns the highest version

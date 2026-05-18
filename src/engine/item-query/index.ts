@@ -21,7 +21,7 @@ export interface ItemFieldValue {
  * identifier Sitecore Experience Edge uses as a GraphQL `__typename`. Spaces
  * and non-alphanumeric characters become word boundaries; each word is then
  * upper-cased and concatenated. Empty/whitespace input returns `ContentItem`
- * — the catch-all fallback type name we always declare.
+ * - the catch-all fallback type name we always declare.
  */
 export function pascalizeTemplateName(name: string): string {
   if (!name || !name.trim()) return 'ContentItem';
@@ -34,7 +34,7 @@ export function pascalizeTemplateName(name: string): string {
 
 /**
  * Look up an item by its Sitecore path. Thin wrapper around
- * `Engine.getItemByPath` that returns the plain `ScsItem` — resolver code
+ * `Engine.getItemByPath` that returns the plain `ScsItem` - resolver code
  * doesn't care about the tree node wrapper.
  */
 export function resolveItemByPath(engine: Engine, path: string): ScsItem | null {
@@ -59,7 +59,7 @@ export function resolveItemByPath(engine: Engine, path: string): ScsItem | null 
  * fields, then the latest-version field list for the requested language
  * (defaulting to `en`).
  *
- * Returns an `ItemFieldValue` triple — `value` is always the raw string,
+ * Returns an `ItemFieldValue` triple - `value` is always the raw string,
  * `jsonValue` tries to `JSON.parse` that string (falls back to the string),
  * `boolValue` is `true` when the string is `"1"` and `false` when `"0"`.
  * Callers select whichever form matches the GraphQL selection set.
@@ -129,7 +129,7 @@ export function resolveItemChildren(
   // Sort by Sitecore's native sibling ordering via the shared comparator
   // (0.4.0.11: `compareSitecoreSiblings` replaces the local decorator,
   // and Array.sort stability in Node ≥12 preserves insertion order on
-  // identical sort keys — dropping the explicit `a.i - b.i` final
+  // identical sort keys - dropping the explicit `a.i - b.i` final
   // tiebreak is safe).
   return filtered.sort((a, b) => compareSitecoreSiblings(engine, a.item, b.item));
 }
@@ -184,7 +184,7 @@ export interface SchemaCatalog {
  * Walk the engine tree and return the set of pascalized template names + the
  * set of human-readable field hints present across every item. Merged with
  * the hardcoded starter sets so the returned catalog is usable even for an
- * empty tree — mockingbird still accepts and validates Content SDK queries
+ * empty tree - mockingbird still accepts and validates Content SDK queries
  * during cold startup before indexing completes.
  *
  * This is a static snapshot: callers that need to pick up template/field

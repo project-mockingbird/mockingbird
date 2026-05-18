@@ -9,7 +9,7 @@ export function formatGuidBraced(guid: string): string {
 }
 
 /**
- * Format a GUID for Experience Edge GraphQL `id` scalars — bare 32-hex
+ * Format a GUID for Experience Edge GraphQL `id` scalars - bare 32-hex
  * uppercase, no dashes, no braces (e.g. `88DA64DE28B64620B1085D8C61564F6F`).
  * Accepts any of Sitecore's internal forms (braced / dashed / lowercase).
  */
@@ -28,7 +28,7 @@ export function normalizeGuid(raw: string): string {
 
 /**
  * Convert a GUID in any of the accepted forms (braced, dashed 36-char, or
- * undashed 32-hex — with or without surrounding braces) to canonical
+ * undashed 32-hex - with or without surrounding braces) to canonical
  * lowercase-dashed form. Returns undefined if the input isn't a valid GUID.
  */
 export function toCanonicalGuid(raw: string | undefined): string | undefined {
@@ -41,7 +41,7 @@ export function toCanonicalGuid(raw: string | undefined): string | undefined {
 /**
  * Extract every brace-wrapped GUID from a string (e.g. SXA multilist, pipe-
  * delimited, or concatenated brace lists). Strips braces, lowercases, but
- * does NOT validate hex — callers resolve the resulting IDs against the
+ * does NOT validate hex - callers resolve the resulting IDs against the
  * engine tree, which is the real existence check.
  */
 export function parseGuidList(value: string | undefined): string[] {
