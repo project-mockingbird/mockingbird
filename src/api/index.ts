@@ -1,15 +1,16 @@
 import { resolve, dirname } from 'path';
 import { createServer } from './server.js';
+import { DEFAULT_WORKSPACE_ROOT, getWorkspaceRoot } from './state/workspace-path.js';
 
 process.env.PORT ??= process.env.MOCKINGBIRD_PORT;
 process.env.HOST ??= process.env.MOCKINGBIRD_HOST;
 process.env.REGISTRY_PATH ??= './data/registry.json.gz';
 // Container-internal workspace mount path. Replaces MOCKINGBIRD_WORKSPACE_ROOT
 // (kept as a one-cycle deprecation alias). All routes read MOCKINGBIRD_WORKSPACE.
-process.env.MOCKINGBIRD_WORKSPACE ??= process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+process.env.MOCKINGBIRD_WORKSPACE ??= process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? DEFAULT_WORKSPACE_ROOT;
 // Default to .mockingbird/cache/ INSIDE the workspace mount so the engine cache
 // rides in the workspace instead of a separate docker volume.
-const workspaceForCache = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+const workspaceForCache = getWorkspaceRoot();
 process.env.MOCKINGBIRD_CACHE_PATH ??= resolve(workspaceForCache, '.mockingbird', 'cache');
 process.env.INDEX_CACHE_PATH ??= resolve(process.env.MOCKINGBIRD_CACHE_PATH, 'index.json.gz');
 

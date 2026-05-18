@@ -9,7 +9,7 @@ import { multistream } from 'pino';
 import { Engine } from '../engine/index.js';
 import { ensureWorkspaceLayout } from '../engine/workspace-bootstrap.js';
 import { ensureConfigExists, readConfig, resolveConfigPath } from './state/config-store.js';
-import { resolveWorkspacePath } from './state/workspace-path.js';
+import { resolveWorkspacePath, getWorkspaceRoot } from './state/workspace-path.js';
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
 import { registerReadinessGate } from './hooks/readiness-gate.js';
@@ -64,7 +64,7 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   // Ensure workspace cache directory and .gitignore are set up. This is
   // idempotent and runs once at server startup. Non-fatal if it fails
   // (e.g., read-only workspace), so we log the error and continue.
-  const workspaceRoot = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
+  const workspaceRoot = resolve(getWorkspaceRoot());
   await ensureWorkspaceLayout(workspaceRoot).catch((err) => {
     console.warn('[workspace] bootstrap failed (non-fatal):', err);
   });
@@ -199,13 +199,10 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
       if (hash) {
         const project = config.projects[hash];
         if (project) {
-          const wsRoot = resolve(
-            process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces',
-          );
           const layers = [];
           let bad = false;
           for (const l of project.layers) {
-            const abs = resolveWorkspacePath(wsRoot, l.sitecoreJsonPath);
+            const abs = resolveWorkspacePath(workspaceRoot, l.sitecoreJsonPath);
             if (abs === null) { bad = true; break; }
             layers.push({ sitecoreJsonPath: abs, name: l.name, color: l.color });
           }
@@ -215,14 +212,14 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
             try {
               await engine.openWorkspace(layers, { projectName: project.name, lazy: true });
               app.extendMockingbirdSchema?.();
-              app.log.info(`[boot-replay] restored project "${project.name}" (${hash.slice(0, 8)})`);
+              app.log.info(`[boot-replay] restored project "${project.name}" (${hash})`);
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               app.log.warn(`[boot-replay] failed to restore "${project.name}": ${message}`);
             }
           }
         } else {
-          app.log.warn(`[boot-replay] stale lastOpenedHash "${hash.slice(0, 8)}" - no matching project; continuing in no-project mode`);
+          app.log.warn(`[boot-replay] stale lastOpenedHash "${hash}" - no matching project; continuing in no-project mode`);
         }
       }
     } catch (err) {

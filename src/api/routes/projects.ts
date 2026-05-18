@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { resolve } from 'path';
-import { resolveWorkspacePath } from '../state/workspace-path.js';
+import { resolveWorkspacePath, getWorkspaceRoot } from '../state/workspace-path.js';
 import type { Engine } from '../../engine/index.js';
 import { computeProjectHash } from '../project-hash.js';
 import { readConfig, writeConfig, resolveConfigPath } from '../state/config-store.js';
+import { DEFAULT_LAYER_COLOR } from '../constants.js';
 
 /**
  * Merges user layers with layer stats and appends the synthetic ootb row when
@@ -27,9 +28,7 @@ export function layersWithEffectiveCount(
 }
 
 export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): void {
-  const workspaceRoot = resolve(
-    process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces',
-  );
+  const workspaceRoot = resolve(getWorkspaceRoot());
 
   /**
    * Opens a workspace by activating the given layers. Each layer's
@@ -104,7 +103,7 @@ export function registerProjectsRoutes(app: FastifyInstance, engine: Engine): vo
       const savedLayers = layers.map((l) => ({
         sitecoreJsonPath: l.sitecoreJsonPath as string,
         name: l.name as string,
-        color: (l.color ?? '#22c55e') as string,
+        color: l.color ?? DEFAULT_LAYER_COLOR,
       }));
       config.projects[hash] = {
         hash,

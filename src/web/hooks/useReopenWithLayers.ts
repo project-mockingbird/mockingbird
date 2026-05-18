@@ -19,7 +19,9 @@ export interface ReopenWithLayersResult {
  * Replaces the open project's layer set via the existing /api/projects/open
  * endpoint, then rekeys the projectsStore so the project identity follows
  * the new layer-path hash. Use detectCollision() FIRST to gate against
- * accidentally clobbering another project with the same layer set.
+ * accidentally clobbering another project with the same layer set. On success,
+ * invalidates the status, tree, children, and config queries so the UI reflects
+ * the updated engine and persisted state without waiting for the next poll.
  */
 export function useReopenWithLayers() {
   const qc = useQueryClient();

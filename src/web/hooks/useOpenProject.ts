@@ -17,8 +17,8 @@ export interface OpenProjectResponse {
  * Activates a project with the given layer stack. On success, resets the
  * workspace store (tabs, selection, expanded nodes) to fresh-launch state so
  * stale selections from a previous project do not carry over, then invalidates
- * the status, tree, and children queries so the UI reflects the new engine
- * state without waiting for the next polling tick.
+ * the status, tree, children, and config queries so the UI reflects the new
+ * engine state without waiting for the next polling tick.
  */
 export function useOpenProject() {
   const qc = useQueryClient();

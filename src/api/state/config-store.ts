@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, rename, access } from 'fs/promises';
 import { dirname, resolve, join } from 'path';
+import { getWorkspaceRoot } from './workspace-path.js';
 
 export interface SavedProjectLayer {
   sitecoreJsonPath: string;
@@ -88,6 +89,5 @@ export async function ensureConfigExists(filePath: string): Promise<void> {
  */
 export function resolveConfigPath(): string {
   if (process.env.MOCKINGBIRD_CONFIG_PATH) return resolve(process.env.MOCKINGBIRD_CONFIG_PATH);
-  const workspace = process.env.MOCKINGBIRD_WORKSPACE ?? process.env.MOCKINGBIRD_WORKSPACE_ROOT ?? '/workspaces';
-  return join(resolve(workspace), 'config.mockingbird');
+  return join(resolve(getWorkspaceRoot()), 'config.mockingbird');
 }
