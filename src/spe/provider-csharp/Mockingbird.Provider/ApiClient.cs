@@ -1,5 +1,6 @@
 // src/spe/provider-csharp/Mockingbird.Provider/ApiClient.cs
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Text;
@@ -129,6 +130,38 @@ public static class ApiClient
             throw new HttpRequestException($"{(int)resp.StatusCode} {resp.StatusCode}: {responseText}");
         }
         return responseText;
+    }
+
+    /// <summary>
+    /// Commit buffered fields to disk via PUT /api/items/:id. Same body
+    /// shape Set-ItemField -Apply uses. Throws on non-2xx.
+    /// </summary>
+    public static string UpdateItemFields(string id, IReadOnlyDictionary<string, string> fields, string language, int version)
+    {
+        var body = new
+        {
+            fields = fields,
+            language = language,
+            version = version,
+        };
+        return PutJson($"/api/items/{id}", body);
+    }
+
+    /// <summary>
+    /// Compute a dry-run mutation plan via POST /api/items/preview-update.
+    /// Same body shape Set-ItemField (no -Apply) uses. Returns the raw
+    /// plan JSON for the caller to wrap into a host-side diff frame.
+    /// </summary>
+    public static string PreviewUpdate(string id, IReadOnlyDictionary<string, string> fields, string language, int version)
+    {
+        var body = new
+        {
+            id = id,
+            fields = fields,
+            language = language,
+            version = version,
+        };
+        return PostJson("/api/items/preview-update", body);
     }
 
     /// <summary>master:/sitecore/X -> /sitecore/X</summary>

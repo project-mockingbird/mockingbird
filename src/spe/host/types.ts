@@ -12,7 +12,15 @@ export type Frame =
   | { type: 'runComplete'; runId: RunId; exitCode: number; durationMs: number }
   | { type: 'runAborted'; runId: RunId }
   | { type: 'sessionExpiring'; expiresAt: string }
-  | { type: 'sessionClosed'; reason: 'ttl' | 'explicit' | 'crash' };
+  | { type: 'sessionClosed'; reason: 'ttl' | 'explicit' | 'crash' }
+  /**
+   * IsePage UI directive: wipe the terminal output buffer + any inline
+   * diff/applied blocks rendered above it. Emitted by the Mockingbird
+   * `Clear-Host` override since the real cmdlet calls
+   * `[Console]::SetCursorPosition` which fails with "The handle is
+   * invalid" against the SPE host's redirected stdio.
+   */
+  | { type: 'clear' };
 
 export type FrameListener = (frame: Frame) => void;
 
