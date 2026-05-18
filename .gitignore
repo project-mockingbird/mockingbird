@@ -44,6 +44,12 @@ serialization/
 src/spe/provider-csharp/**/bin/
 src/spe/provider-csharp/**/obj/
 .mockingbird/
+
+# Operational scripts (launch-prep, ops, ad-hoc). Existing tracked scripts in
+# scripts/ (dedupe-react.mjs, lint-graphql-context.mjs, etc.) stay tracked;
+# this only prevents NEW one-off helper scripts from polluting git.
+/scripts/
+
 # config.mockingbird at the repo root is a dev/smoke artifact when this repo is
 # used as its own workspace mount. In normal user projects the file is meant
 # to be committed (team-shared project registry), but for mockingbird-the-tool

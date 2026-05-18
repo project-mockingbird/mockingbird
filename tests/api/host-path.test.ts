@@ -192,14 +192,14 @@ describe('translateContainerToHostPath', () => {
     const mounts: MountEntry[] = [
       {
         mountPoint: '/app/data/serialization',
-        source: '/Users/jason/projects/foo',
+        source: '/Users/dev/projects/foo',
       },
     ];
     const out = translateContainerToHostPath(
       '/app/data/serialization/templates/baz.yml',
       mounts,
     );
-    expect(out).toBe('/Users/jason/projects/foo/templates/baz.yml');
+    expect(out).toBe('/Users/dev/projects/foo/templates/baz.yml');
   });
 
   it('longest-prefix wins when multiple mounts overlap', () => {

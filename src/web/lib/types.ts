@@ -149,7 +149,7 @@ export interface TemplateSectionSchema {
    * True for sections from null-base "structural fragment" templates
    * (e.g. SXA's _Name/_Description/_Site Template). CE hides these under
    * "Show Standard Fields = OFF" alongside isStandard sections. Optional
-   * on the wire for backwards compatibility with pre-1.1.0.1 API responses.
+   * on the wire for backwards compatibility with older API responses.
    */
   isStructuralFragment?: boolean;
   sourceTemplateId: string;
