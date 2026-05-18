@@ -173,8 +173,13 @@ describe('<ProjectSidebar> collision dialog', () => {
     await user.click(screen.getByRole('button', { name: /switch to existing/i }));
 
     // useOpenProject fires POST /api/projects/open with the colliding project's layers.
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    // (useOpenProject.onSuccess also invalidates the config query, which may trigger
+    // a background refetch of /api/config - so we check at least one call, not exactly one.)
+    const openCall = fetchMock.mock.calls.find(
+      ([url]) => (url as string) === '/api/projects/open',
+    ) as [string, RequestInit] | undefined;
+    expect(openCall).toBeDefined();
+    const [url, init] = openCall!;
     expect(url).toBe('/api/projects/open');
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@/lib/icon';
 import { mdiFolderOpen } from '@mdi/js';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,6 @@ import { useOpenProject } from '@/hooks/useOpenProject';
 import { useProjectsStore, type SavedProject } from '@/state/projectsStore';
 import { useSettings } from '@/settings/SettingsProvider';
 import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
-import { CONFIG_QUERY_KEY } from '@/hooks/useConfigQuery';
 
 interface NoProjectStateProps {
   onOpenProject?: () => void;
@@ -26,7 +24,6 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const { settings } = useSettings();
-  const qc = useQueryClient();
   const lastOpenedHash = useCurrentProjectHash();
   const autoRestore = settings['session.autoRestore'];
 
@@ -54,13 +51,12 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
       {
         onSuccess: () => {
           touchLastOpened(project.hash);
-          qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
         },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not restore last project.'),
       },
     );
-  }, [hydrated, autoRestore, lastOpenedHash, openProject, qc, touchLastOpened]);
+  }, [hydrated, autoRestore, lastOpenedHash, openProject, touchLastOpened]);
 
   const handleOpenSaved = (project: SavedProject) => {
     setRestoreError(null);
@@ -70,7 +66,6 @@ export function NoProjectState({ onOpenProject }: NoProjectStateProps) {
       {
         onSuccess: () => {
           touchLastOpened(project.hash);
-          qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
         },
         onError: (err) =>
           setRestoreError(err instanceof Error ? err.message : 'Could not open project.'),

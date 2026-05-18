@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { workspaceStore } from '@/state/workspaceStore';
+import { CONFIG_QUERY_KEY } from '@/hooks/useConfigQuery';
 
 export interface OpenProjectLayer {
   sitecoreJsonPath: string;
@@ -42,6 +43,7 @@ export function useOpenProject() {
       qc.invalidateQueries({ queryKey: ['status'] });
       qc.invalidateQueries({ queryKey: ['tree'] });
       qc.invalidateQueries({ queryKey: ['children'] });
+      qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     },
   });
 }

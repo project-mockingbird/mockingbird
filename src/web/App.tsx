@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
 import { Header } from '@/components/layout/Header';
@@ -24,7 +24,6 @@ import { FirstRunChooser } from '@/components/open-project/FirstRunChooser';
 import { useCurrentProjectHash } from '@/hooks/useCurrentProjectHash';
 import { useCloseProject } from '@/hooks/useCloseProject';
 import { useOpenProject } from '@/hooks/useOpenProject';
-import { CONFIG_QUERY_KEY } from '@/hooks/useConfigQuery';
 import { useProjectsStore } from '@/state/projectsStore';
 import { ProjectsStoreHydrator } from '@/state/projectsStoreHydrator';
 import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
@@ -78,7 +77,6 @@ function ContentTreePage() {
   const { data: status } = useEngineStatus();
   const [chooserOpen, setChooserOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const qc = useQueryClient();
   const close = useCloseProject();
   const openProject = useOpenProject();
   const currentProjectHash = useCurrentProjectHash();
@@ -99,7 +97,6 @@ function ContentTreePage() {
             {
               onSuccess: () => {
                 touchLastOpened(project.hash);
-                qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
               },
             },
           );
