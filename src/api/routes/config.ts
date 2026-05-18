@@ -31,7 +31,19 @@ export function registerConfigRoutes(app: FastifyInstance): void {
       reply.code(400).send({ error: 'invalid config body' });
       return;
     }
-    await writeConfig(resolveConfigPath(), req.body);
+    const configPath = resolveConfigPath();
+    const existing = await readConfig(configPath);
+    const merged: MockingbirdConfig = {
+      version: 1,
+      projects: req.body.projects,
+      // Preserve existing lastOpenedHash when the body omits it. If the body
+      // explicitly includes it (including via the migration path), the new
+      // value wins.
+      lastOpenedHash: req.body.lastOpenedHash !== undefined
+        ? req.body.lastOpenedHash
+        : existing.lastOpenedHash,
+    };
+    await writeConfig(configPath, merged);
     reply.send({ ok: true });
   });
 }
