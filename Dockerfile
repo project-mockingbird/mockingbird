@@ -56,12 +56,13 @@ RUN apk add --no-cache \
       userspace-rcu \
       zlib \
   && wget -O /tmp/pwsh.tar.gz \
-      "https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/powershell-7.4.6-linux-musl-x64.tar.gz" \
+      "https://github.com/PowerShell/PowerShell/releases/download/v7.4.15/powershell-7.4.15-linux-musl-x64.tar.gz" \
   && mkdir -p /opt/microsoft/powershell/7 \
   && tar zxf /tmp/pwsh.tar.gz -C /opt/microsoft/powershell/7 \
   && chmod +x /opt/microsoft/powershell/7/pwsh \
   && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
-  && rm /tmp/pwsh.tar.gz
+  && rm /tmp/pwsh.tar.gz \
+  && npm install -g npm@latest
 
 WORKDIR /app
 COPY --from=builder /app/dist dist/
