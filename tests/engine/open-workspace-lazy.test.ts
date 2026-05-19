@@ -10,7 +10,7 @@ let projectPath: string;
 beforeAll(async () => {
   workspaceRoot = resolve(tmpdir(), `lazy-open-test-${Date.now()}`);
   projectPath = join(workspaceRoot, 'project-lazy');
-  await mkdir(join(projectPath, 'items'), { recursive: true });
+  await mkdir(join(projectPath, 'items', 'foo'), { recursive: true });
   await writeFile(
     join(projectPath, 'sitecore.json'),
     JSON.stringify({
@@ -29,7 +29,7 @@ beforeAll(async () => {
   // An empty fixture lets readiness flip to 'ready' synchronously, making
   // the lazy vs. non-lazy paths indistinguishable in assertions.
   await writeFile(
-    join(projectPath, 'items', 'sample.yml'),
+    join(projectPath, 'items', 'foo', 'sample.yml'),
     `---
 ID: "ce0bf41d-1111-2222-3333-aaaaaaaaaaaa"
 Parent: "00000000-0000-0000-0000-000000000000"
@@ -71,15 +71,19 @@ describe('Engine.openWorkspace lazy mode', () => {
     const earlyState = engine.readiness.state;
     expect(['initializing', 'ready']).toContain(earlyState);
 
-    // The lazy path must NOT populate itemProvenance - that is the key
-    // observable contract. If a future change accidentally re-introduces an
-    // await readiness.ready() in the lazy path it would also fill provenance,
-    // causing this assertion to fail.
-    const beforeWait = engine['_itemProvenance'].size;
     await engine.readiness.ready();
-    expect(engine['_itemProvenance'].size).toBe(beforeWait); // lazy keeps it empty
-
     expect(engine.readiness.state).toBe('ready');
+
+    // After readiness completes, provenance must be populated as a side effect
+    // even though openWorkspace returned early. Boot-replay relies on this:
+    // the API call returns fast, but layer attribution (and the UI's
+    // effectiveCount / provenance bars) need to fill in once indexing finishes.
+    // A microtask tick lets the fire-and-forget fill promise settle.
+    await new Promise((r) => setImmediate(r));
+    expect(engine['_itemProvenance'].size).toBeGreaterThan(0);
+    const stats = engine.getLayerStats();
+    const lazyLayer = stats.find((s) => s.name === 'lazy');
+    expect(lazyLayer?.effectiveCount).toBeGreaterThan(0);
 
     await engine.close();
   });
