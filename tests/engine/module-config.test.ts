@@ -11,7 +11,6 @@ describe('loadProjectConfig', () => {
   it('parses sitecore.json', async () => {
     const config = await loadProjectConfig(resolve(FIXTURES, 'sitecore.json'));
     expect(config.modules).toEqual(['authoring/items/**/*.module.json']);
-    expect(config.serialization?.defaultModuleRelativeSerializationPath).toBe('items');
   });
 });
 
@@ -30,5 +29,21 @@ describe('discoverModules', () => {
     const modules = await discoverModules(FIXTURES);
     expect(modules).toHaveLength(1);
     expect(modules[0].namespace).toBe('Project.MyProject');
+  });
+
+  it('propagates sitecore.json defaultModuleRelativeSerializationPath into modules that do not set their own items.path', async () => {
+    const modules = await discoverModules(
+      resolve(__dirname, '../fixtures/valid-default-serialization-path'),
+    );
+    expect(modules).toHaveLength(1);
+    expect(modules[0].items.path).toBe('items');
+  });
+
+  it('does not override an explicit module items.path with the project default', async () => {
+    const modules = await discoverModules(
+      resolve(__dirname, '../fixtures/valid-default-serialization-path-with-override'),
+    );
+    expect(modules).toHaveLength(1);
+    expect(modules[0].items.path).toBe('serialization');
   });
 });

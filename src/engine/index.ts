@@ -1099,9 +1099,8 @@ export class Engine {
       this._initStarted = false;
       this.readiness.reset();
       await this.startInit();
-      if (!options?.lazy) {
+      const fillProvenance = async () => {
         await this.readiness.ready();
-        // Eager provenance fill: every tree node attributes to the single layer.
         let nodeCount = 0;
         for (const node of this.tree.getAllNodes()) {
           this._itemProvenance.set(node.item.id, {
@@ -1111,6 +1110,11 @@ export class Engine {
           nodeCount++;
         }
         this._layerStats.set(primary.name, nodeCount);
+      };
+      if (options?.lazy) {
+        void fillProvenance();
+      } else {
+        await fillProvenance();
       }
       return;
     }
