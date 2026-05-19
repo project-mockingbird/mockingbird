@@ -32,7 +32,7 @@ A few worth calling out:
 
 - **GraphQL Layout Service.** Experience Edge-shaped endpoint at `/sitecore/api/graph/edge` matching the headless layout query, so existing rendering hosts and Sitecore tooling can target Mockingbird with just a host swap. Browseable GraphiQL UI at `/graphiql` for ad-hoc query authoring.
 - **Multi-tab content tree.** A familiar tree view at `/tree` with a horizontal 2-pane split: per-pane tab strip, drag-to-resize handle, "Split right" / "Move to other pane" on tab right-click, "Open in new tab" from the tree, dirty-state confirm when closing a tab with unsaved field edits, and tabs persisted across reloads via localStorage.
-- **Runtime layer management.** Each project is a stack of layers - each layer a `sitecore.json` reference with a name, color, and visibility toggle. Add, remove, or replace layers from the project sidebar without restarting the container. The engine merges layers via SCS `allowedPushOperations` strength (CreateOnly < CreateAndUpdate < CreateUpdateAndDelete) on every reopen. Project state lives in browser localStorage and auto-restores on page load.
+- **Runtime layer management.** Each project is a stack of layers - each layer a `sitecore.json` reference with a name, color, and visibility toggle. Add, remove, or replace layers from the project sidebar without restarting the container. The engine merges layers via SCS `allowedPushOperations` strength (CreateOnly < CreateAndUpdate < CreateUpdateAndDelete) on every reopen. Projects sync to a team-shared `config.mockingbird` at the workspace root; the per-user auto-restore-on-load toggle stays in browser localStorage.
 - **Field editors for the standard Sitecore field types.** Single-line / multi-line text, rich text, lookup / multilist / treelist (with GUID resolution to readable names), name value list, name lookup value list, password, number, integer, datetime (with a calendar picker), checkbox, image (with the Media Picker dialog), rendering / layout, file. The shapes match what `dotnet sitecore` would write back.
 - **SXA Headless scaffolding.** Right-click `/sitecore/content` -> Insert -> Headless Site Collection to scaffold a tenant with the standard cross-cutting folder structure under each Project root (Templates, Media, Placeholder Settings, Renderings, Settings, Branches). Right-click a tenant -> Insert -> Headless Site to scaffold a site with JSSSettings, Site Definition, and StartItem auto-wired. The mechanism is a faithful TypeScript port of Sitecore's SPE scaffolding scripts (Add-JSSTenant + New-JSSSite + the Invoke-* action pipeline); curated definition items ship in the registry so the dialog is functional on a fresh install, and authors can extend the catalogue by adding Definition Items to their content tree.
 - **Image Media Picker dialog.** Pick an image from the site's media library (site-scoped via `query:$siteMedia`) with a filterable tree picker, thumbnail preview, alt text, dimensions (Keep Aspect Ratio with auto-recompute), and spacing fields. Round-trips to the same XML attribute set Sitecore persists.
@@ -43,7 +43,7 @@ A few worth calling out:
 - **Byte-faithful SCS round-trip.** Custom Rainbow-grammar parser + writer so edits through the Web UI, CLI, or PowerShell produce the same bytes `dotnet sitecore` would have written (leading whitespace preserved, Rainbow quoting rules, UTF-8 BOM + CRLF by default). The parser is a bug-compatible port of `Sitecore.DevEx.Serialization.Client.YamlReader`; the writer matches `Rainbow.Storage.Yaml.YamlWriter.WriteMapInternal` byte-for-byte.
 - **SXA layout resolution + Page Designs.** Page Design composition (partial designs + page-level renderings, merged in that order), template mapping via the `TemplatesMapping` field on `<siteParent>/Presentation/Page Designs`, per-item `Page Design` field overrides, `local:` datasources scoped to the owning partial design, dynamic-placeholder normalization, and declared-keys-aware orphan-rendering pruning.
 - **Async indexing.** The API answers `503 {status:"indexing",progress}` while parsing; `/api/status` reports `scanned/total` and is always ungated. Container startup is under 20s even on a large content tree.
-- **Persistent index cache.** Gzipped parsed tree at `/app/data/cache/index.json.gz`; warm-cache restart in ~60s on unchanged content. A post-ready signature verifier deletes the cache and rebuilds on the next boot if it detects drift from disk.
+- **Persistent index cache.** Gzipped parsed tree per layer at `<workspace>/.mockingbird/cache/index-<sha1>.json.gz`; warm-cache restart in ~60s on unchanged content. A post-ready signature verifier deletes the cache and rebuilds on the next boot if it detects drift from disk.
 - **OOTB registry baked in.** Sitecore's standard templates, renderings, and settings (tens of thousands of items, ~1 MB compressed) ship in the image so your content items can reference them without an external CM.
 
 ## Quick start
@@ -52,7 +52,7 @@ A few worth calling out:
 docker compose up -d
 ```
 
-Mockingbird boots with the OOTB Sitecore registry loaded but no serialized items. Open `http://localhost:3333` and the first-run wizard walks the workspace mount to discover `sitecore.json` files for project selection.
+Mockingbird boots with the OOTB Sitecore registry loaded but no serialized items. Open `http://localhost:3333` and the first-run wizard lets you browse the workspace mount, pick a `sitecore.json` to use as a layer, and stack additional layers into a named project.
 
 By default the compose mounts the directory you ran it from (`./`) at `/workspaces` inside the container. To point at a broader directory so the wizard can browse multiple repos, set `MOCKINGBIRD_WORKSPACE` in `.env`:
 
@@ -69,12 +69,9 @@ Mockingbird stores the saved-projects list in a workspace-local file:
 
     ./config.mockingbird
 
-This file lives at the workspace root, alongside `sitecore.json`. **Commit it.**
-Anyone who clones the repo and runs mockingbird gets the team's saved projects
-in the "Open existing project" wizard for free - no per-developer setup needed.
+Each saved project is a named, ordered stack of layers - each layer is a reference to one `sitecore.json` in the workspace, with a display name, color, and visibility toggle. The file lives at the workspace root. **Commit it.** Anyone who clones the repo and runs mockingbird gets the team's saved projects in the "Open existing project" wizard for free - no per-developer setup needed.
 
-The file is plain JSON. Mockingbird reads it on startup via `GET /api/config`
-and writes it back via `PUT /api/config` whenever the project list changes.
+The file is plain JSON. Mockingbird reads it on startup via `GET /api/config` and writes it back via `PUT /api/config` whenever the project list changes.
 
 ### Cache: `.mockingbird/cache/`
 
@@ -83,17 +80,11 @@ On first cache write, mockingbird:
 - creates `.mockingbird/cache/.gitkeep`
 - appends `.mockingbird/` to root `.gitignore` (idempotent)
 
-This is purely transient state. Safe to delete; rebuilds on next open. The
-cache used to live in a named docker volume (`mockingbird-cache`) prior to
-1.0.9.0. If you have an orphaned volume from that era, reclaim it with
-`docker volume rm mockingbird-cache`.
+This is purely transient state. Safe to delete; rebuilds on next open. If you have an orphaned `mockingbird-cache` Docker volume from an older setup (back when the cache lived in a named volume), reclaim it with `docker volume rm mockingbird-cache`.
 
 ### Per-user preferences (auto-restore, theme, etc.)
 
-Some settings are per-user, per-browser and stay in browser localStorage:
-auto-restore-last-project, theme, sidebar collapsed, panel sizes. These are
-intentionally NOT in `config.mockingbird` since they don't make sense to share
-across the team.
+Some settings stay per-user in browser localStorage: theme, sidebar collapsed state, panel sizes, auto-restore toggle. The "last opened project" pointer that auto-restore replays lives server-side as `lastOpenedHash` in `config.mockingbird`, so a fresh browser - or a headless consumer - reopens the right project. The browser-local settings are intentionally NOT shared via `config.mockingbird` since they don't make sense across the team.
 
 ## Endpoints
 
@@ -146,7 +137,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 - **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:0.11.0` at the time of writing).
 - **Commit serialized YAML alongside the code that depends on it.** Author items in Mockingbird, let the file watcher emit clean YAML, and PR the YAML alongside the React / Next.js changes that consume it. Reviewers see the item changes in the diff.
-- **One `sitecore.json` per project.** The engine reads `sitecore.json` from each project root the wizard registers and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. Multi-layer setups (e.g. a tenant template layer + a content layer) live as separate `sitecore.json` files under the workspace mount; the wizard registers them as layers of one project.
+- **One `sitecore.json` per layer.** Each layer points at one `sitecore.json` and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. A project is a stack of layers - common shapes are one layer (single repo) or two (e.g. a tenant template layer + a content layer) - merged at open time via SCS `allowedPushOperations` strength (CreateOnly < CreateAndUpdate < CreateUpdateAndDelete).
 - **Treat the cache as disposable.** `.mockingbird/cache/index-*.json.gz` are derived artifacts; they rebuild from your YAML on the next boot. Safe to delete at any time, gitignored by default, safe to skip backing up.
 - **Use the Package Builder to ship a slice upstream.** Browse to a subtree, right-click `Add to Package`, check out, and the resulting `.zip` installs in a real Sitecore CM via the standard Package Installer. Useful for promoting a developer's locally-authored items to a UAT instance without serializing through the upstream pipeline.
 
@@ -263,7 +254,7 @@ Everything mockingbird needs lives under that mount:
 
 | Path under workspace | Purpose |
 |---|---|
-| `sitecore.json` | SCS root config (the same file `dotnet sitecore` uses) - one per project; the wizard discovers them at runtime |
+| `sitecore.json` | SCS root config (the same file `dotnet sitecore` uses) - one per layer; the wizard's folder browser picks them as you build a project |
 | `config.mockingbird` | Team-shared project registry. Commit it - new devs cloning the repo get the project list for free |
 | `.mockingbird/cache/` | Engine-internal parsed-item index. Gitignored. Safe to delete; rebuilds on next boot |
 
@@ -277,7 +268,7 @@ The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mock
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `MOCKINGBIRD_WORKSPACE` | Host path bound to `/workspaces` in the container. The first-run wizard walks this mount to discover `sitecore.json` files. | `./` |
+| `MOCKINGBIRD_WORKSPACE` | Host path bound to `/workspaces` in the container. The first-run wizard's folder browser navigates this mount so you can pick `sitecore.json` files as project layers. | `./` |
 | `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:0.11.0`) in shared environments. | `projectmockingbird/mockingbird:latest` |
 | `MOCKINGBIRD_PORT` | Host port mockingbird binds (loopback-only). Container always listens on 3333 internally. | `3333` |
 | `MOCKINGBIRD_HOST` | Container's internal listener address. `0.0.0.0` so Docker's port-NAT can forward; almost never needs changing. | `0.0.0.0` |
