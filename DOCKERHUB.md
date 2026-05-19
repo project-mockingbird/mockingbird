@@ -58,6 +58,7 @@ Full configuration reference, environment variables, GraphQL schema, and archite
 | Tag | Notes |
 |---|---|
 | `latest` | Most recent release |
+| `0.11.2` | Security patch: clears 5 HIGH CVEs (pwsh 7.4.15, fast-uri 3.x override, npm bump) |
 | `0.11.1` | First-contact fixes for canonical SCS repos (default serialization path, lazy-mode provenance fill) |
 | `0.11.0` | First public release |
 
