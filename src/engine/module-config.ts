@@ -19,6 +19,7 @@ export async function loadModuleConfig(filePath: string): Promise<ModuleConfig |
 export async function discoverModules(rootDir: string): Promise<ModuleConfig[]> {
   const projectConfigPath = resolve(rootDir, 'sitecore.json');
   const projectConfig = await loadProjectConfig(projectConfigPath);
+  const defaultItemsPath = projectConfig.serialization?.defaultModuleRelativeSerializationPath;
 
   const configs: ModuleConfig[] = [];
   for (const pattern of projectConfig.modules) {
@@ -26,7 +27,12 @@ export async function discoverModules(rootDir: string): Promise<ModuleConfig[]> 
     for (const match of matches) {
       const absolutePath = resolve(rootDir, match);
       const config = await loadModuleConfig(absolutePath);
-      if (config) configs.push(config);
+      if (config) {
+        if (config.items.path === undefined && defaultItemsPath !== undefined) {
+          config.items.path = defaultItemsPath;
+        }
+        configs.push(config);
+      }
     }
   }
 

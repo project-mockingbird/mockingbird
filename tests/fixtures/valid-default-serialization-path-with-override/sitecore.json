@@ -1,0 +1,6 @@
+{
+  "modules": ["*.module.json"],
+  "serialization": {
+    "defaultModuleRelativeSerializationPath": "items"
+  }
+}

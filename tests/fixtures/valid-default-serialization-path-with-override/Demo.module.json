@@ -1,0 +1,12 @@
+{
+  "namespace": "Project.DemoOverride",
+  "items": {
+    "path": "serialization",
+    "includes": [
+      {
+        "name": "templates",
+        "path": "/sitecore/templates/Project/DemoOverride"
+      }
+    ]
+  }
+}

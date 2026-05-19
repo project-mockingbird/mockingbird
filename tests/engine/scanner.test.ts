@@ -35,6 +35,14 @@ describe('scanDirectory', () => {
     const template = tree.getById('a1b2c3d4-e5f6-7890-abcd-000000000001')!;
     expect(template.module).toBe('Project.MyProject');
   });
+
+  it('resolves items under sitecore.json defaultModuleRelativeSerializationPath when module omits items.path', async () => {
+    const fixture = resolve(__dirname, '../fixtures/valid-default-serialization-path');
+    const tree = await scanDirectory(fixture);
+    const item = tree.getById('c0ffee01-0000-0000-0000-000000000001');
+    expect(item).toBeDefined();
+    expect(item!.item.path).toBe('/sitecore/templates/Project/Demo/DemoTemplate');
+  });
 });
 
 describe('scanDirectory - non-item documents', () => {
