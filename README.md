@@ -386,6 +386,18 @@ npm run cli -- tree /sitecore/content
 # it via MOCKINGBIRD_IMAGE in .env)
 docker build -t projectmockingbird/mockingbird:dev .
 
+# For images published to Hub, build via buildx with SBOM + provenance
+# attestations so Docker Scout's supply-chain card stays compliant.
+# Default buildx builders use the docker driver which cannot emit
+# attestations - create a docker-container builder first (one-time).
+docker buildx create --name attestation-builder --driver docker-container --bootstrap
+docker buildx build --builder attestation-builder \
+  --platform linux/amd64 \
+  --sbom=true --provenance=mode=max \
+  --push \
+  -t projectmockingbird/mockingbird:<version> \
+  -t projectmockingbird/mockingbird:latest .
+
 # Dev Web UI with hot reload on :5173 (proxies /api -> http://localhost:3333)
 npm run dev:web
 ```
