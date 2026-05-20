@@ -62,7 +62,7 @@ RUN apk add --no-cache \
   && chmod +x /opt/microsoft/powershell/7/pwsh \
   && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
   && rm /tmp/pwsh.tar.gz \
-  && npm install -g npm@latest
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 WORKDIR /app
 COPY --from=builder /app/dist dist/
