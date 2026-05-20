@@ -8,7 +8,7 @@ import fastifyStatic from '@fastify/static';
 import { multistream } from 'pino';
 import { Engine } from '../engine/index.js';
 import { ensureWorkspaceLayout } from '../engine/workspace-bootstrap.js';
-import { ensureConfigExists, readConfig, resolveConfigPath } from './state/config-store.js';
+import { ensureConfigExists, migrateConfigIfLegacy, readConfig, resolveConfigPath } from './state/config-store.js';
 import { resolveWorkspacePath, getWorkspaceRoot } from './state/workspace-path.js';
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
@@ -70,6 +70,14 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   });
   await ensureConfigExists(resolveConfigPath()).catch((err) => {
     console.warn('[workspace] config.mockingbird bootstrap failed (non-fatal):', err);
+  });
+  // Normalize legacy-shaped files (per-dev fields embedded in the tracked
+  // file) to the split shape. One-shot: subsequent boots find a clean file
+  // and the call is a no-op. Without this, repos that started on pre-0.11.3
+  // never migrate unless someone manually POSTs /api/projects/open, because
+  // boot-replay restores the workspace without going through that route.
+  await migrateConfigIfLegacy(resolveConfigPath()).catch((err) => {
+    console.warn('[workspace] config.mockingbird legacy migration failed (non-fatal):', err);
   });
 
   // CORS: default policy allows ONLY same-origin (no Origin header at all,

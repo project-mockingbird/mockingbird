@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { mkdir, rm, writeFile, readFile, stat, readdir } from 'fs/promises';
 import { resolve, join, dirname, basename } from 'path';
 import { tmpdir } from 'os';
-import { readConfig, writeConfig, ensureConfigExists, resolveConfigPath, type MockingbirdConfig } from '../../../src/api/state/config-store.js';
+import { readConfig, writeConfig, ensureConfigExists, migrateConfigIfLegacy, resolveConfigPath, type MockingbirdConfig } from '../../../src/api/state/config-store.js';
 
 let tmpRoot: string;
 let configPath: string;
@@ -325,6 +325,73 @@ describe('per-dev split (config.mockingbird.local)', () => {
     const result = await readConfig(configPath);
     expect(result.lastOpenedHash).toBeUndefined();
     expect(result.projects.h1.lastOpenedAt).toBe(0);
+  });
+});
+
+describe('migrateConfigIfLegacy', () => {
+  it('splits embedded per-dev fields out to .local when the tracked file is legacy-shaped', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        lastOpenedHash: 'h1',
+        projects: {
+          h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1, lastOpenedAt: 42 },
+        },
+      }),
+      'utf-8',
+    );
+
+    await migrateConfigIfLegacy(configPath);
+
+    const trackedAfter = JSON.parse(await readFile(configPath, 'utf-8'));
+    expect(trackedAfter.lastOpenedHash).toBeUndefined();
+    expect(trackedAfter.projects.h1.lastOpenedAt).toBeUndefined();
+
+    const localAfter = JSON.parse(await readFile(`${configPath}.local`, 'utf-8'));
+    expect(localAfter.lastOpenedHash).toBe('h1');
+    expect(localAfter.lastOpenedAt.h1).toBe(42);
+  });
+
+  it('is a no-op when the tracked file already has the split shape', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        projects: { h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1 } },
+      }),
+      'utf-8',
+    );
+    const before = await stat(configPath);
+
+    await migrateConfigIfLegacy(configPath);
+
+    const after = await stat(configPath);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    // No .local file created spuriously - nothing to migrate, nothing to write.
+    let localExists = true;
+    try {
+      await stat(`${configPath}.local`);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') localExists = false;
+      else throw err;
+    }
+    expect(localExists).toBe(false);
+  });
+
+  it('is a no-op when the tracked file does not exist', async () => {
+    // Fresh workspace, no config files anywhere. Migrate must not crash and
+    // must not create either file.
+    await migrateConfigIfLegacy(configPath);
+
+    let trackedExists = true;
+    try {
+      await stat(configPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') trackedExists = false;
+      else throw err;
+    }
+    expect(trackedExists).toBe(false);
   });
 });
 

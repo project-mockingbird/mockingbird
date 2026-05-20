@@ -174,6 +174,43 @@ export async function ensureConfigExists(filePath: string): Promise<void> {
 }
 
 /**
+ * Normalize a legacy-shaped config.mockingbird (per-dev fields embedded in the
+ * tracked file) by splitting them out to the sibling .local file. No-op when
+ * the file is already clean or absent. Called from server bootstrap so a
+ * boot-replay restore is not the only trigger for the migration.
+ */
+export async function migrateConfigIfLegacy(filePath: string): Promise<void> {
+  let raw: string;
+  try {
+    raw = await readFile(filePath, 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  if (!parsed || typeof parsed !== 'object') return;
+  const p = parsed as Record<string, unknown>;
+  if (p.version !== 1) return;
+
+  const hasTopLevelLastOpenedHash = typeof p.lastOpenedHash === 'string';
+  const projects = (p.projects && typeof p.projects === 'object' ? p.projects : {}) as Record<string, unknown>;
+  const hasEmbeddedLastOpenedAt = Object.values(projects).some(
+    (v) => v && typeof v === 'object' && 'lastOpenedAt' in (v as Record<string, unknown>),
+  );
+  if (!hasTopLevelLastOpenedHash && !hasEmbeddedLastOpenedAt) return;
+
+  // Read via the merged path (which honors legacy fields as a fallback), then
+  // write via the splitting path (which emits the clean shape).
+  const merged = await readConfig(filePath);
+  await writeConfig(filePath, merged);
+}
+
+/**
  * Resolve the path to config.mockingbird from environment. Honors
  * `MOCKINGBIRD_CONFIG_PATH` (explicit override) first, otherwise joins
  * `config.mockingbird` onto the workspace root.
