@@ -399,7 +399,8 @@ docker build -t projectmockingbird/mockingbird:dev .
 # For images published to Hub, build via buildx with SBOM + provenance
 # attestations so Docker Scout's supply-chain card stays compliant.
 # Default buildx builders use the docker driver which cannot emit
-# attestations - create a docker-container builder first (one-time).
+# attestations - spin up a docker-container builder per release and
+# remove it when done.
 docker buildx create --name attestation-builder --driver docker-container --bootstrap
 docker buildx build --builder attestation-builder \
   --platform linux/amd64 \
@@ -407,6 +408,13 @@ docker buildx build --builder attestation-builder \
   --push \
   -t projectmockingbird/mockingbird:<version> \
   -t projectmockingbird/mockingbird:latest .
+docker buildx rm attestation-builder
+
+# Releases are infrequent enough that the ~150 MB buildkit pull on the
+# next release is a worthwhile trade for not having an idle buildkit
+# container, and a fresh builder guarantees the SBOM attestation reflects
+# the current build with no stale-cache surprises. (The 0.11.2 re-push
+# cycle hit exactly that stale-attestation bug.)
 
 # Dev Web UI with hot reload on :5173 (proxies /api -> http://localhost:3333)
 npm run dev:web
