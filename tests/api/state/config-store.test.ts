@@ -186,6 +186,148 @@ describe('ensureConfigExists', () => {
   });
 });
 
+describe('per-dev split (config.mockingbird.local)', () => {
+  it('reads lastOpenedHash from the .local file when the tracked file does not have it', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        projects: {
+          h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1 },
+        },
+      }),
+      'utf-8',
+    );
+    await writeFile(
+      `${configPath}.local`,
+      JSON.stringify({ version: 1, lastOpenedHash: 'h1' }),
+      'utf-8',
+    );
+    const result = await readConfig(configPath);
+    expect(result.lastOpenedHash).toBe('h1');
+    expect(result.projects.h1.name).toBe('p');
+  });
+
+  it('reads per-project lastOpenedAt from the .local file', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        projects: {
+          h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1 },
+        },
+      }),
+      'utf-8',
+    );
+    await writeFile(
+      `${configPath}.local`,
+      JSON.stringify({ version: 1, lastOpenedAt: { h1: 12345 } }),
+      'utf-8',
+    );
+    const result = await readConfig(configPath);
+    expect(result.projects.h1.lastOpenedAt).toBe(12345);
+  });
+
+  it('returns lastOpenedAt as 0 when the .local file has no entry for that project', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        projects: {
+          h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1 },
+        },
+      }),
+      'utf-8',
+    );
+    // No .local file at all.
+    const result = await readConfig(configPath);
+    expect(result.projects.h1.lastOpenedAt).toBe(0);
+  });
+
+  it('writes per-dev fields ONLY to .local; tracked file has no lastOpenedHash or per-project lastOpenedAt', async () => {
+    const merged: MockingbirdConfig = {
+      version: 1,
+      lastOpenedHash: 'h1',
+      projects: {
+        h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1, lastOpenedAt: 99 },
+      },
+    };
+    await writeConfig(configPath, merged);
+
+    const trackedOnDisk = JSON.parse(await readFile(configPath, 'utf-8'));
+    expect(trackedOnDisk.lastOpenedHash).toBeUndefined();
+    expect(trackedOnDisk.projects.h1.lastOpenedAt).toBeUndefined();
+    expect(trackedOnDisk.projects.h1.name).toBe('p');
+
+    const localOnDisk = JSON.parse(await readFile(`${configPath}.local`, 'utf-8'));
+    expect(localOnDisk.lastOpenedHash).toBe('h1');
+    expect(localOnDisk.lastOpenedAt).toEqual({ h1: 99 });
+  });
+
+  it('writeConfig + readConfig round-trip preserves the merged shape', async () => {
+    const merged: MockingbirdConfig = {
+      version: 1,
+      lastOpenedHash: 'h2',
+      projects: {
+        h1: { hash: 'h1', name: 'a', layers: [], createdAt: 1, lastOpenedAt: 10 },
+        h2: { hash: 'h2', name: 'b', layers: [], createdAt: 2, lastOpenedAt: 20 },
+      },
+    };
+    await writeConfig(configPath, merged);
+    const read = await readConfig(configPath);
+    expect(read).toEqual(merged);
+  });
+
+  it('migrates legacy embedded per-dev fields from tracked file on the next write', async () => {
+    // Existing repos may have config.mockingbird with embedded lastOpenedHash
+    // and per-project lastOpenedAt - the pre-split shape. Reading still works
+    // (back-compat); the next write should split them out, leaving the tracked
+    // file clean.
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        lastOpenedHash: 'h1',
+        projects: {
+          h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1, lastOpenedAt: 7 },
+        },
+      }),
+      'utf-8',
+    );
+
+    const before = await readConfig(configPath);
+    expect(before.lastOpenedHash).toBe('h1');
+    expect(before.projects.h1.lastOpenedAt).toBe(7);
+
+    await writeConfig(configPath, before);
+
+    const trackedAfter = JSON.parse(await readFile(configPath, 'utf-8'));
+    expect(trackedAfter.lastOpenedHash).toBeUndefined();
+    expect(trackedAfter.projects.h1.lastOpenedAt).toBeUndefined();
+
+    const localAfter = JSON.parse(await readFile(`${configPath}.local`, 'utf-8'));
+    expect(localAfter.lastOpenedHash).toBe('h1');
+    expect(localAfter.lastOpenedAt.h1).toBe(7);
+  });
+
+  it('tolerates a malformed .local file (falls back to no per-dev state, no throw)', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        projects: {
+          h1: { hash: 'h1', name: 'p', layers: [], createdAt: 1 },
+        },
+      }),
+      'utf-8',
+    );
+    await writeFile(`${configPath}.local`, 'not json', 'utf-8');
+    const result = await readConfig(configPath);
+    expect(result.lastOpenedHash).toBeUndefined();
+    expect(result.projects.h1.lastOpenedAt).toBe(0);
+  });
+});
+
 describe('resolveConfigPath', () => {
   const ORIGINAL_ENV = { ...process.env };
   beforeEach(() => {
