@@ -73,6 +73,15 @@ Each saved project is a named, ordered stack of layers - each layer is a referen
 
 The file is plain JSON. Mockingbird reads it on startup via `GET /api/config` and writes it back via `PUT /api/config` whenever the project list changes.
 
+### Per-developer session state: `config.mockingbird.local`
+
+Per-developer ephemeral state - which project this dev currently has open (`lastOpenedHash`) and when they last opened each project (`lastOpenedAt`) - lives in a sibling file next to the tracked one:
+
+    ./config.mockingbird          # team-shared, commit it
+    ./config.mockingbird.local    # per-developer, gitignore it
+
+The split exists so team members don't stomp on each other with constant churn in `lastOpenedAt` / `lastOpenedHash`. Add `config.mockingbird.local` to your repo's `.gitignore`. Mockingbird reads both files and merges them when serving `GET /api/config`; `PUT /api/config` writes per-dev fields back into the `.local` file only.
+
 ### Cache: `.mockingbird/cache/`
 
 Engine cache artifacts live under `.mockingbird/cache/` in the workspace mount.
@@ -84,7 +93,7 @@ This is purely transient state. Safe to delete; rebuilds on next open. If you ha
 
 ### Per-user preferences (auto-restore, theme, etc.)
 
-Some settings stay per-user in browser localStorage: theme, sidebar collapsed state, panel sizes, auto-restore toggle. The "last opened project" pointer that auto-restore replays lives server-side as `lastOpenedHash` in `config.mockingbird`, so a fresh browser - or a headless consumer - reopens the right project. The browser-local settings are intentionally NOT shared via `config.mockingbird` since they don't make sense across the team.
+Some settings stay per-user in browser localStorage: theme, sidebar collapsed state, panel sizes, auto-restore toggle. The "last opened project" pointer that auto-restore replays lives server-side as `lastOpenedHash` in `config.mockingbird.local`, so a fresh browser - or a headless consumer - reopens the right project. The browser-local settings are intentionally NOT shared via `config.mockingbird` since they don't make sense across the team.
 
 ## Endpoints
 
@@ -256,6 +265,7 @@ Everything mockingbird needs lives under that mount:
 |---|---|
 | `sitecore.json` | SCS root config (the same file `dotnet sitecore` uses) - one per layer; the wizard's folder browser picks them as you build a project |
 | `config.mockingbird` | Team-shared project registry. Commit it - new devs cloning the repo get the project list for free |
+| `config.mockingbird.local` | Per-developer session state (last-opened project, last-opened times). Gitignore it - keeps team members from stomping on each other |
 | `.mockingbird/cache/` | Engine-internal parsed-item index. Gitignored. Safe to delete; rebuilds on next boot |
 
 The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mockingbird image for full support - no extra mount needed.

@@ -55,3 +55,9 @@ src/spe/provider-csharp/**/obj/
 # to be committed (team-shared project registry), but for mockingbird-the-tool
 # we keep it untracked so smoke sessions don't pollute git.
 config.mockingbird
+
+# Per-developer session state (lastOpenedHash, per-project lastOpenedAt).
+# Always untracked - lives next to config.mockingbird in user projects too.
+# Consumer repos that commit config.mockingbird should add this line to
+# their own .gitignore.
+config.mockingbird.local
