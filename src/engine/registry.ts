@@ -5,15 +5,26 @@ import { normalizeGuid } from './guid.js';
 import type { RegistryData, RegistryItem } from './types.js';
 
 export class Registry {
-  private byId = new Map<string, RegistryItem>();
-  private byPath = new Map<string, RegistryItem>();
-  private byParent = new Map<string, RegistryItem[]>();
+  // db -> (key -> value). Partitioned so cross-database GUID/path twins coexist.
+  private byId = new Map<string, Map<string, RegistryItem>>();
+  private byPath = new Map<string, Map<string, RegistryItem>>();
+  private byParent = new Map<string, Map<string, RegistryItem[]>>();
   private data: RegistryData | null = null;
   private databases = new Set<string>();
   private visibleByDb = new Map<string, Set<string>>();
 
+  /** Preferred db order for db-agnostic lookups: master first (content-tool centric),
+   *  then core, then any remaining dbs alphabetically. */
+  private dbOrder(): string[] {
+    const head = ['master', 'core'].filter(d => this.databases.has(d));
+    const rest = [...this.databases].filter(d => !head.includes(d)).sort();
+    return [...head, ...rest];
+  }
+
   get size(): number {
-    return this.byId.size;
+    let n = 0;
+    for (const m of this.byId.values()) n += m.size;
+    return n;
   }
 
   get version(): string {
@@ -43,22 +54,26 @@ export class Registry {
     this.databases.clear();
 
     for (const item of data.items) {
+      const database = item.database ?? 'master';
       const normalized: RegistryItem = {
         ...item,
         id: item.id.toLowerCase(),
         parent: item.parent.toLowerCase(),
         template: item.template.toLowerCase(),
-        database: item.database ?? 'master',
+        database,
       };
-      this.byId.set(normalized.id, normalized);
-      this.byPath.set(normalized.path.toLowerCase(), normalized);
-      this.databases.add(normalized.database);
-
-      const parentId = normalized.parent;
-      if (!this.byParent.has(parentId)) {
-        this.byParent.set(parentId, []);
+      this.databases.add(database);
+      if (!this.byId.has(database)) {
+        this.byId.set(database, new Map());
+        this.byPath.set(database, new Map());
+        this.byParent.set(database, new Map());
       }
-      this.byParent.get(parentId)!.push(normalized);
+      this.byId.get(database)!.set(normalized.id, normalized);
+      this.byPath.get(database)!.set(normalized.path.toLowerCase(), normalized);
+      const pmap = this.byParent.get(database)!;
+      const parentId = normalized.parent;
+      if (!pmap.has(parentId)) pmap.set(parentId, []);
+      pmap.get(parentId)!.push(normalized);
     }
 
     this.buildVisibilityIndex();
@@ -70,14 +85,12 @@ export class Registry {
     this.visibleByDb.clear();
     for (const db of this.databases) {
       const visible = new Set<string>();
-      for (const item of this.byId.values()) {
-        if (item.database === db) {
-          // Walk up the parent chain, marking each ancestor visible
-          let current: RegistryItem | undefined = item;
-          while (current && !visible.has(current.id)) {
-            visible.add(current.id);
-            current = this.byId.get(current.parent);
-          }
+      const dbMap = this.byId.get(db)!;
+      for (const item of dbMap.values()) {
+        let current: RegistryItem | undefined = item;
+        while (current && !visible.has(current.id)) {
+          visible.add(current.id);
+          current = dbMap.get(current.parent);
         }
       }
       this.visibleByDb.set(db, visible);
@@ -89,18 +102,15 @@ export class Registry {
    *  included if they lead to a serialized item (not to random OOTB master items). */
   rebuildMasterVisibility(serializedParentIds: string[]): void {
     const visible = new Set<string>();
-    // Include all master-tagged items
-    for (const item of this.byId.values()) {
-      if (item.database === 'master') {
-        visible.add(item.id);
-      }
-    }
-    // Walk up from serialized items' parents to build the structural ancestor chain
-    for (const parentId of serializedParentIds) {
-      let current = this.byId.get(parentId.toLowerCase());
-      while (current && !visible.has(current.id)) {
-        visible.add(current.id);
-        current = this.byId.get(current.parent);
+    const masterMap = this.byId.get('master');
+    if (masterMap) {
+      for (const item of masterMap.values()) visible.add(item.id);
+      for (const parentId of serializedParentIds) {
+        let current = masterMap.get(parentId.toLowerCase());
+        while (current && !visible.has(current.id)) {
+          visible.add(current.id);
+          current = masterMap.get(current.parent);
+        }
       }
     }
     this.visibleByDb.set('master', visible);
@@ -122,21 +132,41 @@ export class Registry {
     return visible ? visible.has(normalizeGuid(id)) : false;
   }
 
-  getById(id: string): RegistryItem | undefined {
-    return this.byId.get(normalizeGuid(id));
+  getById(id: string, db?: string): RegistryItem | undefined {
+    const nid = normalizeGuid(id);
+    if (db) return this.byId.get(db)?.get(nid);
+    for (const d of this.dbOrder()) {
+      const hit = this.byId.get(d)?.get(nid);
+      if (hit) return hit;
+    }
+    return undefined;
   }
 
-  getByPath(path: string): RegistryItem | undefined {
-    return this.byPath.get(path.toLowerCase());
+  getByPath(path: string, db?: string): RegistryItem | undefined {
+    const p = path.toLowerCase();
+    if (db) return this.byPath.get(db)?.get(p);
+    for (const d of this.dbOrder()) {
+      const hit = this.byPath.get(d)?.get(p);
+      if (hit) return hit;
+    }
+    return undefined;
   }
 
-  has(id: string): boolean {
-    return this.byId.has(normalizeGuid(id));
+  has(id: string, db?: string): boolean {
+    return this.getById(id, db) !== undefined;
   }
 
   getChildren(parentId: string, database?: string): RegistryItem[] {
-    const children = this.byParent.get(normalizeGuid(parentId)) ?? [];
-    if (!database) return children;
+    const pid = normalizeGuid(parentId);
+    if (!database) {
+      const all: RegistryItem[] = [];
+      for (const m of this.byParent.values()) {
+        const c = m.get(pid);
+        if (c) all.push(...c);
+      }
+      return all;
+    }
+    const children = this.byParent.get(database)?.get(pid) ?? [];
     const visible = this.visibleByDb.get(database);
     if (!visible) return [];
     return children.filter(c => visible.has(c.id));
@@ -146,10 +176,13 @@ export class Registry {
 
   getRootItems(database?: string): RegistryItem[] {
     const roots: RegistryItem[] = [];
-    for (const item of this.byId.values()) {
-      if (item.parent === Registry.NULL_GUID) {
-        if (!database || this.isVisibleInDb(item.id, database)) {
-          roots.push(item);
+    const dbs = database ? [database] : [...this.databases];
+    for (const db of dbs) {
+      const m = this.byId.get(db);
+      if (!m) continue;
+      for (const item of m.values()) {
+        if (item.parent === Registry.NULL_GUID) {
+          if (!database || this.isVisibleInDb(item.id, database)) roots.push(item);
         }
       }
     }
@@ -161,28 +194,31 @@ export class Registry {
   }
 
   sizeByDatabase(database: string): number {
-    let count = 0;
-    for (const item of this.byId.values()) {
-      if (item.database === database) count++;
-    }
-    return count;
+    return this.byId.get(database)?.size ?? 0;
   }
 
   getAllTemplates(): RegistryItem[] {
-    const results: RegistryItem[] = [];
-    for (const item of this.byId.values()) {
-      if (item.template === TEMPLATE_TEMPLATE_ID) {
-        results.push(item);
-      }
-    }
-    return results;
+    return this.collectByTemplate(TEMPLATE_TEMPLATE_ID);
   }
 
   getItemsByTemplate(templateId: string): RegistryItem[] {
-    const target = normalizeGuid(templateId);
+    return this.collectByTemplate(normalizeGuid(templateId));
+  }
+
+  /** Collect items whose template matches `target`, de-duplicated by id with master
+   *  preference (a colliding GUID yields its master twin, matching pre-partition behavior). */
+  private collectByTemplate(target: string): RegistryItem[] {
+    const seen = new Set<string>();
     const results: RegistryItem[] = [];
-    for (const item of this.byId.values()) {
-      if (item.template === target) results.push(item);
+    for (const db of this.dbOrder()) {
+      const m = this.byId.get(db);
+      if (!m) continue;
+      for (const item of m.values()) {
+        if (item.template === target && !seen.has(item.id)) {
+          seen.add(item.id);
+          results.push(item);
+        }
+      }
     }
     return results;
   }
