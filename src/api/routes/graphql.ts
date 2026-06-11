@@ -542,7 +542,7 @@ export async function registerGraphQLRoutes(
   // queryDepth caps the depth of any single incoming query. The recursive
   // `children` field can otherwise be nested arbitrarily deep by an
   // unauthenticated localhost caller and pin the event loop. The default
-  // (20) covers the typical ModularNavigation query head apps ship,
+  // (20) covers the typical deeply-nested navigation queries head apps ship,
   // which nests `children -> results -> ... on Type` four times deep
   // (~17-18 levels with inline fragments counted). Tune via env if a
   // deeper query is genuinely needed.

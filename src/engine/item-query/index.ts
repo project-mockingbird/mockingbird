@@ -143,15 +143,15 @@ export function resolveItemChildren(
  */
 const STARTER_TYPE_NAMES = [
   'ContentItem',
-  'RootMenuItem',
-  'MenuColumn',
-  'MenuLinkList',
-  'MenuLink',
+  'DemoRoot',
+  'DemoBlock',
+  'DemoLinkList',
+  'DemoLink',
   'FaqList',
   'FaqItem',
   'AccordionItem',
   'TabItem',
-  'DynamicForm',
+  'DemoGroup',
   'SitemapEntry',
 ];
 
@@ -163,8 +163,8 @@ const STARTER_FIELD_HINTS = [
   'Content',
   'Image',
   'Link',
-  'MenuItemText',
-  'MenuItemLink',
+  'DemoNodeText',
+  'DemoNodeLink',
   'Caption',
   'Summary',
   'Description',

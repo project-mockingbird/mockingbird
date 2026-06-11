@@ -31,8 +31,8 @@ function buildEngine(items: ScsItem[]): Engine {
 }
 
 describe('pascalizeTemplateName', () => {
-  it('converts "Root Menu Item" → "RootMenuItem"', () => {
-    expect(pascalizeTemplateName('Root Menu Item')).toBe('RootMenuItem');
+  it('converts "Demo Root" → "DemoRoot"', () => {
+    expect(pascalizeTemplateName('Demo Root')).toBe('DemoRoot');
   });
 
   it('preserves an already-pascal name', () => {
@@ -40,7 +40,7 @@ describe('pascalizeTemplateName', () => {
   });
 
   it('strips non-alphanumerics', () => {
-    expect(pascalizeTemplateName('Menu Link-List')).toBe('MenuLinkList');
+    expect(pascalizeTemplateName('Demo Link-List')).toBe('DemoLinkList');
   });
 
   it('returns ContentItem for empty input', () => {
@@ -112,10 +112,10 @@ describe('readItemFieldByHint', () => {
     const item = makeItem({
       id: 'aaa',
       path: '/p',
-      sharedFields: [{ id: 'f', hint: 'MenuItemText', value: 'click' }],
+      sharedFields: [{ id: 'f', hint: 'DemoNodeText', value: 'click' }],
     });
-    expect(readItemFieldByHint(item, 'menuItemText')?.value).toBe('click');
-    expect(readItemFieldByHint(item, 'menuitemtext')?.value).toBe('click');
+    expect(readItemFieldByHint(item, 'demoNodeText')?.value).toBe('click');
+    expect(readItemFieldByHint(item, 'demonodetext')?.value).toBe('click');
   });
 
   it('returns null when the hint is not found', () => {
@@ -148,14 +148,14 @@ describe('resolveItemChildren', () => {
 
 describe('collectSchemaCatalog', () => {
   it('collects pascalized type names for every distinct template in the tree', () => {
-    const tmplA = makeItem({ id: 'tmpl-a', path: '/sitecore/templates/site/Root Menu Item' });
-    const tmplB = makeItem({ id: 'tmpl-b', path: '/sitecore/templates/site/Menu Column' });
+    const tmplA = makeItem({ id: 'tmpl-a', path: '/sitecore/templates/site/Demo Root' });
+    const tmplB = makeItem({ id: 'tmpl-b', path: '/sitecore/templates/site/Demo Block' });
     const it1 = makeItem({ id: 'i1', path: '/content/1', template: 'tmpl-a' });
     const it2 = makeItem({ id: 'i2', path: '/content/2', template: 'tmpl-b' });
     const engine = buildEngine([tmplA, tmplB, it1, it2]);
     const catalog = collectSchemaCatalog(engine);
-    expect(catalog.typeNames).toContain('RootMenuItem');
-    expect(catalog.typeNames).toContain('MenuColumn');
+    expect(catalog.typeNames).toContain('DemoRoot');
+    expect(catalog.typeNames).toContain('DemoBlock');
     expect(catalog.typeNames).toContain('ContentItem'); // always included as fallback
   });
 
@@ -164,7 +164,7 @@ describe('collectSchemaCatalog', () => {
       id: 'i',
       path: '/p',
       sharedFields: [
-        { id: 'f1', hint: 'MenuItemText', value: 'x' },
+        { id: 'f1', hint: 'DemoNodeText', value: 'x' },
         { id: 'f2', hint: '__Created', value: 'skip' },
       ],
       languages: [{
@@ -177,14 +177,14 @@ describe('collectSchemaCatalog', () => {
       }],
     });
     const catalog = collectSchemaCatalog(buildEngine([it]));
-    expect(catalog.fieldHints).toContain('MenuItemText');
+    expect(catalog.fieldHints).toContain('DemoNodeText');
     expect(catalog.fieldHints).toContain('Body');
     expect(catalog.fieldHints).not.toContain('__Created');
   });
 
   it('includes a hardcoded starter set of common Content SDK type names', () => {
     const catalog = collectSchemaCatalog(buildEngine([]));
-    for (const expected of ['RootMenuItem', 'MenuColumn', 'MenuLinkList', 'ContentItem']) {
+    for (const expected of ['DemoRoot', 'DemoBlock', 'DemoLinkList', 'ContentItem']) {
       expect(catalog.typeNames).toContain(expected);
     }
   });

@@ -261,8 +261,8 @@ function decodeParams(
 /**
  * If a param value is a Sitecore `<image mediaid="{GUID}" />` XML snippet,
  * inject a `mediaurl` attribute pointing to the resolved media item - Edge
- * does this enrichment on rendering params (HamburgerMenuIcon, BackgroundImage,
- * etc.) so the rendering host can render the image without a second lookup.
+ * does this enrichment on rendering params (BackgroundImage and similar image
+ * params) so the rendering host can render the image without a second lookup.
  */
 function enrichImageParam(value: string, engine: Engine, mediaBaseUrl: string): string {
   if (!value || !value.startsWith('<image ')) return value;
@@ -409,7 +409,7 @@ function resolveNode(
     fields = { data: componentQueryResult as unknown as JssFieldValue };
   } else {
     // Dispatch order:
-    //   1. Hand-crafted componentName resolver (Carousel, Spotlight).
+    //   1. Hand-crafted componentName resolver (e.g. Carousel).
     //   2. RCR-item-driven resolver (Phase D).
     //   3. Default schema-driven field emission.
     const resolver = CONTENTS_RESOLVERS[componentName];
