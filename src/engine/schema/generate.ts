@@ -8,7 +8,7 @@ import { getTemplateSchema, type TemplateFieldSchema } from '../template-schema.
  * Convert a Sitecore template **name** into a GraphQL type identifier.
  * Splits on any run of non-alphanumeric characters (spaces, dashes,
  * punctuation) and PascalCases each word. Preserves a leading run of
- * underscores so Sitecore base templates (`_LabeledField`, `__StandardValues`)
+ * underscores so Sitecore base templates (`_BaseAlpha`, `__StandardValues`)
  * remain distinguishable. Empty input returns the generic fallback `Item`.
  */
 export function templateNameToTypeName(name: string): string {
@@ -35,13 +35,13 @@ const GRAPHQL_RESERVED_FIELDS = new Set(['__typename', '__schema', '__type']);
 
 /**
  * Split a mixed-format identifier into word tokens. Handles both
- * space/dash/underscore-separated ("Menu Item Text") AND camelCase /
- * PascalCase ("MenuItemText") inputs - Sitecore project templates
+ * space/dash/underscore-separated ("Demo Node Text") AND camelCase /
+ * PascalCase ("DemoNodeText") inputs - Sitecore project templates
  * mostly use the latter, OOTB templates the former.
  *
  * Splits:
- *  - on runs of non-alphanumerics ("Menu Item" → Menu, Item)
- *  - on lower→upper transitions ("menuItem" → menu, Item)
+ *  - on runs of non-alphanumerics ("Demo Node" → Demo, Node)
+ *  - on lower→upper transitions ("demoNode" → demo, Node)
  *  - on consecutive upper followed by lower ("CSSClass" → CSS, Class)
  */
 function splitIdentifierWords(name: string): string[] {
@@ -155,6 +155,44 @@ function readBaseTemplateIds(item: ScsItem): string[] {
 }
 
 /**
+ * Walk the full `__Base template` chain for a template and return the type
+ * names of every transitively-reachable base template that is emitted as an
+ * interface (name starts with `_`). Required by the GraphQL spec: an
+ * implementing type or interface must declare every transitively-implemented
+ * interface, not just its direct bases. A type that reaches `_BaseAlpha`
+ * only through the intermediate `_BaseBeta` interface must
+ * still list `_BaseAlpha`.
+ *
+ * The walk traverses THROUGH non-interface intermediate templates (a concrete
+ * base in the chain doesn't sever reachability) but only collects the
+ * `_`-prefixed interface templates. Ordering is breadth-first in base-template
+ * declaration order (direct bases before their bases); duplicates and the
+ * starting template's own type name are dropped. Cycle-guarded via a visited
+ * set on template ids, so a base-template cycle terminates instead of hanging.
+ */
+function collectTransitiveBaseInterfaces(
+  startId: string,
+  selfTypeName: string,
+  templatesById: Map<string, GeneratedTemplate>,
+  baseIdsById: Map<string, string[]>,
+): string[] {
+  const result: string[] = [];
+  const visited = new Set<string>([startId]);
+  const queue = [...(baseIdsById.get(startId) ?? [])];
+  while (queue.length > 0) {
+    const baseId = queue.shift()!;
+    if (visited.has(baseId)) continue;
+    visited.add(baseId);
+    const baseDesc = templatesById.get(baseId);
+    if (baseDesc && baseDesc.isBase && baseDesc.typeName !== selfTypeName && !result.includes(baseDesc.typeName)) {
+      result.push(baseDesc.typeName);
+    }
+    for (const next of baseIdsById.get(baseId) ?? []) queue.push(next);
+  }
+  return result;
+}
+
+/**
  * Walk a template and return the flattened schema, falling back to an
  * empty section list when `getTemplateSchema` throws (which it can on
  * partially-indexed trees). The caller treats a missing schema as
@@ -204,15 +242,18 @@ const ANY_ITEM_FIELDS = `    id: ID!
  *   2. A generic `type Item implements AnyItem` fallback for any runtime
  *      item whose template isn't in the generated set.
  *   3. One `interface <BaseName>` per template whose name starts with `_`,
- *      containing only that template's own fields (NOT flattened - bases
- *      stay minimal so an `... on _LabeledField` fragment doesn't pick
- *      up unrelated fields).
- *   4. One `type <Name> implements AnyItem & <bases>` per template, with
+ *      carrying the flattened field set and declaring `implements` for every
+ *      base interface it transitively inherits (e.g.
+ *      `_BaseBeta implements _BaseAlpha`).
+ *   4. One `type <Name> implements AnyItem & <interfaces>` per template, with
  *      the full flattened field set (own + base + transitive base fields).
+ *      `<interfaces>` is the TRANSITIVE set of base interfaces, not just the
+ *      direct bases - the GraphQL spec requires declaring every
+ *      transitively-implemented interface.
  *
  * Cycles in the base-template graph are detected during the flatten pass
  * (delegated to `getTemplateSchema`, which already uses a visited set) and
- * via a local guard in {@link collectBaseChain}.
+ * via the visited guard in {@link collectTransitiveBaseInterfaces}.
  */
 export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResult {
   const templatesById = new Map<string, GeneratedTemplate>();
@@ -242,21 +283,24 @@ export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResul
     });
   }
 
-  // Second pass: resolve base-template references to type names (skipping
-  // any base whose template isn't in the current generation set - those
-  // get dropped from `implements` since their types don't exist).
+  // Second pass: resolve the interface type names each template implements.
+  // The GraphQL spec requires declaring every TRANSITIVELY-implemented
+  // interface, not just direct bases ("Transitively implemented interfaces
+  // ... must also be defined on an implementing type or interface"). A type
+  // that reaches `_BaseAlpha` only through the intermediate
+  // `_BaseBeta` interface must still list `_BaseAlpha`,
+  // so we walk the full base-template chain (see collectTransitiveBaseInterfaces).
+  // A base whose template isn't in the current generation set is simply never
+  // reached, so it drops out of `implements` (its type doesn't exist).
+  const baseIdsById = new Map<string, string[]>();
   for (const node of templateNodes) {
-    const desc = templatesById.get(node.item.id.toLowerCase());
+    baseIdsById.set(node.item.id.toLowerCase(), readBaseTemplateIds(node.item));
+  }
+  for (const node of templateNodes) {
+    const id = node.item.id.toLowerCase();
+    const desc = templatesById.get(id);
     if (!desc) continue;
-    const baseIds = readBaseTemplateIds(node.item);
-    for (const baseId of baseIds) {
-      const baseDesc = templatesById.get(baseId);
-      if (!baseDesc || !baseDesc.isBase) continue;
-      if (baseDesc.typeName === desc.typeName) continue; // self-reference safety
-      if (!desc.baseTypeNames.includes(baseDesc.typeName)) {
-        desc.baseTypeNames.push(baseDesc.typeName);
-      }
-    }
+    desc.baseTypeNames = collectTransitiveBaseInterfaces(id, desc.typeName, templatesById, baseIdsById);
   }
 
   // Third pass: flatten fields through the schema walker + record every
@@ -297,14 +341,22 @@ ${allFieldsBlock}
   }`);
   }
 
-  // Base-template interfaces (one per `_Foo` template).
+  // Base-template interfaces (one per `_Foo` template). Each declares the
+  // base interfaces it transitively implements - the GraphQL spec requires an
+  // interface derived from another interface to declare `implements` for it
+  // (and for everything that one implements, hence the transitive set in
+  // `baseTypeNames`). The flattened field bag already carries the inherited
+  // fields, so the implementing interface satisfies the spec's field rule.
   for (const desc of templatesById.values()) {
     if (!desc.isBase) continue;
     const fieldLines = Array.from(desc.fields.keys())
       .map(fname => `    ${fname}: ItemField`)
       .join('\n');
+    const implementsClause = desc.baseTypeNames.length > 0
+      ? ` implements ${desc.baseTypeNames.join(' & ')}`
+      : '';
     parts.push(`
-  interface ${desc.typeName} {
+  interface ${desc.typeName}${implementsClause} {
 ${fieldLines || '    _placeholder: ItemField'}
   }`);
   }
