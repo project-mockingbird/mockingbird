@@ -58,6 +58,7 @@ Full configuration reference, environment variables, GraphQL schema, and archite
 | Tag | Notes |
 |---|---|
 | `latest` | Most recent release |
+| `0.11.4` | GraphQL schema generator declares transitively-implemented interfaces, so inline fragments on a base interface resolve on every type that reaches it through an intermediate interface |
 | `0.11.3` | Per-developer session state moved to `config.mockingbird.local` so team members don't stomp on each other in the tracked file |
 | `0.11.2` | Security patch: clears 5 HIGH CVEs (pwsh 7.4.15, fast-uri 3.x override, npm bump) |
 | `0.11.1` | First-contact fixes for canonical SCS repos (default serialization path, lazy-mode provenance fill) |
