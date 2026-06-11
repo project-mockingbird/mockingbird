@@ -267,70 +267,68 @@ function buildTemplateFixtureWithId(
   return { id: templateId, items };
 }
 
-const rootMenuItemTmpl = buildTemplateFixtureWithId('Root Menu Item', [
-  'Menu Item Text', 'Menu Item Link', 'Menu Icon', 'Hide In Sitemap', 'Hide In Main Menu',
+const demoRootTmpl = buildTemplateFixtureWithId('Demo Root', [
+  'Demo Node Text', 'Demo Node Link', 'Demo Icon', 'Demo Flag One', 'Demo Flag Two',
 ]);
-const menuColumnTmpl = buildTemplateFixtureWithId('Menu Column', []);
-const menuLinkListTmpl = buildTemplateFixtureWithId('Menu Link List', [
-  'Menu Item Text', 'Menu Item Link', 'Menu Item Subtitle Text', 'Menu Item Description',
-  'Menu Icon', 'Hide In Sitemap', 'Hide In Main Menu', 'Menu Item Tags',
+const demoBlockTmpl = buildTemplateFixtureWithId('Demo Block', []);
+const demoLinkListTmpl = buildTemplateFixtureWithId('Demo Link List', [
+  'Demo Node Text', 'Demo Node Link', 'Demo Node Subtitle Text', 'Demo Node Description',
+  'Demo Icon', 'Demo Flag One', 'Demo Flag Two', 'Demo Node Tags',
 ]);
-const menuLinkTmpl = buildTemplateFixtureWithId('Menu Link', [
-  'Menu Item Text', 'Menu Item Link', 'Menu Item Description', 'Hide In Sitemap',
-  'Hide In Main Menu', 'Menu Item Tags',
+const demoLinkTmpl = buildTemplateFixtureWithId('Demo Link', [
+  'Demo Node Text', 'Demo Node Link', 'Demo Node Description', 'Demo Flag One',
+  'Demo Flag Two', 'Demo Node Tags',
 ]);
-const menuLinkTagTmpl = buildTemplateFixtureWithId('Menu Link Tag', [
-  'Menu Link Tag Text', 'Menu Link Tag CSS Class',
+const demoLinkTagTmpl = buildTemplateFixtureWithId('Demo Link Tag', [
+  'Demo Link Tag Text', 'Demo Link Tag CSS Class',
 ]);
-const menuSpotlightTmpl = buildTemplateFixtureWithId('Menu Spotlight', [
-  'Menu Spotlight Title', 'Menu Spotlight Text', 'Menu Spotlight Link',
+const demoFeatureTmpl = buildTemplateFixtureWithId('Demo Feature', [
+  'Demo Feature Title', 'Demo Feature Text', 'Demo Feature Link',
 ]);
-const staticNavMenuItemTmpl = buildTemplateFixtureWithId('Static Navigation Menu Item', [
-  'Static Link Item Text', 'Static Link Item Link',
+const demoStaticItemTmpl = buildTemplateFixtureWithId('Demo Static Item', [
+  'Demo Static Text', 'Demo Static Url',
 ]);
-const staticNavRootTmpl = buildTemplateFixtureWithId('Static Navigation Root', []);
-const labeledFieldTmpl = buildTemplateFixtureWithId('_Labeled Field', [
+const demoStaticRootTmpl = buildTemplateFixtureWithId('Demo Static Root', []);
+const baseAlphaTmpl = buildTemplateFixtureWithId('_Base Alpha', [
   'Field Label', 'Field Name',
 ]);
-const labeledFieldWithPlaceholderTmpl = buildTemplateFixtureWithId('_Labeled Field With Placeholder', [
-  'Field Placeholder Text',
+const baseBetaTmpl = buildTemplateFixtureWithId('_Base Beta', [
+  'Demo Placeholder Text',
 ]);
-const requireableFieldTmpl = buildTemplateFixtureWithId('_Requireable Field', [
-  'Is Field Required', 'Validation Error Message',
+const baseGammaTmpl = buildTemplateFixtureWithId('_Base Gamma', [
+  'Demo Required Flag', 'Demo Error Message',
 ]);
-// The real consuming app has concrete form-field templates that implement
-// all three form base interfaces (e.g. FormContactFieldTextbox). Emulate
-// that here by inheriting Form Button from _Labeled Field,
-// _Labeled Field With Placeholder, AND _Requireable Field - the
-// DynamicForm query spreads inline fragments on all three and needs at
+// A concrete type that implements all three base interfaces at once.
+// Concrete Four inherits _Base Alpha, _Base Beta, AND _Base Gamma - the
+// DemoGroup query spreads inline fragments on all three and needs at
 // least one concrete type to make the spread valid.
-const formButtonTmpl = buildTemplateFixtureWithId('Form Button', ['Form Button Text'], {
+const concreteFourTmpl = buildTemplateFixtureWithId('Concrete Four', ['Concrete Four Text'], {
   baseTemplateIds: [
-    labeledFieldTmpl.id,
-    labeledFieldWithPlaceholderTmpl.id,
-    requireableFieldTmpl.id,
+    baseAlphaTmpl.id,
+    baseBetaTmpl.id,
+    baseGammaTmpl.id,
   ],
 });
-const dynamicFormFieldsSectionTmpl = buildTemplateFixtureWithId('Dynamic Form Fields Section', []);
-const dynamicFormTmpl = buildTemplateFixtureWithId('Dynamic Form', [
-  'Form Name', 'Form Success Message', 'Form Failure Message',
+const demoGroupSectionTmpl = buildTemplateFixtureWithId('Demo Group Section', []);
+const demoGroupTmpl = buildTemplateFixtureWithId('Demo Group', [
+  'Group Name', 'Group Success Message', 'Group Failure Message',
 ]);
 
 const NAV_TEMPLATE_FIXTURES: ScsItem[] = [
-  ...rootMenuItemTmpl.items,
-  ...menuColumnTmpl.items,
-  ...menuLinkListTmpl.items,
-  ...menuLinkTmpl.items,
-  ...menuLinkTagTmpl.items,
-  ...menuSpotlightTmpl.items,
-  ...staticNavMenuItemTmpl.items,
-  ...staticNavRootTmpl.items,
-  ...labeledFieldTmpl.items,
-  ...labeledFieldWithPlaceholderTmpl.items,
-  ...requireableFieldTmpl.items,
-  ...formButtonTmpl.items,
-  ...dynamicFormFieldsSectionTmpl.items,
-  ...dynamicFormTmpl.items,
+  ...demoRootTmpl.items,
+  ...demoBlockTmpl.items,
+  ...demoLinkListTmpl.items,
+  ...demoLinkTmpl.items,
+  ...demoLinkTagTmpl.items,
+  ...demoFeatureTmpl.items,
+  ...demoStaticItemTmpl.items,
+  ...demoStaticRootTmpl.items,
+  ...baseAlphaTmpl.items,
+  ...baseBetaTmpl.items,
+  ...baseGammaTmpl.items,
+  ...concreteFourTmpl.items,
+  ...demoGroupSectionTmpl.items,
+  ...demoGroupTmpl.items,
 ];
 
 const SITE_TREE_FIXTURES: ScsItem[] = [
@@ -375,10 +373,10 @@ const SITE_TREE_FIXTURES: ScsItem[] = [
   // Include the page/template/rendering fixtures so the app instance built for
   // these tests also has the Home item registered with a full template chain.
   pageTemplate, pageSection, titleField, contentFieldDef, heroBannerRendering,
-  // Project templates (Root Menu Item, Menu Column, ...) - needed so the
+  // Project templates (Demo Root, Demo Block, ...) - needed so the
   // dynamic schema generator emits corresponding GraphQL types that the
-  // consuming ModularNavigation / StaticNavigation / DynamicForm queries
-  // reference via inline fragments.
+  // DemoNavigation / DemoStaticNav / DemoGroup queries reference via
+  // inline fragments.
   ...NAV_TEMPLATE_FIXTURES,
 ];
 
@@ -496,7 +494,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     // AnyItem/multilist/route-level id projections use canonical
     // lowercase-dashed (`88da64de-28b6-4620-b108-5d8c61564f6f`). The bare
     // 32-hex-uppercase form is reserved for the ComponentQuery executor's
-    // result rows (see Spotlight `data.datasource.links.results[*].id` -
+    // result rows (see Feature `data.datasource.links.results[*].id` -
     // covered by the contents-resolvers spec).
     const response = await siteApp.inject({
       method: 'POST',
@@ -829,10 +827,10 @@ describe('GraphQL site queries (Content SDK)', () => {
     });
   });
 
-  it('parses an inline fragment on a declared permissive type (RootMenuItem) without errors', async () => {
+  it('parses an inline fragment on a declared permissive type (DemoRoot) without errors', async () => {
     // The Home item's template ("Content Page") is NOT in the permissive
     // allowlist, so its runtime type resolves to the generic `Item`. The
-    // fragment `... on RootMenuItem` is valid syntax because the type is
+    // fragment `... on DemoRoot` is valid syntax because the type is
     // declared as an `AnyItem` implementer, and gets skipped at execution
     // because the runtime type doesn't match. What matters here is that
     // the query parses cleanly - no "Unknown type" or "Abstract type was
@@ -844,7 +842,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         query: `query($p:String!,$l:String!){
           item(path:$p,language:$l){
             id
-            ... on RootMenuItem { menuItemText { value } }
+            ... on DemoRoot { demoNodeText { value } }
           }
         }`,
         variables: { p: SITE_ROOT_PATH, l: 'en' },
@@ -964,26 +962,26 @@ describe('GraphQL site queries (Content SDK)', () => {
     }
   });
 
-  it('parses the consuming ModularNavigation query without errors (nested inline fragments)', async () => {
-    // Copy of the real ModularNavigationQuery from the headless app. We don't need
+  it('parses the consuming DemoNavigation query without errors (nested inline fragments)', async () => {
+    // Copy of the real DemoNavigationQuery from the headless app. We don't need
     // every template item to exist - what matters is that mercurius
-    // accepts the query: the inline fragments reference RootMenuItem and
-    // MenuColumn, both in the permissive allowlist, so the schema is
+    // accepts the query: the inline fragments reference DemoRoot and
+    // DemoBlock, both in the permissive allowlist, so the schema is
     // satisfied and empty results are valid.
     const res = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
       payload: {
-        query: `query ModularNavigation($datasource: String!, $language: String!) {
-          modularNavigation: item(path: $datasource, language: $language) {
+        query: `query DemoNavigation($datasource: String!, $language: String!) {
+          demoNavigation: item(path: $datasource, language: $language) {
             rootItems: children(includeTemplateIDs: ["{91B46589-67ED-45A3-8804-1563A7E39F4E}"]) {
               results {
-                ... on RootMenuItem {
+                ... on DemoRoot {
                   id
-                  menuItemText { value }
+                  demoNodeText { value }
                   columns: children(includeTemplateIDs: ["{AEDDB611-901F-4DC3-8F88-3596DC7B5DB3}"]) {
                     results {
-                      ... on MenuColumn { id }
+                      ... on DemoBlock { id }
                     }
                   }
                 }
@@ -1003,7 +1001,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     // The datasource doesn't resolve to an item in the site fixture, so the
     // outer item is null - that's fine. What matters is the absence of
     // "Unknown type" / "Abstract type was resolved to ..." errors.
-    expect('modularNavigation' in body.data).toBe(true);
+    expect('demoNavigation' in body.data).toBe(true);
   });
 
   it('children(includeTemplateIDs:) filters by both brace-wrapped and no-brace id formats', async () => {
@@ -1070,39 +1068,39 @@ describe('GraphQL site queries (Content SDK)', () => {
     }
   });
 
-  it('parses the consuming app ModularNavigation query verbatim', async () => {
+  it('parses a nested DemoNavigation query that spreads inline fragments', async () => {
     const res = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
       payload: {
-        query: `query ModularNavigation($datasource: String!, $language: String!) {
-          modularNavigation: item(path: $datasource, language: $language) {
+        query: `query DemoNavigation($datasource: String!, $language: String!) {
+          demoNavigation: item(path: $datasource, language: $language) {
             rootItems:children(includeTemplateIDs:["{91B46589-67ED-45A3-8804-1563A7E39F4E}"]) {
               results {
-                ... on RootMenuItem {
-                  id, menuItemText { value }, menuItemLink { jsonValue }, menuIcon { jsonValue },
-                  hideInSitemap { boolValue }, hideInMainMenu { boolValue },
+                ... on DemoRoot {
+                  id, demoNodeText { value }, demoNodeLink { jsonValue }, demoIcon { jsonValue },
+                  demoFlagOne { boolValue }, demoFlagTwo { boolValue },
                   columns:children(includeTemplateIDs:["{AEDDB611-901F-4DC3-8F88-3596DC7B5DB3}"]) {
                     results {
-                      ... on MenuColumn {
+                      ... on DemoBlock {
                         id,
                         elements:children(includeTemplateIDs:["{19E9E732-A61E-40A1-B63A-BF46787828B8}","{126AE507-E463-4EEE-A4FF-8CB5855A1CD4}","{3308F3C1-7B11-47DD-8720-4E962C5FE8E5}"]) {
                           results {
                             id, template { id, name },
-                            ... on MenuLinkList {
-                              menuItemText { value }, menuItemLink { jsonValue },
-                              menuItemSubtitleText { value }, menuItemDescription { value },
-                              menuIcon { jsonValue }, hideInSitemap { boolValue }, hideInMainMenu { boolValue },
-                              menuItemTags { targetItems { ... on MenuLinkTag { menuLinkTagText { value }, menuLinkTagCssClass { value } } } },
+                            ... on DemoLinkList {
+                              demoNodeText { value }, demoNodeLink { jsonValue },
+                              demoNodeSubtitleText { value }, demoNodeDescription { value },
+                              demoIcon { jsonValue }, demoFlagOne { boolValue }, demoFlagTwo { boolValue },
+                              demoNodeTags { targetItems { ... on DemoLinkTag { demoLinkTagText { value }, demoLinkTagCssClass { value } } } },
                               links: children(includeTemplateIDs:["{C792B58A-DB19-408F-9D55-09A28C89C00A}"]){
-                                results { ... on MenuLink {
-                                  id, menuItemText { value }, menuItemLink { jsonValue }, menuItemDescription { value },
-                                  hideInSitemap { boolValue }, hideInMainMenu { boolValue },
-                                  menuItemTags { targetItems { ... on MenuLinkTag { menuLinkTagText { value }, menuLinkTagCssClass { value } } } }
+                                results { ... on DemoLink {
+                                  id, demoNodeText { value }, demoNodeLink { jsonValue }, demoNodeDescription { value },
+                                  demoFlagOne { boolValue }, demoFlagTwo { boolValue },
+                                  demoNodeTags { targetItems { ... on DemoLinkTag { demoLinkTagText { value }, demoLinkTagCssClass { value } } } }
                                 } }
                               }
                             },
-                            ... on MenuSpotlight { menuSpotlightTitle { value }, menuSpotlightText { value }, menuSpotlightLink { jsonValue } }
+                            ... on DemoFeature { demoFeatureTitle { value }, demoFeatureText { value }, demoFeatureLink { jsonValue } }
                           }
                         }
                       }
@@ -1122,31 +1120,31 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.errors).toBeUndefined();
-    // The datasource isn't a real item, so the outer modularNavigation is
+    // The datasource isn't a real item, so the outer demoNavigation is
     // null. The test only verifies that the query parses + validates
     // against the generated schema without throwing "Unknown type" or
     // "Cannot query field" errors.
-    expect('modularNavigation' in body.data).toBe(true);
+    expect('demoNavigation' in body.data).toBe(true);
   });
 
-  it('parses the consuming app StaticNavigation query verbatim', async () => {
+  it('parses a nested DemoStaticNav query that spreads inline fragments', async () => {
     const res = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
       payload: {
-        query: `query StaticNavigation($datasource: String!, $language: String!) {
-          staticNavigation: item(path: $datasource, language: $language) {
+        query: `query DemoStaticNav($datasource: String!, $language: String!) {
+          demoStaticNav: item(path: $datasource, language: $language) {
             links: children(includeTemplateIDs: ["{8B5D4F2A-70DA-4883-934D-F19014DE169F}"]) {
               results {
-                ... on StaticNavigationMenuItem {
-                  id, staticLinkItemText { value }, staticLinkItemLink { jsonValue },
+                ... on DemoStaticItem {
+                  id, demoStaticText { value }, demoStaticUrl { jsonValue },
                   links: children(includeTemplateIDs: ["{8B5D4F2A-70DA-4883-934D-F19014DE169F}"]) {
-                    results { ... on StaticNavigationMenuItem { id, staticLinkItemText { value }, staticLinkItemLink { jsonValue } } }
+                    results { ... on DemoStaticItem { id, demoStaticText { value }, demoStaticUrl { jsonValue } } }
                   }
                 }
               }
             }
-            ... on StaticNavigationRoot { id }
+            ... on DemoStaticRoot { id }
           }
         }`,
         variables: {
@@ -1159,25 +1157,25 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(res.json().errors).toBeUndefined();
   });
 
-  it('parses the consuming app DynamicForm query verbatim (uses _Labeled/_Requireable base interfaces)', async () => {
+  it('parses a DemoGroup query that spreads inline fragments on the _Base Alpha / _Base Gamma interfaces', async () => {
     const res = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
       payload: {
-        query: `query DynamicForm($datasource: String!, $language: String!) {
+        query: `query DemoGroup($datasource: String!, $language: String!) {
           form: item(path: $datasource, language: $language) {
-            ... on DynamicForm {
-              formName { value }, formSuccessMessage { value }, formFailureMessage { value },
+            ... on DemoGroup {
+              groupName { value }, groupSuccessMessage { value }, groupFailureMessage { value },
               fields: children(includeTemplateIDs:["{10C64411-CC89-4B52-96FB-8B9478C49562}"]) {
                 results {
-                  ... on DynamicFormFieldsSection {
+                  ... on DemoGroupSection {
                     elements:children(includeTemplateIDs:["{3108BC9F-0CC9-4EF6-9364-734F983213BC}"]) {
                       results {
                         id, template { name },
-                        ... on _LabeledField { fieldLabel { value }, fieldName { value } }
-                        ... on _LabeledFieldWithPlaceholder { fieldPlaceholderText { value } }
-                        ... on _RequireableField { isFieldRequired { boolValue }, validationErrorMessage { value } }
-                        ... on FormButton { formButtonText { value } }
+                        ... on _BaseAlpha { fieldLabel { value }, fieldName { value } }
+                        ... on _BaseBeta { demoPlaceholderText { value } }
+                        ... on _BaseGamma { demoRequiredFlag { boolValue }, demoErrorMessage { value } }
+                        ... on ConcreteFour { concreteFourText { value } }
                       }
                     }
                   }
@@ -1197,20 +1195,20 @@ describe('GraphQL site queries (Content SDK)', () => {
   });
 
   it('sets __typename to the generated template type name and resolves template-specific fields', async () => {
-    // Fixture: a full Root Menu Item template (section + field definition)
-    // so the schema generator emits `type RootMenuItem implements AnyItem`
-    // with a `menuItemText` field. The concrete test item's template
+    // Fixture: a full Demo Root template (section + field definition)
+    // so the schema generator emits `type DemoRoot implements AnyItem`
+    // with a `demoNodeText` field. The concrete test item's template
     // points at this generated type, so inline fragments spread.
-    const tmpl = buildTemplateFixtureWithId('Root Menu Item', ['Menu Item Text']);
-    const rootMenuItem: ScsItem = makeItem({
+    const tmpl = buildTemplateFixtureWithId('Demo Root', ['Demo Node Text']);
+    const demoRootItem: ScsItem = makeItem({
       id: 'rmi00000-rmi0-rmi0-rmi0-rmi000000000',
       path: '/sitecore/content/site/Home/Menu/MainMenu',
       template: tmpl.id,
       sharedFields: [
-        { id: 'mit00001-0000-0000-0000-000000000000', hint: 'Menu Item Text', value: 'Products' },
+        { id: 'mit00001-0000-0000-0000-000000000000', hint: 'Demo Node Text', value: 'Products' },
       ],
     });
-    const app = await createTestApp([...tmpl.items, rootMenuItem]);
+    const app = await createTestApp([...tmpl.items, demoRootItem]);
     try {
       const res = await app.inject({
         method: 'POST',
@@ -1220,7 +1218,7 @@ describe('GraphQL site queries (Content SDK)', () => {
             item(path:"/sitecore/content/site/Home/Menu/MainMenu", language:"en"){
               __typename
               id
-              ... on RootMenuItem { menuItemText { value } }
+              ... on DemoRoot { demoNodeText { value } }
             }
           }`,
         },
@@ -1228,8 +1226,8 @@ describe('GraphQL site queries (Content SDK)', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.errors).toBeUndefined();
-      expect(body.data.item.__typename).toBe('RootMenuItem');
-      expect(body.data.item.menuItemText.value).toBe('Products');
+      expect(body.data.item.__typename).toBe('DemoRoot');
+      expect(body.data.item.demoNodeText.value).toBe('Products');
     } finally {
       await app.close();
     }
@@ -1450,13 +1448,13 @@ describe('GraphQL site queries (Content SDK)', () => {
         id: parentId,
         path: '/sitecore/content/tenant-parent',
       });
-      const menuLinkTmpl = 'c792b58a-db19-408f-9d55-09a28c89c00a';
+      const demoLinkTmpl = 'c792b58a-db19-408f-9d55-09a28c89c00a';
 
       const canonicalChild = makeItem({
         id: '7621f425-e10d-44a9-8d23-f2b7d5f6cd87',
         parent: parentId,
         path: '/sitecore/content/tenant-parent/Document Store',
-        template: menuLinkTmpl,
+        template: demoLinkTmpl,
       });
       // Parent reference stored brace-wrapped + uppercase - the real-
       // world SCS writer variant that masked items from children()
@@ -1465,14 +1463,14 @@ describe('GraphQL site queries (Content SDK)', () => {
         id: '97ca43a5-3b10-473e-9326-5044c75f259f',
         parent: `{${parentId.toUpperCase()}}`,
         path: '/sitecore/content/tenant-parent/Catalog Resources',
-        template: menuLinkTmpl,
+        template: demoLinkTmpl,
       });
       // Parent reference stored uppercase without braces.
       const upperChild = makeItem({
         id: 'e3f93dda-209c-4e3a-a6f4-a4438e459652',
         parent: parentId.toUpperCase(),
         path: '/sitecore/content/tenant-parent/Resource Catalog',
-        template: menuLinkTmpl,
+        template: demoLinkTmpl,
       });
 
       const app = await createTestApp([parent, canonicalChild, bracedChild, upperChild]);
@@ -1492,7 +1490,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"${parentId}",language:"en"){children(includeTemplateIDs:["${menuLinkTmpl}"]){results{id}}}}`,
+            query: `{item(path:"${parentId}",language:"en"){children(includeTemplateIDs:["${demoLinkTmpl}"]){results{id}}}}`,
           },
         });
         const body = response.json();
@@ -1568,13 +1566,13 @@ describe('GraphQL site queries (Content SDK)', () => {
       // empty strings (Gap 1 from 0.1.12 - Edge never returns null on a
       // template-declared field); the shape is still non-null, it's just
       // the empty object now.
-      const app = await buildAppWithFieldOfType('MenuIcon', 'Image', false);
+      const app = await buildAppWithFieldOfType('DemoIcon', 'Image', false);
       try {
         const response = await app.inject({
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/test-item",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/test-item",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -1588,16 +1586,16 @@ describe('GraphQL site queries (Content SDK)', () => {
     it('unset general link field on a template-declared field returns { value: { href: "" } }', async () => {
       // 0.4.0.5: empty authored Link emits `{href:""}` in Sitecore. The
       // 0.4.0 collapse to generic `{value:{}}` regressed this - a real
-      // Spotlight rendering with an unauthored MenuItemLink showed
+      // Feature rendering with an unauthored DemoNodeLink showed
       // `links.results[0].link.jsonValue.value` as `{}` locally vs
       // `{"href":""}` in Sitecore. Links always carry an `href` key even empty.
-      const app = await buildAppWithFieldOfType('MenuItemLink', 'General Link', false);
+      const app = await buildAppWithFieldOfType('DemoNodeLink', 'General Link', false);
       try {
         const response = await app.inject({
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/test-item",language:"en"){field(name:"MenuItemLink"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/test-item",language:"en"){field(name:"DemoNodeLink"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -1615,7 +1613,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000001001',
-            hint: 'MenuIcon',
+            hint: 'DemoIcon',
             value: '<image mediaid="{DEADBEEF-DEAD-BEEF-DEAD-BEEFDEADBEEF}" />',
           },
         ],
@@ -1626,7 +1624,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-broken-image",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-broken-image",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -1658,7 +1656,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000003001',
-            hint: 'MenuIcon',
+            hint: 'DemoIcon',
             value: `<image mediaid="{${mediaId.toUpperCase()}}" alt="Hero" hspace="30" vspace="20" class="custom-img" title="Hero image" border="0" />`,
           },
         ],
@@ -1669,7 +1667,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-image-attrs",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-image-attrs",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -1711,7 +1709,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000003002',
-            hint: 'MenuIcon',
+            hint: 'DemoIcon',
             value: `<image mediaid="{${mediaId.toUpperCase()}}" alt="" class="" hspace="" vspace="" title="" />`,
           },
         ],
@@ -1722,7 +1720,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-image-empties",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-image-empties",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -1754,7 +1752,7 @@ describe('GraphQL site queries (Content SDK)', () => {
       const mediaId = 'f5b4216f-704f-4594-a158-5203055a74b8';
       const media = makeItem({
         id: mediaId,
-        path: '/sitecore/media library/site/spotlight-image-backgrounds/link-events-2',
+        path: '/sitecore/media library/site/demo-images/demo-photo',
         sharedFields: [
           { id: 'c06867fe-9a43-4c7d-b739-48780492d06f', hint: 'Extension', value: 'jpg' },
           { id: '22eac599-f13b-4607-a89d-c091763a467d', hint: 'Width', value: '1650' },
@@ -1767,7 +1765,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000003005',
-            hint: 'MenuIcon',
+            hint: 'DemoIcon',
             value: `<image mediaid="{${mediaId.toUpperCase()}}" />`,
           },
         ],
@@ -1778,14 +1776,14 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-d2973111",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-d2973111",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
         expect(body.errors).toBeUndefined();
         expect(body.data.item.field.jsonValue).toEqual({
           value: {
-            src: '/-/media/site/spotlight-image-backgrounds/link-events-2.jpg?h=1079&iar=0&w=1650',
+            src: '/-/media/site/demo-images/demo-photo.jpg?h=1079&iar=0&w=1650',
             alt: '',
             width: '1650',
             height: '1079',
@@ -1826,7 +1824,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000003006',
-            hint: 'MenuIcon',
+            hint: 'DemoIcon',
             value: `<image mediaid="{${mediaId.toUpperCase()}}" alt="Custom" width="50" />`,
           },
         ],
@@ -1837,7 +1835,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-alt-override",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-alt-override",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -1880,7 +1878,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000003007',
-            hint: 'MenuIcon',
+            hint: 'DemoIcon',
             value: `<image mediaid="{${mediaId.toUpperCase()}}" />`,
           },
         ],
@@ -1891,7 +1889,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-versioned-alt",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-versioned-alt",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2103,7 +2101,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000003003',
-            hint: 'MenuItemLink',
+            hint: 'DemoNodeLink',
             value: '<link linktype="external" url="https://x.test" target="_blank" text="Docs" anchor="" />',
           },
         ],
@@ -2114,7 +2112,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-link-external",language:"en"){field(name:"MenuItemLink"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-link-external",language:"en"){field(name:"DemoNodeLink"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2146,7 +2144,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000003004',
-            hint: 'MenuItemLink',
+            hint: 'DemoNodeLink',
             value: `<link text="About" anchor="" linktype="internal" class="" title="" target="" querystring="" id="{${targetId.toUpperCase()}}" />`,
           },
         ],
@@ -2157,7 +2155,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/site/Home/holder-link-internal",language:"en"){field(name:"MenuItemLink"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/site/Home/holder-link-internal",language:"en"){field(name:"DemoNodeLink"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2195,8 +2193,8 @@ describe('GraphQL site queries (Content SDK)', () => {
         id: '66666666-0000-0000-0000-000000000001',
         path: '/sitecore/content/holder-regression',
         sharedFields: [
-          { id: 'ffffffff-0000-0000-0000-000000002001', hint: 'MenuIcon', value: `<image mediaid="{${mediaId.toUpperCase()}}" alt="X" />` },
-          { id: 'ffffffff-0000-0000-0000-000000002002', hint: 'MenuItemLink', value: '<link text="X" linktype="external" url="https://example.com" target="_blank" />' },
+          { id: 'ffffffff-0000-0000-0000-000000002001', hint: 'DemoIcon', value: `<image mediaid="{${mediaId.toUpperCase()}}" alt="X" />` },
+          { id: 'ffffffff-0000-0000-0000-000000002002', hint: 'DemoNodeLink', value: '<link text="X" linktype="external" url="https://example.com" target="_blank" />' },
         ],
       });
       const app = await createTestApp([media, holder]);
@@ -2206,8 +2204,8 @@ describe('GraphQL site queries (Content SDK)', () => {
           url: '/api/graphql',
           payload: {
             query: `{item(path:"/sitecore/content/holder-regression",language:"en"){
-              img: field(name:"MenuIcon"){jsonValue}
-              lnk: field(name:"MenuItemLink"){jsonValue}
+              img: field(name:"DemoIcon"){jsonValue}
+              lnk: field(name:"DemoNodeLink"){jsonValue}
             }}`,
           },
         });
@@ -2229,7 +2227,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     // Real Sitecore orders children by the numeric __Sortorder standard
     // field (empty/missing → 100) and breaks ties by the item name,
     // case-insensitive. Mockingbird was returning items in indexing order,
-    // which manifested as scrambled nav on the consuming app.
+    // which manifested as scrambled nav rendering.
     it('children are sorted by __Sortorder numeric asc, then by name', async () => {
       const parent: ScsItem = makeItem({
         id: 'so000000-0000-0000-0000-000000000000',
@@ -2368,8 +2366,8 @@ describe('GraphQL site queries (Content SDK)', () => {
         id: 'wr000000-0000-0000-0000-000000000002',
         path: '/sitecore/content/wrapper-checkbox',
         sharedFields: [
-          { id: 'ffffffff-0000-0000-0000-000000000001', hint: 'HideInSitemap', value: '1' },
-          { id: 'ffffffff-0000-0000-0000-000000000002', hint: 'HideInMainMenu', value: '0' },
+          { id: 'ffffffff-0000-0000-0000-000000000001', hint: 'DemoFlagOne', value: '1' },
+          { id: 'ffffffff-0000-0000-0000-000000000002', hint: 'DemoFlagTwo', value: '0' },
         ],
       });
       const app = await createTestApp([item]);
@@ -2379,8 +2377,8 @@ describe('GraphQL site queries (Content SDK)', () => {
           url: '/api/graphql',
           payload: {
             query: `{item(path:"/sitecore/content/wrapper-checkbox",language:"en"){
-              on: field(name:"HideInSitemap"){boolValue}
-              off: field(name:"HideInMainMenu"){boolValue}
+              on: field(name:"DemoFlagOne"){boolValue}
+              off: field(name:"DemoFlagTwo"){boolValue}
             }}`,
           },
         });
@@ -2425,7 +2423,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         id: 'ho000000-0000-0000-0000-000000000001',
         path: '/sitecore/content/holder-image',
         sharedFields: [
-          { id: 'ffffffff-0000-0000-0000-000000000010', hint: 'MenuIcon', value: `<image mediaid="{${mediaId.toUpperCase()}}" />` },
+          { id: 'ffffffff-0000-0000-0000-000000000010', hint: 'DemoIcon', value: `<image mediaid="{${mediaId.toUpperCase()}}" />` },
         ],
       });
       const app = await createTestApp([media, holder]);
@@ -2434,7 +2432,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-image",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-image",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2466,7 +2464,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-image-unset",language:"en"){field(name:"MenuIcon"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-image-unset",language:"en"){field(name:"DemoIcon"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2485,7 +2483,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000000020',
-            hint: 'MenuItemLink',
+            hint: 'DemoNodeLink',
             value: '<link text="Documentation" linktype="external" url="https://docs.site.example.com" target="_blank" />',
           },
         ],
@@ -2496,7 +2494,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-link-ext",language:"en"){field(name:"MenuItemLink"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-link-ext",language:"en"){field(name:"DemoNodeLink"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2523,7 +2521,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000000021',
-            hint: 'MenuItemLink',
+            hint: 'DemoNodeLink',
             value: `<link text="Contact Us" linktype="internal" id="{${targetId.toUpperCase()}}" />`,
           },
         ],
@@ -2534,7 +2532,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/site/Home/holder-link-int",language:"en"){field(name:"MenuItemLink"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/site/Home/holder-link-int",language:"en"){field(name:"DemoNodeLink"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2556,7 +2554,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000000022',
-            hint: 'MenuItemLink',
+            hint: 'DemoNodeLink',
             value: '<link text="Gone" linktype="internal" id="{DEADBEEF-DEAD-BEEF-DEAD-BEEFDEADBEEF}" />',
           },
         ],
@@ -2567,7 +2565,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/site/Home/holder-link-broken",language:"en"){field(name:"MenuItemLink"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/site/Home/holder-link-broken",language:"en"){field(name:"DemoNodeLink"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2593,7 +2591,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         sharedFields: [
           {
             id: 'ffffffff-0000-0000-0000-000000000023',
-            hint: 'MenuItemLink',
+            hint: 'DemoNodeLink',
             value: `<link text="Brochure" linktype="media" id="{${mediaId.toUpperCase()}}" />`,
           },
         ],
@@ -2604,7 +2602,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/holder-link-media",language:"en"){field(name:"MenuItemLink"){jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/holder-link-media",language:"en"){field(name:"DemoNodeLink"){jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2621,7 +2619,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         id: 'wr000000-0000-0000-0000-000000000003',
         path: '/sitecore/content/wrapper-text',
         sharedFields: [
-          { id: 'ffffffff-0000-0000-0000-000000000030', hint: 'MenuItemText', value: 'Products' },
+          { id: 'ffffffff-0000-0000-0000-000000000030', hint: 'DemoNodeText', value: 'Products' },
         ],
       });
       const app = await createTestApp([item]);
@@ -2630,7 +2628,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/wrapper-text",language:"en"){field(name:"MenuItemText"){value jsonValue}}}`,
+            query: `{item(path:"/sitecore/content/wrapper-text",language:"en"){field(name:"DemoNodeText"){value jsonValue}}}`,
           },
         });
         const body = response.json();
@@ -2670,7 +2668,7 @@ describe('GraphQL site queries (Content SDK)', () => {
 // (General Link, Image - anything whose pipeline processor reads
 // `args.engine`) crashed with TypeError on `args.engine.getItemById`, the
 // `field(name:)` resolver bubbled the throw up, Mercurius caught it, and
-// the field came back as null. Spotlight components consuming
+// the field came back as null. Feature components consuming
 // `link.link.jsonValue` then crashed with "Cannot read properties of null
 // (reading 'jsonValue')". Same bug class as 0.7.5.0 alias-bypass
 // (`handleEdgeAlias` passing `{}`); same fix family: thread the parent
