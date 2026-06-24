@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { useTemplateSchema } from '@/hooks/useItems';
 import { useFieldTypes } from '@/hooks/useValidation';
 import { useTabState } from '@/state/useTabState';
@@ -30,7 +30,19 @@ interface TemplateBuilderProps {
   onChanges: (changes: BuilderChanges) => void;
 }
 
-export function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
+export interface TemplateBuilderHandle {
+  /**
+   * Return the complete staged changes, committing any text the user typed into
+   * the add-section / add-field inputs but never confirmed with Enter. Save
+   * calls this so in-progress input is persisted instead of silently dropped.
+   */
+  flush: () => BuilderChanges;
+  /** Clear all local staging (called after a successful save). */
+  reset: () => void;
+}
+
+export const TemplateBuilder = forwardRef<TemplateBuilderHandle, TemplateBuilderProps>(
+  function TemplateBuilder({ sections, onChanges }, ref) {
   const { data: fieldTypes } = useFieldTypes();
   const [fieldEdits, setFieldEdits] = useState<Map<string, Record<string, string>>>(new Map());
   const [newFieldName, setNewFieldName] = useState<Record<string, string>>({});
@@ -76,6 +88,30 @@ export function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
     setNewSectionName('');
     reportChanges(fieldEdits, pendingNewFields, updated);
   };
+
+  useImperativeHandle(ref, () => ({
+    flush: (): BuilderChanges => {
+      const newSections = [...pendingNewSections];
+      const looseSection = newSectionName.trim();
+      if (looseSection) newSections.push(looseSection);
+      const newFields = [...pendingNewFields];
+      for (const [sectionName, raw] of Object.entries(newFieldName)) {
+        const name = raw.trim();
+        if (name) {
+          newFields.push({ sectionName, name, fieldType: newFieldType[sectionName] || 'Single-Line Text' });
+        }
+      }
+      return { fieldUpdates: fieldEdits, newFields, newSections };
+    },
+    reset: () => {
+      setFieldEdits(new Map());
+      setNewFieldName({});
+      setNewFieldType({});
+      setPendingNewFields([]);
+      setNewSectionName('');
+      setPendingNewSections([]);
+    },
+  }), [fieldEdits, newFieldName, newFieldType, pendingNewFields, newSectionName, pendingNewSections]);
 
   const rowGrid = 'grid grid-cols-[1fr_150px_1fr_60px_60px] gap-px px-3 py-1 border-b items-center';
 
@@ -203,7 +239,7 @@ export function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
       </div>
     </div>
   );
-}
+});
 
 interface TemplateEditorProps {
   item: ItemDetail;
@@ -214,11 +250,12 @@ interface TemplateEditorProps {
   onFieldChange: (fieldId: string, value: string) => void;
   builderChanges?: BuilderChanges | null;
   onBuilderChanges?: (changes: BuilderChanges) => void;
+  builderRef?: React.Ref<TemplateBuilderHandle>;
   editing?: boolean;
   onNavigate?: (id: string) => void;
 }
 
-export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVersion, viewMode, onFieldChange, onBuilderChanges, editing = true, onNavigate }: TemplateEditorProps) {
+export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVersion, viewMode, onFieldChange, onBuilderChanges, builderRef, editing = true, onNavigate }: TemplateEditorProps) {
   const { state } = useTabState();
   const editedFields = state.editedFields;
   const { data: schema } = useTemplateSchema(item.id);
@@ -341,7 +378,7 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
     }
     return (
       <div className="space-y-4">
-        <TemplateBuilder sections={schema!.builderSections!} onChanges={onBuilderChanges!} />
+        <TemplateBuilder ref={builderRef} sections={schema!.builderSections!} onChanges={onBuilderChanges!} />
       </div>
     );
   }

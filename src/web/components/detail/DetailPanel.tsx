@@ -1,5 +1,5 @@
 
-import { useState, useMemo, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState, FileLoadError } from '@/components/ui/empty-states';
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Icon } from '@/lib/icon';
 import { mdiFileOutline } from '@mdi/js';
 import { toast } from 'sonner';
-import { TemplateEditor, type BuilderChanges } from './TemplateEditor';
+import { TemplateEditor, type BuilderChanges, type TemplateBuilderHandle } from './TemplateEditor';
 import { applyBuilderStructuralChanges } from '@/lib/builder-save';
 import { RenderingsFieldEditor } from './field-editors/renderings';
 import { QuickInfo } from './QuickInfo';
@@ -52,6 +52,7 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
     [navigate, tabId],
   );
   const [builderChanges, setBuilderChanges] = useState<BuilderChanges | null>(null);
+  const builderRef = useRef<TemplateBuilderHandle>(null);
   const selectedLang = state.language;
   const setSelectedLang = useCallback(
     (lang: string) => navigate({ language: lang }),
@@ -132,6 +133,7 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
       toast.success('Saved');
       setEditedFields({});
       setBuilderChanges(null);
+      builderRef.current?.reset();
       queryClient.invalidateQueries({ queryKey: ['item', selectedId] });
       queryClient.invalidateQueries({ queryKey: ['template-schema', selectedId] });
       queryClient.invalidateQueries({ queryKey: ['tree'] });
@@ -147,18 +149,22 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
   };
 
   const handleSave = () => {
+    // Flush the Builder first so text typed into an add-section / add-field
+    // input but not yet confirmed with Enter is still persisted. Falls back to
+    // the reported builderChanges when the Builder isn't mounted.
+    const structural = builderRef.current?.flush() ?? builderChanges;
     const allFields: Record<string, string> = { ...editedFields };
-    if (builderChanges) {
-      for (const [fieldId, props] of builderChanges.fieldUpdates) {
+    if (structural) {
+      for (const [fieldId, props] of structural.fieldUpdates) {
         for (const [propId, val] of Object.entries(props)) {
           allFields[`${fieldId}:${propId}`] = val;
         }
       }
     }
-    const hasStructural = builderChanges !== null &&
-      (builderChanges.newSections.length > 0 || builderChanges.newFields.length > 0);
+    const hasStructural = structural !== null &&
+      (structural.newSections.length > 0 || structural.newFields.length > 0);
     if (Object.keys(allFields).length === 0 && !hasStructural) return;
-    saveMutation.mutate({ fields: allFields, structural: builderChanges });
+    saveMutation.mutate({ fields: allFields, structural });
   };
 
   const dirty = Object.keys(editedFields).length > 0 ||
@@ -278,6 +284,7 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
                 onFieldChange={handleFieldChange}
                 builderChanges={builderChanges}
                 onBuilderChanges={setBuilderChanges}
+                builderRef={builderRef}
                 editing={!readOnly}
                 onNavigate={onNavigate}
               />
