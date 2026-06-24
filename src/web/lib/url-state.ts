@@ -5,8 +5,32 @@ export const KNOWN_DIALOGS = [
 
 export type DialogName = typeof KNOWN_DIALOGS[number];
 
-export const KNOWN_TABS = ['content', 'standard', 'layout', 'yaml'] as const;
+export const KNOWN_TABS = ['builder', 'content', 'standard', 'layout', 'yaml'] as const;
 export type TabName = typeof KNOWN_TABS[number];
+
+/**
+ * Resolve which detail tab is active for an item. The Builder tab exists only
+ * for template items and Yaml only when the item is editable, so a persisted
+ * tab that isn't valid for the current item must fall back rather than leave the
+ * Tabs control pointing at a non-existent panel. Templates default to Builder;
+ * everything else uses the configured default tab.
+ */
+export function resolveDetailTab(opts: {
+  persisted: TabName | null;
+  isTemplate: boolean;
+  readOnly: boolean;
+  settingDefault: TabName;
+}): TabName {
+  const valid: TabName[] = [
+    ...(opts.isTemplate ? (['builder'] as TabName[]) : []),
+    'content',
+    'standard',
+    'layout',
+    ...(opts.readOnly ? [] : (['yaml'] as TabName[])),
+  ];
+  if (opts.persisted && valid.includes(opts.persisted)) return opts.persisted;
+  return opts.isTemplate ? 'builder' : opts.settingDefault;
+}
 
 export type NavState = {
   selectedId: string | null;

@@ -18,6 +18,7 @@ import { QuickInfo } from './QuickInfo';
 import { VersionTrimmer } from './VersionTrimmer';
 import { UnusedDatasourcesBanner } from './UnusedDatasourcesBanner';
 import type { ItemDetail } from '@/lib/types';
+import { resolveDetailTab, type TabName } from '@/lib/url-state';
 import { useSettings } from '@/settings/SettingsProvider';
 import { useTabState } from '@/state/useTabState';
 import { workspaceStore } from '@/state/workspaceStore';
@@ -235,15 +236,38 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
         <VersionTrimmer item={item} language={selectedLang} />
         <UnusedDatasourcesBanner item={item} />
         <Tabs
-          value={state.detailTab ?? settings['editor.defaultTab']}
-          onValueChange={(v) => navigate({ detailTab: v as 'content' | 'standard' | 'layout' | 'yaml' })}
+          value={resolveDetailTab({
+            persisted: state.detailTab,
+            isTemplate: item.type === 'template',
+            readOnly,
+            settingDefault: settings['editor.defaultTab'] as TabName,
+          })}
+          onValueChange={(v) => navigate({ detailTab: v as TabName })}
         >
           <TabsList>
+            {item.type === 'template' && <TabsTrigger value="builder">Builder</TabsTrigger>}
             <TabsTrigger value="content">Content</TabsTrigger>
             <TabsTrigger value="standard">Standard Fields</TabsTrigger>
             <TabsTrigger value="layout">Layout</TabsTrigger>
             {!readOnly && <TabsTrigger value="yaml">Yaml</TabsTrigger>}
           </TabsList>
+          {item.type === 'template' && (
+            <TabsContent value="builder" className="space-y-4">
+              <QuickInfo item={item} onNavigate={onNavigate} />
+              <TemplateEditor
+                item={item}
+                sectionFilter="builder"
+                selectedLang={selectedLang}
+                selectedVersion={selectedVersion}
+                viewMode={viewMode}
+                onFieldChange={handleFieldChange}
+                builderChanges={builderChanges}
+                onBuilderChanges={setBuilderChanges}
+                editing={!readOnly}
+                onNavigate={onNavigate}
+              />
+            </TabsContent>
+          )}
           <TabsContent value="content" className="space-y-4">
             <QuickInfo item={item} onNavigate={onNavigate} />
             <TemplateEditor
@@ -253,8 +277,6 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
               selectedVersion={selectedVersion}
               viewMode={viewMode}
               onFieldChange={handleFieldChange}
-              builderChanges={builderChanges}
-              onBuilderChanges={setBuilderChanges}
               editing={!readOnly}
               onNavigate={onNavigate}
             />

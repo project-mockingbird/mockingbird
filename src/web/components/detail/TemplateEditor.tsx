@@ -173,7 +173,7 @@ function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
 
 interface TemplateEditorProps {
   item: ItemDetail;
-  sectionFilter: 'content' | 'standard';
+  sectionFilter: 'content' | 'standard' | 'builder';
   selectedLang: string;
   selectedVersion: number;
   viewMode: 'normal' | 'raw';
@@ -293,7 +293,24 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
   // get the Builder so the user can add the first section/field, exactly as
   // Sitecore's Template Builder does. The API only sets `builderSections` for
   // template items, so its presence (even empty) is the template signal.
-  const showBuilder = sectionFilter === 'content' && item.type === 'template' && Array.isArray(schema?.builderSections) && !!onBuilderChanges;
+  const showBuilder = item.type === 'template' && Array.isArray(schema?.builderSections) && !!onBuilderChanges;
+
+  // The Builder is its own tab (before Content). In builder mode render ONLY the
+  // Builder - never the field editors.
+  if (sectionFilter === 'builder') {
+    if (!showBuilder) {
+      return (
+        <div className="text-sm text-muted-foreground p-4">
+          The Builder is available for template items only.
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-4">
+        <TemplateBuilder sections={schema!.builderSections!} onChanges={onBuilderChanges!} />
+      </div>
+    );
+  }
 
   // Standard tab fallback when no schema: show only the renamed-by-convention "Standard" buckets
   if (sectionFilter === 'standard' && useFallback) {
@@ -306,13 +323,6 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
 
   return (
     <div className="space-y-4">
-      {showBuilder && (
-        <TemplateBuilder
-          sections={schema!.builderSections!}
-          onChanges={onBuilderChanges!}
-        />
-      )}
-
       {useFallback ? (
         <div className="space-y-3">
           {item.sharedFields.length > 0 && (
