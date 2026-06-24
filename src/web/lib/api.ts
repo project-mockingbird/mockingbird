@@ -86,7 +86,7 @@ export const api = {
       body: JSON.stringify({ type: 'moveTo', ...data }),
     }),
   refreshItem: (id: string) =>
-    request<{ rootItemId: string; refreshed: number; item: ItemDetail }>(
+    request<{ rootItemId: string; refreshed: number; removed: number; item: ItemDetail }>(
       `/api/items/${bareGuid(id)}/refresh`,
       { method: 'POST', body: '{}' },
     ),

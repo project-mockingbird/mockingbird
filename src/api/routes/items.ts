@@ -443,6 +443,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       return reply.status(200).send({
         rootItemId: result.rootItemId,
         refreshed: result.refreshed,
+        removed: result.removed,
         item: serializeItemNode(node, engine),
       });
     } catch (err: unknown) {
