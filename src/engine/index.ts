@@ -18,6 +18,7 @@ import {
   RENDERING_TEMPLATE_ID,
   STANDARD_TEMPLATE_ID,
   FIELD_IDS,
+  classifyItem,
 } from './constants.js';
 import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, ValidationResult } from './types.js';
 import { comparePushOps, pushOpStrength, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
@@ -687,10 +688,76 @@ export class Engine {
       this.computeChildFilePath(templateFilePath, stdValItem.path),
     );
 
-    const templateNode = this.tree.addItem(templateItem, templateFilePath);
-    this.tree.addItem(stdValItem, stdValFilePath);
+    const templateNode = this.addCreatedItem(templateItem, templateFilePath);
+    this.addCreatedItem(stdValItem, stdValFilePath);
 
     return templateNode;
+  }
+
+  /**
+   * Create a `__Standard Values` item for an EXISTING template and wire the
+   * template's `__Standard values` field to it. Mirrors Sitecore's Content
+   * Editor "Standard values" command (OPTIONS ribbon): the SV item is a child
+   * of the template whose own `template` IS the template id, so it inherits
+   * every field the template declares, and the template item's `__Standard
+   * values` field points at it. This is the same shape `createTemplate`
+   * produces inline for brand-new templates.
+   *
+   * Throws when the item does not resolve in the serialized tree (registry-only
+   * OOTB templates are read-only), is not a Template item, or already has a
+   * `__Standard Values` item (field set or child present).
+   */
+  async createStandardValues(templateId: string): Promise<ItemNode> {
+    const templateNode = this.tree.getById(templateId);
+    if (!templateNode) throw new Error(`Template not found: ${templateId}`);
+    if (classifyItem(templateNode.item.template) !== 'template') {
+      throw new Error(`Item is not a template: ${templateNode.item.path}`);
+    }
+
+    // Reject duplicates: either the field already points somewhere, or a child
+    // literally named "__Standard Values" already exists (which would collide
+    // on disk anyway).
+    const existingField = templateNode.item.sharedFields.find(f => f.id === FIELD_IDS.standardValues);
+    const fieldAlreadySet = !!existingField && existingField.value.trim() !== '';
+    const childAlreadyExists = [...templateNode.children.values()].some(
+      c => (c.item.path.split('/').pop() ?? '').toLowerCase() === '__standard values',
+    );
+    if (fieldAlreadySet || childAlreadyExists) {
+      throw new Error(`Template already has __Standard Values: ${templateNode.item.path}`);
+    }
+
+    const svId = generateGuid();
+    const svItem: ScsItem = {
+      id: svId,
+      parent: templateNode.item.id,
+      template: templateNode.item.id,
+      path: `${templateNode.item.path}/__Standard Values`,
+      sharedFields: [],
+      languages: [],
+    };
+
+    const svFilePath = await this.writeItemFileAt(
+      svItem,
+      this.computeChildFilePath(templateNode.filePath, svItem.path),
+    );
+    const svNode = this.addCreatedItem(svItem, svFilePath);
+
+    // Point the template's `__Standard values` field at the new SV item, then
+    // re-write the template file. Mutating the live tree item keeps in-memory
+    // state aligned with disk (same approach as the move/rename re-writes).
+    if (existingField) {
+      existingField.value = formatGuidBraced(svId);
+      existingField.hint = existingField.hint || '__Standard values';
+    } else {
+      templateNode.item.sharedFields.push({
+        id: FIELD_IDS.standardValues,
+        hint: '__Standard values',
+        value: formatGuidBraced(svId),
+      });
+    }
+    await this.writeItemFileAt(templateNode.item, templateNode.filePath);
+
+    return svNode;
   }
 
   async createSection(name: string, templatePath: string): Promise<ItemNode> {
@@ -726,7 +793,7 @@ export class Engine {
       sectionItem,
       this.computeChildFilePath(templateNode.filePath, sectionItem.path),
     );
-    return this.tree.addItem(sectionItem, filePath);
+    return this.addCreatedItem(sectionItem, filePath);
   }
 
   async createField(name: string, sectionPath: string, fieldType: string): Promise<ItemNode> {
@@ -764,7 +831,7 @@ export class Engine {
       fieldItem,
       this.computeChildFilePath(sectionNode.filePath, fieldItem.path),
     );
-    return this.tree.addItem(fieldItem, filePath);
+    return this.addCreatedItem(fieldItem, filePath);
   }
 
   async createRendering(name: string, parentPath: string): Promise<ItemNode> {
@@ -800,7 +867,7 @@ export class Engine {
       renderingItem,
       this.computeChildFilePath(parentNode.filePath, renderingItem.path),
     );
-    return this.tree.addItem(renderingItem, filePath);
+    return this.addCreatedItem(renderingItem, filePath);
   }
 
   async insertItem(args: InsertItemArgs): Promise<InsertItemResult> {
@@ -1279,6 +1346,46 @@ export class Engine {
   /** Returns the project name set when opening the workspace, or null if not provided. */
   getProjectName(): string | null {
     return this._projectName;
+  }
+
+  /**
+   * Add a freshly USER-CREATED item to the in-memory tree AND record its layer
+   * provenance, so the content tree's provenance bar ("green bar") appears
+   * immediately - without re-opening the workspace, which is the only other
+   * time `_itemProvenance` is populated. Returns the new {@link ItemNode}, same
+   * as the underlying `tree.addItem`.
+   *
+   * Every user-initiated create path (insert-from-template, New
+   * Section/Field/Template/Rendering, branch instantiation, copy/duplicate,
+   * SXA scaffolding) routes its tree insertion through here. Indexing, scan,
+   * cache-load and refresh paths intentionally call `tree.addItem` directly:
+   * their provenance is computed by the open/merge logic and must not be
+   * overwritten with the active-layer stamp.
+   */
+  addCreatedItem(item: ScsItem, filePath: string, module?: string): ItemNode {
+    const node = this.tree.addItem(item, filePath, module);
+    this.recordCreatedItemProvenance(item.id, item.parent);
+    return node;
+  }
+
+  /**
+   * Stamp provenance for a newly created item. The winning layer is inherited
+   * from the item's parent's winner (correct for multi-layer mode: a new child
+   * belongs to whatever layer its parent's file lives in), falling back to the
+   * primary (first) layer, which is the sole layer in single-layer mode.
+   *
+   * No-op when no workspace layers are open (legacy `init()` / no-project
+   * mode) - matching the pre-existing "no provenance bars without a layered
+   * workspace" behavior - and idempotent: re-adding an item that already has
+   * provenance neither re-stamps it nor double-counts it in the layer stats.
+   */
+  recordCreatedItemProvenance(itemId: string, parentId: string | undefined): void {
+    if (this._layers.length === 0) return;
+    if (this._itemProvenance.has(itemId)) return;
+    const parentProv = parentId ? this._itemProvenance.get(parentId) : undefined;
+    const layerName = parentProv?.winnerLayer ?? this._layers[0].name;
+    this._itemProvenance.set(itemId, { winnerLayer: layerName, contributingLayers: [layerName] });
+    this._layerStats.set(layerName, (this._layerStats.get(layerName) ?? 0) + 1);
   }
 
   /**

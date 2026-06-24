@@ -286,7 +286,14 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
   const allSectionNames = visibleSections.map(s => s.title);
   if (showOtherFields) allSectionNames.push('Other Fields');
 
-  const showBuilder = sectionFilter === 'content' && item.type === 'template' && schema?.builderSections && schema.builderSections.length > 0 && onBuilderChanges;
+  // Show the Builder for ANY template item, not just ones that already have
+  // their own sections. A template with only inherited sections (notably a
+  // Rendering Parameters template, whose fields all come from Standard
+  // Rendering Parameters) has an empty `builderSections` array - it must still
+  // get the Builder so the user can add the first section/field, exactly as
+  // Sitecore's Template Builder does. The API only sets `builderSections` for
+  // template items, so its presence (even empty) is the template signal.
+  const showBuilder = sectionFilter === 'content' && item.type === 'template' && Array.isArray(schema?.builderSections) && !!onBuilderChanges;
 
   // Standard tab fallback when no schema: show only the renamed-by-convention "Standard" buckets
   if (sectionFilter === 'standard' && useFallback) {

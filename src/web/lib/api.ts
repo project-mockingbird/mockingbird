@@ -95,6 +95,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name: newName }),
     }),
+  createStandardValues: (id: string) =>
+    request<ItemDetail>(`/api/items/${bareGuid(id)}/standard-values`, {
+      method: 'POST',
+      body: '{}',
+    }),
   updateItem: (id: string, data: UpdateItemRequest) =>
     request<ItemDetail>(`/api/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteItem: (id: string) =>
