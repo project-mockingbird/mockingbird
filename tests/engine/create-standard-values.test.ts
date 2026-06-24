@@ -102,6 +102,32 @@ describe('Engine.createStandardValues (item 3)', () => {
     await expect(engine.createStandardValues(TPL_ID)).rejects.toThrow(/standard values/i);
   });
 
+  it('allows (re)creation when the __Standard values field dangles at a deleted item', async () => {
+    const built = await buildEngine();
+    dir = built.dir;
+    engine = built.engine;
+
+    // Simulate a previously-deleted SV: deleting the SV item never rewrote the
+    // template, so its __Standard values field still points at a now-nonexistent
+    // item. No SV child exists on disk.
+    const tpl = engine.getItemById(TPL_ID)!;
+    tpl.item.sharedFields.push({
+      id: FIELD_IDS.standardValues,
+      hint: '__Standard values',
+      value: '{DEADDEAD-0000-0000-0000-000000000000}',
+    });
+
+    // The dangling pointer must NOT block re-creation.
+    const sv = await engine.createStandardValues(TPL_ID);
+    expect(sv.item.path).toBe('/sitecore/templates/MyTemplate/__Standard Values');
+    expect(existsSync(sv.filePath)).toBe(true);
+
+    // The field is repointed to the NEW sv item, not left dangling at the dead guid.
+    const field = engine.getItemById(TPL_ID)!.item.sharedFields.find((f) => f.id === FIELD_IDS.standardValues);
+    expect(field!.value.toLowerCase()).toContain(sv.item.id.toLowerCase());
+    expect(field!.value.toLowerCase()).not.toContain('deaddead');
+  });
+
   it('rejects an item that is not a template', async () => {
     const built = await buildEngine();
     dir = built.dir;

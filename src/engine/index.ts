@@ -714,16 +714,23 @@ export class Engine {
       throw new Error(`Item is not a template: ${templateNode.item.path}`);
     }
 
-    // Reject duplicates: either the field already points somewhere, or a child
-    // literally named "__Standard Values" already exists (which would collide
-    // on disk anyway).
+    // An SV genuinely exists only when a "__Standard Values" CHILD item is
+    // present AND its file is still on disk. A `__Standard values` field that
+    // points at a since-deleted item is a dangling pointer (deleting the SV item
+    // never rewrites the template to clear it), and a child left in the in-memory
+    // tree after a host-side delete is stale - neither should block re-creation.
+    // The dangling field is repointed at the freshly-created SV below.
     const existingField = templateNode.item.sharedFields.find(f => f.id === FIELD_IDS.standardValues);
-    const fieldAlreadySet = !!existingField && existingField.value.trim() !== '';
-    const childAlreadyExists = [...templateNode.children.values()].some(
+    const svChild = [...templateNode.children.values()].find(
       c => (c.item.path.split('/').pop() ?? '').toLowerCase() === '__standard values',
     );
-    if (fieldAlreadySet || childAlreadyExists) {
-      throw new Error(`Template already has __Standard Values: ${templateNode.item.path}`);
+    if (svChild) {
+      const svFileExists = await stat(svChild.filePath).then(() => true).catch(() => false);
+      if (svFileExists) {
+        throw new Error(`Template already has __Standard Values: ${templateNode.item.path}`);
+      }
+      // Stale tree entry whose file is gone - drop it so the fresh SV can be created.
+      this.tree.removeItem(svChild.item.id);
     }
 
     const svId = generateGuid();
