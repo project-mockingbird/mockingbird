@@ -13,6 +13,7 @@ import { Icon } from '@/lib/icon';
 import { mdiFileOutline } from '@mdi/js';
 import { toast } from 'sonner';
 import { TemplateEditor, type BuilderChanges } from './TemplateEditor';
+import { applyBuilderStructuralChanges } from '@/lib/builder-save';
 import { RenderingsFieldEditor } from './field-editors/renderings';
 import { QuickInfo } from './QuickInfo';
 import { VersionTrimmer } from './VersionTrimmer';
@@ -108,20 +109,32 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
   );
 
   const saveMutation = useMutation({
-    mutationFn: async (fields: Record<string, string>) => {
-      const res = await fetch(`/api/items/${selectedId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields, language: selectedLang, version: selectedVersion }),
-      });
-      if (!res.ok) throw new Error(`Save failed: ${res.status}`);
-      return res.json();
+    mutationFn: async ({ fields, structural }: { fields: Record<string, string>; structural: BuilderChanges | null }) => {
+      // Brand-new Builder sections/fields are item creations, not field-value
+      // edits - they go through POST /api/items first (sections before fields,
+      // so a field's parent section exists). The field-value PUT below only
+      // mutates existing fields (including Builder field-prop edits).
+      if (structural && item && (structural.newSections.length > 0 || structural.newFields.length > 0)) {
+        await applyBuilderStructuralChanges(item.path, structural);
+      }
+      if (Object.keys(fields).length > 0) {
+        const res = await fetch(`/api/items/${selectedId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields, language: selectedLang, version: selectedVersion }),
+        });
+        if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+        return res.json();
+      }
+      return null;
     },
     onSuccess: () => {
       toast.success('Saved');
       setEditedFields({});
       setBuilderChanges(null);
       queryClient.invalidateQueries({ queryKey: ['item', selectedId] });
+      queryClient.invalidateQueries({ queryKey: ['template-schema', selectedId] });
+      queryClient.invalidateQueries({ queryKey: ['tree'] });
       queryClient.invalidateQueries({ queryKey: ['unused-datasources', selectedId] });
     },
     onError: (err) => {
@@ -142,8 +155,10 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
         }
       }
     }
-    if (Object.keys(allFields).length === 0) return;
-    saveMutation.mutate(allFields);
+    const hasStructural = builderChanges !== null &&
+      (builderChanges.newSections.length > 0 || builderChanges.newFields.length > 0);
+    if (Object.keys(allFields).length === 0 && !hasStructural) return;
+    saveMutation.mutate({ fields: allFields, structural: builderChanges });
   };
 
   const dirty = Object.keys(editedFields).length > 0 ||

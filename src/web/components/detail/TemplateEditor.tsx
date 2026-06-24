@@ -30,7 +30,7 @@ interface TemplateBuilderProps {
   onChanges: (changes: BuilderChanges) => void;
 }
 
-function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
+export function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
   const { data: fieldTypes } = useFieldTypes();
   const [fieldEdits, setFieldEdits] = useState<Map<string, Record<string, string>>>(new Map());
   const [newFieldName, setNewFieldName] = useState<Record<string, string>>({});
@@ -76,6 +76,51 @@ function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
     setNewSectionName('');
     reportChanges(fieldEdits, pendingNewFields, updated);
   };
+
+  const rowGrid = 'grid grid-cols-[1fr_150px_1fr_60px_60px] gap-px px-3 py-1 border-b items-center';
+
+  const addFieldRow = (sectionName: string) => (
+    <div className={rowGrid}>
+      <Input
+        placeholder="Add a new field"
+        value={newFieldName[sectionName] ?? ''}
+        onChange={(e) => setNewFieldName(prev => ({ ...prev, [sectionName]: e.target.value }))}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleAddField(sectionName); }}
+        className="pl-4 text-xs h-7"
+      />
+      <Select
+        value={newFieldType[sectionName] ?? 'Single-Line Text'}
+        onValueChange={(v) => setNewFieldType(prev => ({ ...prev, [sectionName]: v }))}
+      >
+        <SelectTrigger size="sm" className="text-xs w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {fieldTypes?.map(ft => <SelectItem key={ft} value={ft}>{ft}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+
+  // Staged-but-unsaved field: display-only, no editable props yet (it doesn't
+  // exist as an item until Save creates it).
+  const pendingFieldRow = (key: string, name: string, fieldType: string) => (
+    <div key={key} className={`${rowGrid} italic text-muted-foreground`}>
+      <span className="pl-4">{name}</span>
+      <span className="text-xs">{fieldType}</span>
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+
+  const pendingFieldsFor = (sectionName: string) =>
+    pendingNewFields
+      .filter(f => f.sectionName === sectionName)
+      .map((f, i) => pendingFieldRow(`pending-${sectionName}-${i}`, f.name, f.fieldType));
 
   return (
     <div className="border rounded-md overflow-hidden text-sm">
@@ -132,29 +177,18 @@ function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
                 </span>
               </div>
             ))}
-            <div className="grid grid-cols-[1fr_150px_1fr_60px_60px] gap-px px-3 py-1 border-b items-center">
-              <Input
-                placeholder="Add a new field"
-                value={newFieldName[section.name] ?? ''}
-                onChange={(e) => setNewFieldName(prev => ({ ...prev, [section.name]: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddField(section.name); }}
-                className="pl-4 text-xs h-7"
-              />
-              <Select
-                value={newFieldType[section.name] ?? 'Single-Line Text'}
-                onValueChange={(v) => setNewFieldType(prev => ({ ...prev, [section.name]: v }))}
-              >
-                <SelectTrigger size="sm" className="text-xs w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {fieldTypes?.map(ft => <SelectItem key={ft} value={ft}>{ft}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <span />
-              <span />
-              <span />
+            {pendingFieldsFor(section.name)}
+            {addFieldRow(section.name)}
+          </div>
+        ))}
+        {pendingNewSections.map(sectionName => (
+          <div key={`pending-section-${sectionName}`}>
+            <div className="px-3 py-1.5 bg-muted/50 font-medium border-b italic">
+              {sectionName}{' '}
+              <span className="text-xs font-normal text-muted-foreground">(unsaved)</span>
             </div>
+            {pendingFieldsFor(sectionName)}
+            {addFieldRow(sectionName)}
           </div>
         ))}
         <div className="px-3 py-1.5 border-b">
