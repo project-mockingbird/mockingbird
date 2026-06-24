@@ -2,9 +2,7 @@
 
 import type { TemplateMeta } from '@/lib/types';
 import { isFolderTemplate } from '@/lib/folder-templates';
-
-const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
-const BRANCH_TEMPLATE_ID = '35e75c72-4985-4e09-88c3-0eac6cd1e64f';
+import { TEMPLATE_TEMPLATE_ID, BRANCH_TEMPLATE_ID } from '@/lib/template-ids';
 
 /** Pickable iff the template is a Template or Branch (not a folder). */
 function isPickable(t: TemplateMeta): boolean {

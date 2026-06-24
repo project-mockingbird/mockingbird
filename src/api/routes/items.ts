@@ -84,6 +84,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       parentPath?: string;
       fieldType?: string;
       templateId?: string;
+      baseTemplateId?: string;
       sourceId?: string;
       destinationParentId?: string;
       // Scaffolding body shapes (type=scaffold-headless-tenant, scaffold-headless-site).
@@ -244,6 +245,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
             parentId: parent.item.id,
             templateId: body.templateId,
             name: body.name!,
+            baseTemplateId: body.baseTemplateId,
           });
           for (const created of result.createdItems) {
             notifyItemChange(engine, { type: 'added', itemId: created.item.id, itemPath: created.item.path });

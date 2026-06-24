@@ -1,12 +1,14 @@
 import type { Engine } from './index.js';
 import type { ItemNode, ScsItem } from './types.js';
 import { sitecoreDate } from './index.js';
-import { generateGuid } from './guid.js';
+import { generateGuid, formatGuidBraced } from './guid.js';
 import {
   BRANCH_TEMPLATE_ID,
   COMMAND_MASTER_TEMPLATE_ID,
   COMMAND_FIELD_ID,
   FIELD_IDS,
+  TEMPLATE_TEMPLATE_ID,
+  STANDARD_TEMPLATE_ID,
   producedTemplateForCommand,
 } from './constants.js';
 import { getNameVsSiblingsError, getSiblingNames } from './name-validation.js';
@@ -33,6 +35,12 @@ export type InsertItemArgs = {
   parentId: string;
   templateId: string;
   name: string;
+  /**
+   * Base template assigned to the new item when it is a Template definition
+   * (its resolved template is `TEMPLATE_TEMPLATE_ID`). Defaults to Standard
+   * template. Ignored for non-template inserts (folders, content items).
+   */
+  baseTemplateId?: string;
 };
 
 export type InsertItemResult = {
@@ -73,13 +81,15 @@ export async function insertItem(engine: Engine, args: InsertItemArgs): Promise<
   return insertItemAtParent(
     engine,
     { item: { id: parentNode.item.id, path: parentNode.item.path }, filePath: parentNode.filePath },
-    { templateId: args.templateId, name: args.name },
+    { templateId: args.templateId, name: args.name, baseTemplateId: args.baseTemplateId },
   );
 }
 
 export type InsertItemAtParentArgs = {
   templateId: string;
   name: string;
+  /** See {@link InsertItemArgs.baseTemplateId}. */
+  baseTemplateId?: string;
 };
 
 /**
@@ -179,6 +189,17 @@ export async function insertItemAtParent(
       },
     ],
   };
+
+  // New Template definitions inherit a base template (CE parity: the create
+  // dialog assigns one, defaulting to Standard template). Only applies when the
+  // new item IS a Template - ordinary content/folder inserts get no base.
+  if (templateId === TEMPLATE_TEMPLATE_ID) {
+    newItem.sharedFields.push({
+      id: FIELD_IDS.baseTemplate,
+      hint: '__Base template',
+      value: formatGuidBraced(args.baseTemplateId ?? STANDARD_TEMPLATE_ID),
+    });
+  }
 
   expandTokenBearingSvFields(engine, newItem, templateId);
 

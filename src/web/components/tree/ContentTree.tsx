@@ -447,7 +447,7 @@ function ContentTreeNode({
     );
   };
 
-  const handleInsert = async (name: string) => {
+  const handleInsert = async (name: string, baseTemplateId?: string) => {
     if (!insertDialog) return;
     setInsertServerError(null);
     try {
@@ -456,6 +456,7 @@ function ContentTreeNode({
         parentPath: node.path,
         templateId: insertDialog.templateId,
         name,
+        baseTemplateId,
       });
       setInsertDialog(null);
       toast.success(`Inserted "${name}"`);
@@ -603,7 +604,7 @@ function ContentTreeNode({
     return (myChildrenQuery.data ?? []).map((c: { name: string }) => c.name);
   }, [myChildrenQuery.data]);
 
-  const handleIconInsert = async (req: { templateId: string; name: string }) => {
+  const handleIconInsert = async (req: { templateId: string; name: string; baseTemplateId?: string }) => {
     setIconInsertServerError(null);
     try {
       await insertItem.mutateAsync({
@@ -611,6 +612,7 @@ function ContentTreeNode({
         parentPath: node.path,
         templateId: req.templateId,
         name: req.name,
+        baseTemplateId: req.baseTemplateId,
       });
       setIconInsertDialogOpen(false);
       toast.success(`Inserted "${req.name}"`);
@@ -1002,6 +1004,7 @@ function ContentTreeNode({
         <InsertItemDialog
           open={!!insertDialog}
           templateName={insertDialog.templateName}
+          templateId={insertDialog.templateId}
           parentPath={node.path}
           onConfirm={handleInsert}
           onClose={() => {

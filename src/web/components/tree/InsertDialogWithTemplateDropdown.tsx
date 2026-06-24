@@ -10,6 +10,8 @@ import { useInsertOptions } from '@/hooks/useInsertOptions';
 import { useNameValidation } from '@/hooks/useNameValidation';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { BaseTemplatePicker } from './BaseTemplatePicker';
+import { TEMPLATE_TEMPLATE_ID, STANDARD_TEMPLATE_ID } from '@/lib/template-ids';
 
 // Combined Insert dialog used by the + hover-icon flow. Differs from
 // InsertItemDialog (which is driven from the right-click submenu and
@@ -20,7 +22,7 @@ interface InsertDialogWithTemplateDropdownProps {
   parentId: string;
   parentPath: string;
   siblings: string[];
-  onConfirm: (req: { templateId: string; name: string }) => void;
+  onConfirm: (req: { templateId: string; name: string; baseTemplateId?: string }) => void;
   onClose: () => void;
   isPending?: boolean;
   serverError?: string | null;
@@ -57,6 +59,11 @@ export function InsertDialogWithTemplateDropdown({
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [name, setName] = useState('');
+  const [baseTemplateId, setBaseTemplateId] = useState(STANDARD_TEMPLATE_ID);
+
+  // Base-template picker shows only when the selected option creates a Template
+  // definition (CE parity: a new template inherits a base, default Standard).
+  const showBase = selectedTemplateId.toLowerCase() === TEMPLATE_TEMPLATE_ID;
 
   // When options arrive, default to the first template; pre-fill name with
   // the template's name (Sitecore CE behaviour).
@@ -72,6 +79,7 @@ export function InsertDialogWithTemplateDropdown({
     if (!open) {
       setSelectedTemplateId('');
       setName('');
+      setBaseTemplateId(STANDARD_TEMPLATE_ID);
     }
   }, [open]);
 
@@ -87,7 +95,7 @@ export function InsertDialogWithTemplateDropdown({
 
   const handleConfirm = () => {
     if (!canSubmit) return;
-    onConfirm({ templateId: selectedTemplateId, name });
+    onConfirm({ templateId: selectedTemplateId, name, baseTemplateId: showBase ? baseTemplateId : undefined });
   };
 
   return (
@@ -148,6 +156,12 @@ export function InsertDialogWithTemplateDropdown({
             )}
             {serverError && (
               <p className="text-xs text-destructive mt-1">{serverError}</p>
+            )}
+            {showBase && (
+              <label className="text-sm mt-3 block">
+                <span className="block mb-1">Base template</span>
+                <BaseTemplatePicker value={baseTemplateId} onChange={setBaseTemplateId} disabled={isPending} />
+              </label>
             )}
           </>
         )}

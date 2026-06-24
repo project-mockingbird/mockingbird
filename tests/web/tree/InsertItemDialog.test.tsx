@@ -8,6 +8,10 @@ describe('InsertItemDialog', () => {
   const baseProps = {
     open: true,
     templateName: 'Page',
+    // A non-Template templateId keeps the base-template picker hidden (it only
+    // shows when creating an actual Template definition), so these cases stay
+    // focused on the name flow without needing a QueryClient.
+    templateId: '11111111-1111-1111-1111-111111111111',
     parentPath: '/sitecore/content',
     onConfirm: vi.fn(),
     onClose: vi.fn(),
@@ -34,7 +38,8 @@ describe('InsertItemDialog', () => {
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: 'NewItem' } });
     fireEvent.click(screen.getByRole('button', { name: /create|ok/i }));
-    expect(onConfirm).toHaveBeenCalledWith('NewItem');
+    // Non-template insert -> no base template passed.
+    expect(onConfirm).toHaveBeenCalledWith('NewItem', undefined);
   });
 
   it('disables OK while pending', () => {
