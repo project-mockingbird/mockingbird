@@ -30,6 +30,19 @@ export interface RenderingEntry {
    * so we stop dropping bytes on edit-save cycles.
    */
   unknownAttrs?: Record<string, string>;
+  /**
+   * Composed-layout ownership. 'page' entries (the default when absent, for the
+   * back-compat own-only parse path) are editable and persisted; 'partial'
+   * entries come from a Page Design's partial designs and are read-only.
+   */
+  owner?: 'page' | 'partial';
+  /** Partial design item name for the read-only badge. Set when owner is 'partial'. */
+  ownerDisplayName?: string;
+  /**
+   * Sitecore path of the owning partial design, for navigating to it from a
+   * read-only partial card. Set when owner is 'partial'.
+   */
+  ownerItemPath?: string;
 }
 
 /**
