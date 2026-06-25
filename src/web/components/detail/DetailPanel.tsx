@@ -138,6 +138,11 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
       queryClient.invalidateQueries({ queryKey: ['template-schema', selectedId] });
       queryClient.invalidateQueries({ queryKey: ['tree'] });
       queryClient.invalidateQueries({ queryKey: ['unused-datasources', selectedId] });
+      // Layout-derived queries depend on __Final Renderings; refresh them so a
+      // just-added rendering's discovered child placeholders (e.g. a Container's
+      // container-N) appear after Save without a manual reload.
+      queryClient.invalidateQueries({ queryKey: ['composed-layout'] });
+      queryClient.invalidateQueries({ queryKey: ['placeholder-paths'] });
     },
     onError: (err) => {
       toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
