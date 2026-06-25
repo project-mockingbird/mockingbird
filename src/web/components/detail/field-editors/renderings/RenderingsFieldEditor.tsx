@@ -178,6 +178,7 @@ export function RenderingsFieldEditor({
         onMoveUp={(uid) => moveWithinPlaceholder(uid, -1)}
         onMoveDown={(uid) => moveWithinPlaceholder(uid, +1)}
         onRemove={handleRemove}
+        onNavigate={onNavigate}
       />
 
       <AddRenderingDialog

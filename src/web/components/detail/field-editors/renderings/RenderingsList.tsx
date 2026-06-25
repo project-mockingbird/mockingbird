@@ -15,11 +15,13 @@ interface RenderingsListProps {
   onMoveUp: (uid: string) => void;
   onMoveDown: (uid: string) => void;
   onRemove: (uid: string) => void;
+  /** Navigate to an item by id (used by read-only partial-design cards). */
+  onNavigate?: (id: string) => void;
 }
 
 export function RenderingsList({
   entries, pageItemId, editing, onAdd,
-  onEdit, onMoveUp, onMoveDown, onRemove,
+  onEdit, onMoveUp, onMoveDown, onRemove, onNavigate,
 }: RenderingsListProps) {
   const { data: composed } = useComposedLayout(pageItemId);
 
@@ -50,6 +52,7 @@ export function RenderingsList({
       onMoveUp={onMoveUp}
       onMoveDown={onMoveDown}
       onRemove={onRemove}
+      onNavigate={onNavigate}
     />
   );
 }
