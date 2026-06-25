@@ -25,6 +25,7 @@
 
 import type { Engine } from '../index.js';
 import type { PlaceholderPath } from './types.js';
+import type { RenderingEntry } from '../layout/types.js';
 import { FINAL_RENDERINGS_FIELD_ID } from '../constants.js';
 import { parseRenderingXml } from '../layout/rendering-xml.js';
 import { getAllowedPlaceholders } from './allowed-placeholders.js';
@@ -83,11 +84,24 @@ export function getPlaceholderPaths(
   const xml = readVersionedField(node.item, FINAL_RENDERINGS_FIELD_ID, language);
   if (!xml) return [];
 
-  // Step 3: parse XML into RenderingEntry[].
-  const entries = parseRenderingXml(xml);
+  // Step 3: parse XML into RenderingEntry[] and discover paths over them.
+  return discoverPlaceholderPaths(engine, parseRenderingXml(xml));
+}
+
+/**
+ * Discover placeholder paths from an explicit RenderingEntry list (in-xml +
+ * declared-child + token-form), independent of where the entries came from.
+ * `getPlaceholderPaths` supplies the page's own `__Final Renderings` entries;
+ * the composed-layout source supplies page + partial-design entries so the
+ * editor can surface placeholders contributed by Page Designs.
+ */
+export function discoverPlaceholderPaths(
+  engine: Engine,
+  entries: RenderingEntry[],
+): PlaceholderPath[] {
   if (entries.length === 0) return [];
 
-  // Step 4a: in-xml paths - collect distinct placeholders in document order.
+  // In-xml paths - collect distinct placeholders in document order.
   const inXmlSet = new Set<string>();
   const inXmlPaths: PlaceholderPath[] = [];
   for (const entry of entries) {
