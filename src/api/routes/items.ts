@@ -7,6 +7,8 @@ import { resolveFieldValue } from '../resolve.js';
 import { getTemplateSchema, enrichSchemaWithStoredFields } from '../template-schema.js';
 import { notifyItemChange } from '../notify.js';
 import { getPlaceholderPaths } from '../../engine/renderings/placeholder-paths.js';
+import { getComposedLayout } from '../../engine/renderings/composed-layout.js';
+import { routeBaseForSite } from '../../engine/sites/index.js';
 import { getInsertOptions } from '../../engine/insert-options.js';
 import { duplicateItem } from '../../engine/duplicate-item.js';
 import { copyItem } from '../../engine/copy-item.js';
@@ -582,6 +584,19 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     const exists = engine.getItemById(itemId) || engine.getRegistryItem(itemId);
     if (!exists) return reply.status(404).send({ error: 'Item not found' });
     return { paths: getPlaceholderPaths(engine, itemId, language ?? 'en') };
+  });
+
+  app.get('/api/items/:itemId/composed-layout', async (request, reply) => {
+    const { itemId } = request.params as { itemId: string };
+    const { language } = request.query as { language?: string };
+    if (!engine.getItemById(itemId)) {
+      return reply.status(404).send({ error: `Item not found: ${itemId}`, statusCode: 404 });
+    }
+    // Use the same site root layout resolution uses (routeBaseForSite). When no
+    // site context is resolved, fall back to '' - the page's own renderings and
+    // declared root slots still surface; only Page Design composition needs it.
+    const siteRootPath = request.site ? routeBaseForSite(request.site) : '';
+    return getComposedLayout(engine, itemId, siteRootPath, language ?? 'en');
   });
 
   app.post('/api/items/preview-update', async (request, reply) => {

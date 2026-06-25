@@ -1,7 +1,7 @@
 import type {
   TreeNode, ItemDetail, ValidationResult, CreateItemRequest, UpdateItemRequest,
   TemplateSchema, TrimVersionsRequest, LookupSourceItem,
-  RenderingMeta, RenderingPlaceholderPath, CompatibleRenderingsResponse,
+  RenderingMeta, RenderingPlaceholderPath, ComposedLayout, CompatibleRenderingsResponse,
   InsertOptionsResponse, InsertItemRequest, InsertItemResponse,
   DuplicateItemRequest, CopyItemRequest, MoveItemRequest, AllTemplatesResponse,
   DescendantItem,
@@ -120,6 +120,10 @@ export const api = {
   getPlaceholderPaths: (itemId: string, language: string = 'en') =>
     request<{ paths: RenderingPlaceholderPath[] }>(
       `/api/items/${bareGuid(itemId)}/placeholder-paths?language=${encodeURIComponent(language)}`,
+    ),
+  getComposedLayout: (itemId: string, language: string = 'en') =>
+    request<ComposedLayout>(
+      `/api/items/${bareGuid(itemId)}/composed-layout?language=${encodeURIComponent(language)}`,
     ),
   getSxaVariants: (renderingId: string) =>
     request<{ variants: Array<{ id: string; name: string; displayName: string; folderName: string; isShared: boolean }> }>(
