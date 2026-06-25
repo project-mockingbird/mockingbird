@@ -339,28 +339,62 @@ export function fallbackChildFilePath(parentFilePath: string, childName: string)
 }
 
 /**
- * Find the include whose Sitecore item-path is the longest covering prefix
- * of `childItemSitecorePath`. Used as the primary lookup in
+ * Whether an include (its Sitecore `path` + `scope`) actually covers an item,
+ * by the item's depth below the include path (0 = the include item itself).
+ * SCS scope semantics:
+ *   SingleItem          -> depth 0 only
+ *   ItemAndChildren     -> depth 0 or 1
+ *   ItemAndDescendants  -> any depth (the SCS default when scope is unset)
+ *   DescendantsOnly     -> depth >= 1
+ *
+ * New-item placement must route to an include whose scope genuinely owns the
+ * item, not merely one whose path is a prefix. Without this, a `SingleItem`
+ * seed include at `/Home` (covers only the Home node) wins the prefix tie over
+ * an `ItemAndDescendants` content include at the same path, and a new
+ * descendant is written out-of-scope under the seed - dropped on the next scan.
+ */
+function scopeCoversChild(
+  includePath: string,
+  scope: ModuleInclude['scope'],
+  childItemSitecorePath: string,
+): boolean {
+  const inc = splitSegments(includePath);
+  const child = splitSegments(childItemSitecorePath);
+  if (child.length < inc.length) return false;
+  for (let i = 0; i < inc.length; i++) {
+    if (child[i].toLowerCase() !== inc[i].toLowerCase()) return false;
+  }
+  const depth = child.length - inc.length;
+  switch (scope ?? 'ItemAndDescendants') {
+    case 'SingleItem': return depth === 0;
+    case 'ItemAndChildren': return depth <= 1;
+    case 'DescendantsOnly': return depth >= 1;
+    case 'ItemAndDescendants':
+    default: return true;
+  }
+}
+
+/**
+ * Find the include whose Sitecore item-path covers `childItemSitecorePath`
+ * (path prefix AND scope) with the longest path. Used as the primary lookup in
  * {@link resolveChildFilePath} so a registry-only parent (whose ghost
  * filePath wouldn't match any include's physical root) still routes its
  * children into the correct module when the children themselves are
- * covered by an include.
+ * covered by an include. Scope-aware so a `SingleItem` seed include never wins
+ * over a descendant-covering include at the same path.
  */
 function findTreeSpecForChildPath(
   childItemSitecorePath: string,
   modules: ReadonlyArray<ModuleConfig>,
   defaultMaxRelativePathLength: number,
 ): TreeSpecContext | null {
-  const lowerChild = childItemSitecorePath.toLowerCase();
   let best: { ctx: TreeSpecContext; depth: number } | null = null;
   for (const mod of modules) {
     for (const include of mod.items.includes) {
-      const includePathLower = include.path.toLowerCase();
-      if (lowerChild === includePathLower || lowerChild.startsWith(includePathLower + '/')) {
-        const ctx = buildTreeSpecContext(mod, include, defaultMaxRelativePathLength);
-        if (!best || include.path.length > best.depth) {
-          best = { ctx, depth: include.path.length };
-        }
+      if (!scopeCoversChild(include.path, include.scope, childItemSitecorePath)) continue;
+      const ctx = buildTreeSpecContext(mod, include, defaultMaxRelativePathLength);
+      if (!best || include.path.length > best.depth) {
+        best = { ctx, depth: include.path.length };
       }
     }
   }
