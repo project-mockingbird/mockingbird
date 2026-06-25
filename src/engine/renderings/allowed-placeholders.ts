@@ -17,6 +17,7 @@
 
 import type { Engine } from '../index.js';
 import { getDeclaredPlaceholderKeys } from '../layout/rendering-metadata.js';
+import { hasDynamicToken } from './dynamic-placeholders.js';
 
 /**
  * Return the placeholder-key strings declared by a rendering item.
@@ -30,4 +31,14 @@ import { getDeclaredPlaceholderKeys } from '../layout/rendering-metadata.js';
  */
 export function getAllowedPlaceholders(engine: Engine, renderingId: string): string[] {
   return [...getDeclaredPlaceholderKeys(engine, renderingId)];
+}
+
+/**
+ * True when a rendering declares at least one dynamic placeholder key (a key
+ * containing a `{*}`/`{N}` token, e.g. a Container's `container-{*}`). Such
+ * renderings must be assigned a `DynamicPlaceholderId` when placed so the key
+ * resolves to a concrete slot and the child placeholder is exposed.
+ */
+export function declaresDynamicPlaceholders(engine: Engine, renderingId: string): boolean {
+  return getDeclaredPlaceholderKeys(engine, renderingId).some(hasDynamicToken);
 }

@@ -9,7 +9,8 @@ import { AddRenderingDialog } from './AddRenderingDialog';
 import { EditRenderingDialog } from './EditRenderingDialog';
 import { ConfirmRemoveRenderingDialog } from './ConfirmRemoveRenderingDialog';
 import { findDescendants } from './find-descendants';
-import { usePlaceholderPaths } from './hooks';
+import { usePlaceholderPaths, useComposedLayout } from './hooks';
+import { nextDynamicPlaceholderId } from './add-rendering';
 import { parseLayoutXml, serializeLayoutXml } from './serialize';
 import { useDialogRoute } from '@/hooks/useNavState';
 import type { RenderingEntry } from './types';
@@ -43,6 +44,14 @@ export function RenderingsFieldEditor({
   const editRoute = useDialogRoute('edit-rendering');
   const queryClient = useQueryClient();
   const { data: placeholderPathsResp } = usePlaceholderPaths(contextItemId);
+  const { data: composed } = useComposedLayout(contextItemId);
+
+  // Next DynamicPlaceholderId for an added dynamic rendering: unique across the
+  // live page entries (incl. unsaved adds) and the composed partial entries.
+  const nextDpi = useMemo(
+    () => nextDynamicPlaceholderId([...entries, ...(composed?.entries ?? [])]),
+    [entries, composed],
+  );
 
   useEffect(() => { setEntries(parsed.entries); }, [parsed]);
 
@@ -185,6 +194,7 @@ export function RenderingsFieldEditor({
         open={addRoute.isOpen}
         pageItemId={contextItemId}
         initialPlaceholder={dialog.kind === 'add' ? dialog.placeholder : undefined}
+        nextDynamicPlaceholderId={nextDpi}
         onCancel={handleClose}
         onSave={handleAddSave}
       />

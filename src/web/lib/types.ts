@@ -194,6 +194,12 @@ export interface RenderingMeta {
   datasourceLocation?: string;
   /** `__Sortorder`; default 100 when missing. */
   sortOrder?: number;
+  /**
+   * True when the rendering declares a dynamic placeholder (e.g. a Container's
+   * `container-{*}`). The Add dialog uses this to auto-assign a
+   * DynamicPlaceholderId so the rendering's child placeholder is exposed.
+   */
+  declaresDynamicPlaceholders?: boolean;
 }
 
 export interface RenderingPlaceholderPath {
@@ -230,7 +236,7 @@ export interface ComposedLayout {
 }
 
 export interface CompatibleRenderingsResponse {
-  renderings: Array<Pick<RenderingMeta, 'id' | 'name' | 'displayName' | 'path' | 'template' | 'icon'>>;
+  renderings: Array<Pick<RenderingMeta, 'id' | 'name' | 'displayName' | 'path' | 'template' | 'icon' | 'declaresDynamicPlaceholders'>>;
 }
 
 // Template picker types (consumed by useAllTemplates and components in

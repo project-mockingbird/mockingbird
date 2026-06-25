@@ -7,6 +7,7 @@ import { resolveDatasourceFields } from '../../engine/renderings/datasource-fiel
 import { getRenderingParametersSchema } from '../../engine/template-schema.js';
 import { lookupUnifiedItem, getId, getName } from '../../engine/layout/unified-item.js';
 import { readSharedField } from '../../engine/layout/item-fields.js';
+import { declaresDynamicPlaceholders } from '../../engine/renderings/allowed-placeholders.js';
 import type { RenderingMeta } from '../../engine/renderings/types.js';
 
 /**
@@ -57,6 +58,7 @@ function buildRenderingMeta(engine: Engine, renderingId: string): RenderingMeta 
     datasourceTemplate: datasource?.datasourceTemplate,
     datasourceLocation: datasource?.datasourceLocation,
     sortOrder,
+    declaresDynamicPlaceholders: declaresDynamicPlaceholders(engine, renderingId),
   };
 }
 

@@ -17,6 +17,12 @@ export interface RenderingMeta {
   datasourceLocation?: string;
   /** `__Sortorder`; default 100 when missing. */
   sortOrder?: number;
+  /**
+   * True when the rendering declares at least one dynamic placeholder key
+   * (e.g. a Container's `container-{*}`). The editor uses this to auto-assign a
+   * `DynamicPlaceholderId` when the rendering is placed.
+   */
+  declaresDynamicPlaceholders?: boolean;
 }
 
 export interface PlaceholderPath {

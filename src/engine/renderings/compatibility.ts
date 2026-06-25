@@ -26,6 +26,7 @@ import {
   lookupUnifiedItemByPath,
   type UnifiedItem,
 } from '../layout/unified-item.js';
+import { declaresDynamicPlaceholders } from './allowed-placeholders.js';
 import type { RenderingMeta } from './types.js';
 
 /** Sitecore path root for all placeholder-settings items. */
@@ -71,6 +72,7 @@ function toRenderingMetaFromUnified(u: UnifiedItem, engine: Engine): RenderingMe
     displayName,
     path,
     template: template.toLowerCase(),
+    declaresDynamicPlaceholders: declaresDynamicPlaceholders(engine, id),
   };
   if (icon && icon.trim() !== '') meta.icon = icon;
   if (sortorderRaw && sortorderRaw.trim() !== '') {

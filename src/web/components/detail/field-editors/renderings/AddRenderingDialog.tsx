@@ -10,11 +10,14 @@ import { useCompatibleRenderings } from './hooks';
 import { RenderingTreePicker } from './RenderingTreePicker';
 import type { RenderingEntry } from './types';
 import { generateUid } from './utils';
+import { buildAddedRenderingEntry } from './add-rendering';
 
 interface AddRenderingDialogProps {
   open: boolean;
   pageItemId: string;
   initialPlaceholder?: string;       // pre-filled when opened from a specific placeholder's "+" affordance
+  /** DynamicPlaceholderId to stamp if the chosen rendering declares one. */
+  nextDynamicPlaceholderId: number;
   title?: string;                    // dialog title (defaults to "Add Rendering")
   saveLabel?: string;                // primary button label (defaults to "Add")
   onCancel: () => void;
@@ -22,7 +25,7 @@ interface AddRenderingDialogProps {
 }
 
 export function AddRenderingDialog({
-  open, pageItemId, initialPlaceholder,
+  open, pageItemId, initialPlaceholder, nextDynamicPlaceholderId,
   title = 'Add Rendering', saveLabel = 'Add',
   onCancel, onSave,
 }: AddRenderingDialogProps) {
@@ -52,13 +55,16 @@ export function AddRenderingDialog({
 
   const handleSave = () => {
     if (!canSave) return;
-    const entry: RenderingEntry = {
+    const norm = (id: string) => id.replace(/[{}]/g, '').toLowerCase();
+    const selected = (compatibleResp?.renderings ?? []).find(r => norm(r.id) === norm(renderingId));
+    const entry = buildAddedRenderingEntry({
       uid: generateUid(),
       renderingId,
       placeholder,
       dataSource: dataSource.trim(),
-      params: {},
-    };
+      declaresDynamicPlaceholders: selected?.declaresDynamicPlaceholders ?? false,
+      nextDynamicPlaceholderId,
+    });
     onSave(entry);
   };
 
