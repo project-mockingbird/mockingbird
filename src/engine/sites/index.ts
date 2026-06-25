@@ -5,6 +5,7 @@ export {
   walkToSiteRoot,
   environmentMatches,
   routeBaseForSite,
+  sxaSiteRootForSite,
   SITE_GROUPING_READ_LANGUAGE,
 } from './resolver.js';
 export {
