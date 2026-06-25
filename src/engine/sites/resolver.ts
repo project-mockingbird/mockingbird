@@ -146,3 +146,23 @@ export function routeBaseForSite(site: SiteDefinition): string {
   if (!site.startItem) return site.rootPath;
   return `${site.rootPath}/${site.startItem}`;
 }
+
+/**
+ * The SXA site root (the `_BaseSiteRoot` item, parent of the start item / Home).
+ * This is the correct input for `resolveSxaContext`, which derives the
+ * tenant/common roots from the SXA site root.
+ *
+ * Discovered sites (`parseSiteItem`) already store the SXA site root in
+ * `rootPath` with a separate `startItem`, so it passes through unchanged.
+ * `synthesizeFromEnv` collapses `startItem` to `''` and stores the start-item
+ * path (e.g. `<site>/Home`, per the `SITE_ROOT_PATH` convention) in `rootPath`;
+ * for that shape we strip the trailing start-item segment to recover the site
+ * root. Without this, SXA variant/style/grid resolution for env-fallback sites
+ * looks under `<site>/Home/...` and `<site>/common` instead of `<site>/...` and
+ * `<tenant>/common`, and finds nothing.
+ */
+export function sxaSiteRootForSite(site: SiteDefinition): string {
+  if (site.startItem) return site.rootPath;
+  const lastSlash = site.rootPath.lastIndexOf('/');
+  return lastSlash > 0 ? site.rootPath.slice(0, lastSlash) : site.rootPath;
+}

@@ -317,7 +317,9 @@ export async function insertBranch(
   // child's parent is already in the tree by the time we add the child.
   const createdNodes: ItemNode[] = [];
   for (let i = 0; i < newItems.length; i++) {
-    createdNodes.push(engine.getTree().addItem(newItems[i], entries[i].finalPath));
+    // Pre-order add means each item's parent is already tree-resident (and
+    // provenance-stamped), so addCreatedItem inherits the right layer.
+    createdNodes.push(engine.addCreatedItem(newItems[i], entries[i].finalPath));
   }
 
   if (createdRootId === null) {

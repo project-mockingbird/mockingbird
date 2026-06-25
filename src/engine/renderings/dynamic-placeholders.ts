@@ -35,6 +35,19 @@ import type { RenderingEntry } from '../layout/types.js';
 const TOKEN_RE = /\{(?:\*|N|\d+)\}/g;
 
 /**
+ * True when a placeholder-key template contains a dynamic-placeholder token
+ * (`{*}`, `{N}`, or `{n}`). Renderings whose declared keys contain such a token
+ * (e.g. a Container's `container-{*}`) need a `DynamicPlaceholderId` assigned
+ * when placed, so the key resolves to a concrete `container-N` slot.
+ *
+ * Uses a fresh non-global regex per call - `TOKEN_RE` is global and its
+ * `lastIndex` is stateful across `.test()` calls.
+ */
+export function hasDynamicToken(template: string): boolean {
+  return /\{(?:\*|N|\d+)\}/.test(template);
+}
+
+/**
  * Substitute dynamic-placeholder tokens in a placeholder-key template.
  *
  * @param template    - placeholder key template, e.g. `'container-{*}'`

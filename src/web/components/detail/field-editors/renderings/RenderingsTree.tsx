@@ -13,6 +13,8 @@ interface RenderingsTreeProps {
   onMoveUp: (uid: string) => void;
   onMoveDown: (uid: string) => void;
   onRemove: (uid: string) => void;
+  /** Navigate to an item by id (used by read-only partial-design cards). */
+  onNavigate?: (id: string) => void;
 }
 
 /**
@@ -27,7 +29,7 @@ interface RenderingsTreeProps {
  */
 export function RenderingsTree({
   nodes, editing, onAdd, onEdit,
-  onMoveUp, onMoveDown, onRemove,
+  onMoveUp, onMoveDown, onRemove, onNavigate,
 }: RenderingsTreeProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -73,6 +75,7 @@ export function RenderingsTree({
               onMoveUp={() => onMoveUp(child.entry.uid)}
               onMoveDown={() => onMoveDown(child.entry.uid)}
               onRemove={() => onRemove(child.entry.uid)}
+              onNavigate={onNavigate}
             />
             {child.children.length > 0 && renderChildren(child.children, depth + 1)}
           </Fragment>

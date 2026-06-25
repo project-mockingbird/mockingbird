@@ -17,9 +17,12 @@ const VALUE_FIELD_ID = '09147fb2-ebfb-4949-8c8e-26a424409d5e';
 const GRID_ROOT_PATH =
   '/sitecore/system/Settings/Feature/Experience Accelerator/Bootstrap 5/Bootstrap 5 Grid Definition';
 
-// Site paths used as the envFallback when registering the site-context hook.
+// SXA site root + its sibling common site under the tenant.
 const SITE_ROOT = '/sitecore/content/tenant/site';
 const COMMON_ROOT = '/sitecore/content/tenant/common';
+// The env fallback (SITE_ROOT_PATH) points at the site's START ITEM (Home),
+// per the documented convention; the SXA site root is its parent.
+const SITE_HOME = `${SITE_ROOT}/Home`;
 
 // Rendering ID that the variants + styles fixtures wire up.
 const RENDERING_ID = '{F473E58A-64BB-4EA9-89BE-2155F3D916E9}';
@@ -127,7 +130,7 @@ describe('GET /api/sxa/variants', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(buildVariantsEngine(), SITE_ROOT);
+    app = await buildApp(buildVariantsEngine(), SITE_HOME);
   });
 
   afterAll(async () => {
@@ -166,7 +169,7 @@ describe('GET /api/sxa/style-options', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(buildStylesEngine(), SITE_ROOT);
+    app = await buildApp(buildStylesEngine(), SITE_HOME);
   });
 
   afterAll(async () => {
@@ -204,7 +207,7 @@ describe('GET /api/sxa/grid-options', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
-    app = await buildApp(buildGridEngine(), SITE_ROOT);
+    app = await buildApp(buildGridEngine(), SITE_HOME);
   });
 
   afterAll(async () => {
@@ -261,5 +264,63 @@ describe('SXA routes - 400 when no site context', () => {
     const res = await app.inject({ method: 'GET', url: '/api/sxa/grid-options' });
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ error: 'no site context (set ?site=<name> or send Host header matching a Site Grouping)' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: env-fallback site whose path is the START ITEM (Home), per the
+// SITE_ROOT_PATH convention. The SXA site root is the parent of Home; common
+// variants live at <tenant>/common. resolveSxaContext must receive the SXA
+// site root, not the start-item path, or common+site variants are missed.
+// ---------------------------------------------------------------------------
+
+function buildCommonVariantEngine() {
+  const TENANT = '/sitecore/content/tenant';
+  const COMMON = `${TENANT}/common`;
+  const SITE = `${TENANT}/site`;
+  return buildEngine([
+    makeItem({ id: 'tenant', path: TENANT }),
+    makeItem({ id: 'common', parent: 'tenant', path: COMMON }),
+    makeItem({ id: 'common-pres', parent: 'common', path: `${COMMON}/Presentation` }),
+    makeItem({ id: 'common-hv', parent: 'common-pres', path: `${COMMON}/Presentation/Headless Variants` }),
+    makeItem({
+      id: 'common-iframes',
+      parent: 'common-hv',
+      template: HEADLESS_VARIANTS_FOLDER_TEMPLATE,
+      path: `${COMMON}/Presentation/Headless Variants/IFrames`,
+      sharedFields: [{ id: COMPATIBLE_RENDERINGS_FIELD_ID, hint: 'Compatible Renderings', value: RENDERING_ID }],
+    }),
+    makeItem({
+      id: 'common-iframe-variant',
+      parent: 'common-iframes',
+      template: VARIANT_DEFINITION_TEMPLATE,
+      path: `${COMMON}/Presentation/Headless Variants/IFrames/IFrame`,
+    }),
+    makeItem({ id: 'site', parent: 'tenant', path: SITE }),
+    makeItem({ id: 'home', parent: 'site', path: `${SITE}/Home` }),
+  ]);
+}
+
+describe('GET /api/sxa/variants - env-fallback start-item path resolves common variants', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    // envFallback = the site's start item (Home), exactly as SITE_ROOT_PATH is set.
+    app = await buildApp(buildCommonVariantEngine(), '/sitecore/content/tenant/site/Home');
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('returns the common-site variant for the rendering', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/sxa/variants?renderingId=${encodeURIComponent(RENDERING_ID)}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.variants.map((v: { name: string }) => v.name)).toContain('IFrame');
+    expect(body.variants.find((v: { name: string }) => v.name === 'IFrame').isShared).toBe(true);
   });
 });

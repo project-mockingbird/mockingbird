@@ -1,25 +1,7 @@
 // src/web/components/detail/field-editors/renderings/rendering-tree.ts
 
 import type { RenderingMeta } from '@/lib/types';
-
-/**
- * Sitecore template GUIDs that represent folder-style containers under
- * /sitecore/layout/Renderings rather than actual renderings the user can
- * pick. Items with these templates always render as folders in the picker
- * even when they have no visible children in the supplied rendering set.
- */
-const FOLDER_TEMPLATE_IDS = new Set<string>([
-  // "Renderings folder" template - the standard SXA folder under Renderings.
-  '7ee0975b-0698-493e-b3a2-0b2ef33d0522',
-  // "Common/Folder" template - the generic Sitecore folder template.
-  'a87a00b1-e6db-45ab-8b54-636fec3b5523',
-  // "Node" template - sometimes used as a generic container in core db.
-  '14416946-9839-4651-a12b-308de9415d52',
-]);
-
-function isFolderRendering(r: { template?: string }): boolean {
-  return !!r.template && FOLDER_TEMPLATE_IDS.has(r.template.toLowerCase());
-}
+import { isFolderTemplate } from '@/lib/folder-templates';
 
 /**
  * Path-based tree node for the rendering picker. A node is either a folder
@@ -51,8 +33,9 @@ export interface RenderingTreeNode {
  * renderings live under /sitecore/layout/Renderings/<Project>/... so
  * trimming gives us a tree rooted at the project folders.
  *
- * Items whose template is in {@link FOLDER_TEMPLATE_IDS} (Renderings folder,
- * Common Folder, Node) always render as folders even with no children. When
+ * Items whose template is a folder template (see {@link isFolderTemplate}:
+ * Renderings folder, Common Folder, Node, ...) always render as folders even
+ * with no children. When
  * a folder-template item shares a path with descendants, the folder-template
  * item itself is hidden from the leaf list (these container items are not
  * meaningful renderings the user would pick - they only exist as containers).
@@ -69,7 +52,7 @@ export function buildRenderingTree(renderings: RenderingMeta[]): RenderingTreeNo
     const relPath = commonPrefix ? r.path.slice(commonPrefix.length) : r.path;
     const segments = relPath.split('/').filter(Boolean);
     if (segments.length === 0) continue; // path equals common prefix - skip
-    const treatAsFolder = isFolderRendering(r);
+    const treatAsFolder = isFolderTemplate(r.template);
     let level = roots;
     let walked = commonPrefix;
     for (let i = 0; i < segments.length; i++) {

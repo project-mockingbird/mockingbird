@@ -1,3 +1,5 @@
+import type { RenderingEntry } from '../layout/types.js';
+
 export interface RenderingMeta {
   id: string;           // braced-uppercase GUID
   name: string;         // item Name
@@ -15,6 +17,12 @@ export interface RenderingMeta {
   datasourceLocation?: string;
   /** `__Sortorder`; default 100 when missing. */
   sortOrder?: number;
+  /**
+   * True when the rendering declares at least one dynamic placeholder key
+   * (e.g. a Container's `container-{*}`). The editor uses this to auto-assign a
+   * `DynamicPlaceholderId` when the rendering is placed.
+   */
+  declaresDynamicPlaceholders?: boolean;
 }
 
 export interface PlaceholderPath {
@@ -28,4 +36,28 @@ export interface PlaceholderPath {
    * an entry SITS in, not paths a rendering exposes).
    */
   ownerUid?: string;
+}
+
+/**
+ * A composed rendering entry: a `RenderingEntry` from the merged Page Design
+ * composition, tagged with whether it belongs to the page itself (editable)
+ * or to a partial design (read-only in the editor).
+ */
+export interface ComposedEntry extends RenderingEntry {
+  /** 'page' entries are editable; 'partial' entries are read-only. */
+  owner: 'page' | 'partial';
+  /** Always set (falls back to the page path when the source left it blank). */
+  ownerItemPath: string;
+  /** Partial design item name, for the read-only badge. Set when owner is 'partial'. */
+  ownerDisplayName?: string;
+}
+
+/**
+ * The fully composed layout for a page: owner-tagged entries (page + partial
+ * design renderings) plus the placeholder paths the editor can target,
+ * including empty root slots the layout item declares but no entry occupies.
+ */
+export interface ComposedLayout {
+  entries: ComposedEntry[];
+  placeholders: PlaceholderPath[];
 }

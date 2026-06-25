@@ -194,6 +194,12 @@ export interface RenderingMeta {
   datasourceLocation?: string;
   /** `__Sortorder`; default 100 when missing. */
   sortOrder?: number;
+  /**
+   * True when the rendering declares a dynamic placeholder (e.g. a Container's
+   * `container-{*}`). The Add dialog uses this to auto-assign a
+   * DynamicPlaceholderId so the rendering's child placeholder is exposed.
+   */
+  declaresDynamicPlaceholders?: boolean;
 }
 
 export interface RenderingPlaceholderPath {
@@ -204,8 +210,33 @@ export interface RenderingPlaceholderPath {
   isTokenForm?: boolean;
 }
 
+/**
+ * A composed rendering entry from GET /api/items/:id/composed-layout. Mirrors
+ * the engine's ComposedEntry: a rendering entry tagged with its owner so the
+ * editor keeps partial-design renderings read-only and persists only page ones.
+ */
+export interface ComposedEntry {
+  uid: string;
+  renderingId: string;
+  placeholder: string;
+  dataSource: string;
+  params: Record<string, string>;
+  /** 'page' entries are editable; 'partial' entries are read-only. */
+  owner: 'page' | 'partial';
+  /** Sitecore path of the owning item (the page itself or a partial design). */
+  ownerItemPath: string;
+  /** Partial design item name, for the read-only badge. Set when owner is 'partial'. */
+  ownerDisplayName?: string;
+}
+
+/** Response of GET /api/items/:id/composed-layout (page + partial composition). */
+export interface ComposedLayout {
+  entries: ComposedEntry[];
+  placeholders: RenderingPlaceholderPath[];
+}
+
 export interface CompatibleRenderingsResponse {
-  renderings: Array<Pick<RenderingMeta, 'id' | 'name' | 'displayName' | 'path' | 'template' | 'icon'>>;
+  renderings: Array<Pick<RenderingMeta, 'id' | 'name' | 'displayName' | 'path' | 'template' | 'icon' | 'declaresDynamicPlaceholders'>>;
 }
 
 // Template picker types (consumed by useAllTemplates and components in
@@ -263,6 +294,8 @@ export interface InsertItemRequest {
   parentPath: string;
   templateId: string;
   name: string;
+  /** Base template for a new Template definition. Ignored for other inserts. */
+  baseTemplateId?: string;
 }
 
 /** POST /api/items with type=fromTemplate returns the created node, serialized as ItemDetail. */

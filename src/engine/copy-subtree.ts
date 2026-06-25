@@ -155,7 +155,9 @@ export async function copySubtree(
   // exist before children.
   const createdNodes: ItemNode[] = [];
   for (let i = 0; i < newItems.length; i++) {
-    createdNodes.push(engine.getTree().addItem(newItems[i], entries[i].finalPath));
+    // Pre-order add: parents are tree-resident (and provenance-stamped) before
+    // their children, so addCreatedItem inherits the right layer per item.
+    createdNodes.push(engine.addCreatedItem(newItems[i], entries[i].finalPath));
   }
 
   return { rootItemId: idMap.get(args.sourceId)!, createdItems: createdNodes };

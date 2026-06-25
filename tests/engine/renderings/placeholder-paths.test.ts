@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeItem, buildEngine, seedRenderingPlaceholders } from '../layout/_helpers.js';
-import { getPlaceholderPaths } from '../../../src/engine/renderings/placeholder-paths.js';
+import { getPlaceholderPaths, discoverPlaceholderPaths } from '../../../src/engine/renderings/placeholder-paths.js';
+import type { RenderingEntry } from '../../../src/engine/layout/types.js';
 import { FINAL_RENDERINGS_FIELD_ID } from '../../../src/engine/layout/page-design.js';
 import type { ScsItem } from '../../../src/engine/types.js';
 
@@ -263,5 +264,16 @@ describe('getPlaceholderPaths', () => {
     const tokenIndices = result.flatMap((p, i) => p.isTokenForm ? [i] : []);
     expect(Math.max(...inXmlIndices)).toBeLessThan(Math.min(...discoveredIndices));
     expect(Math.max(...discoveredIndices)).toBeLessThan(Math.min(...tokenIndices));
+  });
+});
+
+describe('discoverPlaceholderPaths', () => {
+  it('returns in-xml placeholder paths for a supplied entry list (no own-field read)', () => {
+    const engine = buildEngine([]);
+    const entries: RenderingEntry[] = [
+      { uid: '{U1}', renderingId: '{R1}', placeholder: 'headless-main', dataSource: '', params: {} },
+    ];
+    const paths = discoverPlaceholderPaths(engine, entries);
+    expect(paths.map(p => p.value)).toContain('headless-main');
   });
 });

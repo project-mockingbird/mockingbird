@@ -7,6 +7,8 @@ import { resolveFieldValue } from '../resolve.js';
 import { getTemplateSchema, enrichSchemaWithStoredFields } from '../template-schema.js';
 import { notifyItemChange } from '../notify.js';
 import { getPlaceholderPaths } from '../../engine/renderings/placeholder-paths.js';
+import { getComposedLayout } from '../../engine/renderings/composed-layout.js';
+import { routeBaseForSite } from '../../engine/sites/index.js';
 import { getInsertOptions } from '../../engine/insert-options.js';
 import { duplicateItem } from '../../engine/duplicate-item.js';
 import { copyItem } from '../../engine/copy-item.js';
@@ -84,6 +86,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       parentPath?: string;
       fieldType?: string;
       templateId?: string;
+      baseTemplateId?: string;
       sourceId?: string;
       destinationParentId?: string;
       // Scaffolding body shapes (type=scaffold-headless-tenant, scaffold-headless-site).
@@ -244,6 +247,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
             parentId: parent.item.id,
             templateId: body.templateId,
             name: body.name!,
+            baseTemplateId: body.baseTemplateId,
           });
           for (const created of result.createdItems) {
             notifyItemChange(engine, { type: 'added', itemId: created.item.id, itemPath: created.item.path });
@@ -414,6 +418,24 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     }
   });
 
+  // Create a `__Standard Values` item for a template (Sitecore "Standard
+  // values" command). 201 + the new SV node on success.
+  app.post('/api/items/:id/standard-values', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const node = engine.getItemById(id);
+    if (!node) return reply.status(404).send({ error: `Item not found: ${id}`, statusCode: 404 });
+    try {
+      const sv = await engine.createStandardValues(id);
+      // The SV item is added; the template item also changed (its
+      // `__Standard values` field now points at the new SV item).
+      notifyItemChange(engine, { type: 'added', itemId: sv.item.id, itemPath: sv.item.path });
+      notifyItemChange(engine, { type: 'changed', itemId: node.item.id, itemPath: node.item.path });
+      return reply.status(201).send(serializeItemNode(sv, engine));
+    } catch (err: unknown) {
+      return reply.status(400).send({ error: err instanceof Error ? err.message : String(err), statusCode: 400 });
+    }
+  });
+
   app.post('/api/items/:id/refresh', async (request, reply) => {
     const { id } = request.params as { id: string };
     const exists = engine.getItemById(id);
@@ -425,6 +447,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       return reply.status(200).send({
         rootItemId: result.rootItemId,
         refreshed: result.refreshed,
+        removed: result.removed,
         item: serializeItemNode(node, engine),
       });
     } catch (err: unknown) {
@@ -582,6 +605,19 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     const exists = engine.getItemById(itemId) || engine.getRegistryItem(itemId);
     if (!exists) return reply.status(404).send({ error: 'Item not found' });
     return { paths: getPlaceholderPaths(engine, itemId, language ?? 'en') };
+  });
+
+  app.get('/api/items/:itemId/composed-layout', async (request, reply) => {
+    const { itemId } = request.params as { itemId: string };
+    const { language } = request.query as { language?: string };
+    if (!engine.getItemById(itemId)) {
+      return reply.status(404).send({ error: `Item not found: ${itemId}`, statusCode: 404 });
+    }
+    // Use the same site root layout resolution uses (routeBaseForSite). When no
+    // site context is resolved, fall back to '' - the page's own renderings and
+    // declared root slots still surface; only Page Design composition needs it.
+    const siteRootPath = request.site ? routeBaseForSite(request.site) : '';
+    return getComposedLayout(engine, itemId, siteRootPath, language ?? 'en');
   });
 
   app.post('/api/items/preview-update', async (request, reply) => {

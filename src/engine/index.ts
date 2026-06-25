@@ -1,7 +1,7 @@
 import { mkdir, writeFile, stat, rm } from 'fs/promises';
 import { resolve, dirname, sep } from 'path';
 import { createHash } from 'crypto';
-import { scanDirectory, scanAdditionalRoot } from './scanner.js';
+import { scanDirectory, scanAdditionalRoot, collectFileTargets, type FileTarget } from './scanner.js';
 import { ItemTree } from './tree.js';
 import { Registry } from './registry.js';
 import { loadCachedTree, writeCachedTree, deleteStaleCache, type CacheRoot } from './index-cache.js';
@@ -18,6 +18,7 @@ import {
   RENDERING_TEMPLATE_ID,
   STANDARD_TEMPLATE_ID,
   FIELD_IDS,
+  classifyItem,
 } from './constants.js';
 import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, ValidationResult } from './types.js';
 import { comparePushOps, pushOpStrength, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
@@ -90,6 +91,10 @@ export class Engine {
    * `readiness` on the watcher caused the 0.1.3 container-hang regression.
    */
   private _watcherReady: Promise<void> = Promise.resolve();
+  /** Resolves when the post-open cache self-heal (multi-layer warm start)
+   *  finishes. `Promise.resolve()` when no reconcile ran. See
+   *  `_reconcileCacheHitLayers`. */
+  private _reconcilePromise: Promise<void> = Promise.resolve();
   // Cached for the close-time cache rewrite so we don't re-run discoverModules on shutdown.
   private _cacheRoots: CacheRoot[] = [];
   private _layers: LayerSpec[] = [];
@@ -110,6 +115,13 @@ export class Engine {
   /** Awaits the file watcher's initial scan. Mainly useful for tests. */
   async awaitWatcherReady(): Promise<void> {
     await this._watcherReady;
+  }
+
+  /** Awaits the multi-layer warm-start cache self-heal. Resolves immediately
+   *  when no reconcile ran (cold open, single-layer, or no drift). Tests await
+   *  this to observe the reconciled tree deterministically. */
+  async awaitReconcile(): Promise<void> {
+    await this._reconcilePromise;
   }
 
   async startInit(): Promise<void> {
@@ -687,10 +699,83 @@ export class Engine {
       this.computeChildFilePath(templateFilePath, stdValItem.path),
     );
 
-    const templateNode = this.tree.addItem(templateItem, templateFilePath);
-    this.tree.addItem(stdValItem, stdValFilePath);
+    const templateNode = this.addCreatedItem(templateItem, templateFilePath);
+    this.addCreatedItem(stdValItem, stdValFilePath);
 
     return templateNode;
+  }
+
+  /**
+   * Create a `__Standard Values` item for an EXISTING template and wire the
+   * template's `__Standard values` field to it. Mirrors Sitecore's Content
+   * Editor "Standard values" command (OPTIONS ribbon): the SV item is a child
+   * of the template whose own `template` IS the template id, so it inherits
+   * every field the template declares, and the template item's `__Standard
+   * values` field points at it. This is the same shape `createTemplate`
+   * produces inline for brand-new templates.
+   *
+   * Throws when the item does not resolve in the serialized tree (registry-only
+   * OOTB templates are read-only), is not a Template item, or already has a
+   * `__Standard Values` item (field set or child present).
+   */
+  async createStandardValues(templateId: string): Promise<ItemNode> {
+    const templateNode = this.tree.getById(templateId);
+    if (!templateNode) throw new Error(`Template not found: ${templateId}`);
+    if (classifyItem(templateNode.item.template) !== 'template') {
+      throw new Error(`Item is not a template: ${templateNode.item.path}`);
+    }
+
+    // An SV genuinely exists only when a "__Standard Values" CHILD item is
+    // present AND its file is still on disk. A `__Standard values` field that
+    // points at a since-deleted item is a dangling pointer (deleting the SV item
+    // never rewrites the template to clear it), and a child left in the in-memory
+    // tree after a host-side delete is stale - neither should block re-creation.
+    // The dangling field is repointed at the freshly-created SV below.
+    const existingField = templateNode.item.sharedFields.find(f => f.id === FIELD_IDS.standardValues);
+    const svChild = [...templateNode.children.values()].find(
+      c => (c.item.path.split('/').pop() ?? '').toLowerCase() === '__standard values',
+    );
+    if (svChild) {
+      const svFileExists = await stat(svChild.filePath).then(() => true).catch(() => false);
+      if (svFileExists) {
+        throw new Error(`Template already has __Standard Values: ${templateNode.item.path}`);
+      }
+      // Stale tree entry whose file is gone - drop it so the fresh SV can be created.
+      this.tree.removeItem(svChild.item.id);
+    }
+
+    const svId = generateGuid();
+    const svItem: ScsItem = {
+      id: svId,
+      parent: templateNode.item.id,
+      template: templateNode.item.id,
+      path: `${templateNode.item.path}/__Standard Values`,
+      sharedFields: [],
+      languages: [],
+    };
+
+    const svFilePath = await this.writeItemFileAt(
+      svItem,
+      this.computeChildFilePath(templateNode.filePath, svItem.path),
+    );
+    const svNode = this.addCreatedItem(svItem, svFilePath);
+
+    // Point the template's `__Standard values` field at the new SV item, then
+    // re-write the template file. Mutating the live tree item keeps in-memory
+    // state aligned with disk (same approach as the move/rename re-writes).
+    if (existingField) {
+      existingField.value = formatGuidBraced(svId);
+      existingField.hint = existingField.hint || '__Standard values';
+    } else {
+      templateNode.item.sharedFields.push({
+        id: FIELD_IDS.standardValues,
+        hint: '__Standard values',
+        value: formatGuidBraced(svId),
+      });
+    }
+    await this.writeItemFileAt(templateNode.item, templateNode.filePath);
+
+    return svNode;
   }
 
   async createSection(name: string, templatePath: string): Promise<ItemNode> {
@@ -726,7 +811,7 @@ export class Engine {
       sectionItem,
       this.computeChildFilePath(templateNode.filePath, sectionItem.path),
     );
-    return this.tree.addItem(sectionItem, filePath);
+    return this.addCreatedItem(sectionItem, filePath);
   }
 
   async createField(name: string, sectionPath: string, fieldType: string): Promise<ItemNode> {
@@ -764,7 +849,7 @@ export class Engine {
       fieldItem,
       this.computeChildFilePath(sectionNode.filePath, fieldItem.path),
     );
-    return this.tree.addItem(fieldItem, filePath);
+    return this.addCreatedItem(fieldItem, filePath);
   }
 
   async createRendering(name: string, parentPath: string): Promise<ItemNode> {
@@ -800,7 +885,7 @@ export class Engine {
       renderingItem,
       this.computeChildFilePath(parentNode.filePath, renderingItem.path),
     );
-    return this.tree.addItem(renderingItem, filePath);
+    return this.addCreatedItem(renderingItem, filePath);
   }
 
   async insertItem(args: InsertItemArgs): Promise<InsertItemResult> {
@@ -988,6 +1073,8 @@ export class Engine {
       await this._cacheWritePromise.catch(() => {});
       this._cacheWritePromise = null;
     }
+    // Drain the warm-start reconcile (it bails on the _closed flag set above).
+    await this._reconcilePromise.catch(() => {});
     // Write a fresh cache reflecting in-session mutations (PUT, trim, etc.) so the next graceful start is both warm AND fresh. Hard kills fall back to the existing verify-and-delete path.
     if (this.options.indexCachePath && this.readiness.isReady() && this._cacheRoots.length > 0) {
       console.error(`  [index] writing cache on shutdown to ${this.options.indexCachePath}`);
@@ -1020,6 +1107,10 @@ export class Engine {
       try { await this._cacheWritePromise; } catch { /* swallow - tear-down */ }
       this._cacheWritePromise = null;
     }
+    // Drain any in-flight warm-start reconcile before swapping the tree, so it
+    // can't add stale items into the next workspace's fresh tree.
+    try { await this._reconcilePromise; } catch { /* swallow - tear-down */ }
+    this._reconcilePromise = Promise.resolve();
     this.tree = new ItemTree();
     this.modules = [];
     this._cacheRoots = [];
@@ -1140,6 +1231,11 @@ export class Engine {
       Array<{ name: string; ops: AllowedPushOperations | undefined }>
     >();
     const layerCacheWrites: Promise<void>[] = [];
+    // Layers served from a (possibly stale) per-layer cache - candidates for
+    // the warm-start self-heal below. Each carries the set of file paths the
+    // cache actually contained, so the reconcile can spot what disk has that
+    // the cache missed.
+    const cacheHitLayers: Array<{ name: string; layerRoot: string; cachedPaths: Set<string> }> = [];
 
     for (const layer of layers) {
       const layerRoot = dirname(layer.sitecoreJsonPath);
@@ -1155,8 +1251,14 @@ export class Engine {
         if (cached) {
           partialTree = cached.tree;
           this.readiness.markProgress(cached.entryCount, cached.entryCount);
+          cacheHitLayers.push({
+            name: layer.name,
+            layerRoot,
+            cachedPaths: new Set(partialTree.getAllNodes().map((n) => n.filePath.toLowerCase())),
+          });
           // Fire-and-forget signature verify; delete stale cache so the next
-          // open of this layer re-scans cold.
+          // open of this layer re-scans cold (catches edits + host-side
+          // deletes). Adds are healed in-session by the reconcile below.
           void cached.verifyPromise.then(async (match) => {
             if (!match) {
               await deleteStaleCache(layerCachePath);
@@ -1231,6 +1333,70 @@ export class Engine {
     }
 
     this.readiness.markReady();
+
+    // Warm-start self-heal: a cache-hit layer can be missing items that landed
+    // on disk after its cache was written (e.g. an item created via the API in
+    // a previous session, then the container restarted). The file watcher is
+    // disabled in multi-layer mode and the signature verify only deletes the
+    // stale cache for the NEXT restart, so without this the item is absent for
+    // the whole first post-restart session. Runs in the background (no added
+    // time-to-serve); tests await `awaitReconcile()`.
+    if (cacheHitLayers.length > 0) {
+      this._reconcilePromise = this._reconcileCacheHitLayers(cacheHitLayers);
+    }
+  }
+
+  /**
+   * Add-only warm-start self-heal for multi-layer cache hits. For each layer
+   * served from a (possibly stale) per-layer cache, list its on-disk YAMLs and
+   * add any the cache never captured - the "item created last session,
+   * container restarted, item vanished until Refresh" case. Provenance is
+   * stamped from the file's layer root and `onItemChange` fires so an open UI
+   * updates without a manual Refresh.
+   *
+   * Scoped to ADDS on purpose: edits and host-side deletes are still handled by
+   * the signature verify (which deletes the stale cache so the next start
+   * cold-rebuilds) and by manual Refresh - neither of which can cascade-delete
+   * live descendants the way a naive prune here could. Best-effort and
+   * idempotent: a file whose id is already in the live tree is skipped, so a
+   * re-run (next warm start, if the cache wasn't deleted) is safe.
+   */
+  private async _reconcileCacheHitLayers(
+    layers: Array<{ name: string; layerRoot: string; cachedPaths: Set<string> }>,
+  ): Promise<void> {
+    for (const layer of layers) {
+      if (this._closed) return;
+      let onDisk: FileTarget[];
+      try {
+        onDisk = await collectFileTargets(layer.layerRoot);
+      } catch {
+        continue; // can't list disk - skip this layer's reconcile
+      }
+      let added = 0;
+      for (const target of onDisk) {
+        if (this._closed) return;
+        if (layer.cachedPaths.has(target.absolutePath.toLowerCase())) continue;
+        let item: ScsItem;
+        try {
+          item = await parseItem(target.absolutePath);
+        } catch {
+          continue; // unparseable YAML - skip, same as the scan/refresh paths
+        }
+        // Only a "first sighting" id is a genuine add; an id another open layer
+        // already provides is owned by the precedence merge - leave it alone.
+        if (this.tree.getById(item.id)) continue;
+        this.tree.addItem(item, target.absolutePath, target.namespace);
+        this.recordCreatedItemProvenance(item.id, item.parent, target.absolutePath);
+        this.options.onItemChange?.({ type: 'added', itemId: item.id, itemPath: item.path });
+        added++;
+      }
+      if (added > 0) {
+        // New nodes may arrive before their parents; rebuild the children index
+        // so the tree walk is consistent.
+        this.tree.rebuildChildrenIndex();
+        console.error(`  [index] warm-start reconcile(${layer.name}): +${added} item(s) from disk`);
+      }
+    }
   }
 
   /**
@@ -1279,6 +1445,74 @@ export class Engine {
   /** Returns the project name set when opening the workspace, or null if not provided. */
   getProjectName(): string | null {
     return this._projectName;
+  }
+
+  /**
+   * Add a freshly USER-CREATED item to the in-memory tree AND record its layer
+   * provenance, so the content tree's provenance bar ("green bar") appears
+   * immediately - without re-opening the workspace, which is the only other
+   * time `_itemProvenance` is populated. Returns the new {@link ItemNode}, same
+   * as the underlying `tree.addItem`.
+   *
+   * Every user-initiated create path (insert-from-template, New
+   * Section/Field/Template/Rendering, branch instantiation, copy/duplicate,
+   * SXA scaffolding) routes its tree insertion through here. Indexing, scan and
+   * cache-load paths call `tree.addItem` directly; their provenance is computed
+   * by the open/merge logic. The refresh path also calls `tree.addItem`
+   * directly but then stamps via `recordCreatedItemProvenance` for any item it
+   * surfaces that the open/merge never saw (see `refresh-item.ts`).
+   */
+  addCreatedItem(item: ScsItem, filePath: string, module?: string): ItemNode {
+    const node = this.tree.addItem(item, filePath, module);
+    this.recordCreatedItemProvenance(item.id, item.parent, filePath);
+    return node;
+  }
+
+  /**
+   * Stamp provenance for a newly created (or refresh-surfaced) item. The winning
+   * layer is the one whose serialization root actually contains the item's file
+   * (the ground truth - see {@link _layerNameForFilePath}); when no file path is
+   * supplied it falls back to the parent's winner, then the primary (first)
+   * layer. Deriving from the file path rather than parent inheritance keeps an
+   * item correct even when its parent has no provenance yet (e.g. a parent the
+   * Refresh surfaced), which is why a content-layer item no longer gets the
+   * authoring-layer default.
+   *
+   * No-op when no workspace layers are open (legacy `init()` / no-project
+   * mode) - matching the pre-existing "no provenance bars without a layered
+   * workspace" behavior - and idempotent: re-adding an item that already has
+   * provenance neither re-stamps it nor double-counts it in the layer stats.
+   */
+  recordCreatedItemProvenance(itemId: string, parentId: string | undefined, filePath?: string): void {
+    if (this._layers.length === 0) return;
+    if (this._itemProvenance.has(itemId)) return;
+    const byFile = filePath ? this._layerNameForFilePath(filePath) : undefined;
+    const parentProv = parentId ? this._itemProvenance.get(parentId) : undefined;
+    const layerName = byFile ?? parentProv?.winnerLayer ?? this._layers[0].name;
+    this._itemProvenance.set(itemId, { winnerLayer: layerName, contributingLayers: [layerName] });
+    this._layerStats.set(layerName, (this._layerStats.get(layerName) ?? 0) + 1);
+  }
+
+  /**
+   * Returns the name of the open layer whose serialization root (the directory
+   * holding its `sitecore.json`) contains `filePath`, by LONGEST-prefix match.
+   * Nested roots are why longest-prefix matters: an authoring layer rooted at
+   * the workspace and a content layer rooted at `<workspace>/migration` both
+   * "contain" a file under `migration/`, and the deeper (content) root must win.
+   * Returns undefined when no open layer root contains the file.
+   */
+  private _layerNameForFilePath(filePath: string): string | undefined {
+    let bestName: string | undefined;
+    let bestRootLen = -1;
+    for (const layer of this._layers) {
+      const root = dirname(layer.sitecoreJsonPath);
+      const rootWithSep = root.endsWith(sep) ? root : root + sep;
+      if (filePath.startsWith(rootWithSep) && root.length > bestRootLen) {
+        bestRootLen = root.length;
+        bestName = layer.name;
+      }
+    }
+    return bestName;
   }
 
   /**

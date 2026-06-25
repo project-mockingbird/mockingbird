@@ -59,6 +59,17 @@ export function usePlaceholderPaths(itemId: string | undefined, language: string
   });
 }
 
+export function useComposedLayout(itemId: string | undefined, language: string = 'en') {
+  const ready = useEngineReady();
+  return useQuery({
+    queryKey: ['composed-layout', itemId ?? null, language],
+    queryFn: () => api.getComposedLayout(itemId!, language),
+    enabled: ready && !!itemId,
+    retry: false,
+    staleTime: 30_000,  // page can be re-edited; don't cache forever.
+  });
+}
+
 export function useSxaVariants(renderingId: string | undefined) {
   const ready = useEngineReady();
   return useQuery({

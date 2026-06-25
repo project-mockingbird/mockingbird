@@ -97,6 +97,17 @@ function getLayoutId(item: ScsItem): string {
 }
 
 /**
+ * Return the layout-declared top-level placeholder keys for an item: the same
+ * root slots `resolveLayout` emits for an empty route (drawn from the item's
+ * layout item, with the JSS Layout `headless-header|main|footer` fallback).
+ * Used by the composed-layout source so a page with no own renderings still
+ * surfaces its empty root slots as add targets.
+ */
+export function getLayoutRootPlaceholderKeys(item: ScsItem, engine: Engine): string[] {
+  return Object.keys(emptyPlaceholdersFromLayoutItem(engine, getLayoutId(item)));
+}
+
+/**
  * Resolve a route path into a full LayoutRoute by running the layout pipeline:
  * Page Design composition → rendering XML parsing → placeholder tree →
  * component resolution → field formatting.

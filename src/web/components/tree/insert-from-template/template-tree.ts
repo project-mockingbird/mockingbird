@@ -1,26 +1,8 @@
 // src/web/components/tree/insert-from-template/template-tree.ts
 
 import type { TemplateMeta } from '@/lib/types';
-
-const TEMPLATE_TEMPLATE_ID = 'ab86861a-6030-46c5-b394-e8f99e8b87db';
-const BRANCH_TEMPLATE_ID = '35e75c72-4985-4e09-88c3-0eac6cd1e64f';
-
-/**
- * Folder-style container templates. Items with these templates always render
- * as folders even when leaf-positioned. Mirrors the set in
- * src/web/components/detail/field-editors/renderings/rendering-tree.ts plus
- * the canonical Template Folder template that covers /sitecore/templates/...
- */
-const FOLDER_TEMPLATE_IDS = new Set<string>([
-  '0437fee2-44c9-46a6-abe9-28858d9fee8c', // Template Folder
-  '7ee0975b-0698-493e-b3a2-0b2ef33d0522', // Renderings folder
-  'a87a00b1-e6db-45ab-8b54-636fec3b5523', // Common/Folder
-  '14416946-9839-4651-a12b-308de9415d52', // Node
-]);
-
-function isFolderTemplate(t: { template?: string }): boolean {
-  return !!t.template && FOLDER_TEMPLATE_IDS.has(t.template.toLowerCase());
-}
+import { isFolderTemplate } from '@/lib/folder-templates';
+import { TEMPLATE_TEMPLATE_ID, BRANCH_TEMPLATE_ID } from '@/lib/template-ids';
 
 /** Pickable iff the template is a Template or Branch (not a folder). */
 function isPickable(t: TemplateMeta): boolean {
@@ -60,7 +42,7 @@ export function buildTemplateTree(templates: TemplateMeta[]): TemplateTreeNode[]
     const relPath = commonPrefix ? t.path.slice(commonPrefix.length) : t.path;
     const segments = relPath.split('/').filter(Boolean);
     if (segments.length === 0) continue;
-    const treatAsFolder = isFolderTemplate(t) || !isPickable(t);
+    const treatAsFolder = isFolderTemplate(t.template) || !isPickable(t);
     let level = roots;
     let walked = commonPrefix;
 

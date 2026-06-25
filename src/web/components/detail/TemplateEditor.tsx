@@ -1,5 +1,5 @@
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { useTemplateSchema } from '@/hooks/useItems';
 import { useFieldTypes } from '@/hooks/useValidation';
 import { useTabState } from '@/state/useTabState';
@@ -30,7 +30,19 @@ interface TemplateBuilderProps {
   onChanges: (changes: BuilderChanges) => void;
 }
 
-function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
+export interface TemplateBuilderHandle {
+  /**
+   * Return the complete staged changes, committing any text the user typed into
+   * the add-section / add-field inputs but never confirmed with Enter. Save
+   * calls this so in-progress input is persisted instead of silently dropped.
+   */
+  flush: () => BuilderChanges;
+  /** Clear all local staging (called after a successful save). */
+  reset: () => void;
+}
+
+export const TemplateBuilder = forwardRef<TemplateBuilderHandle, TemplateBuilderProps>(
+  function TemplateBuilder({ sections, onChanges }, ref) {
   const { data: fieldTypes } = useFieldTypes();
   const [fieldEdits, setFieldEdits] = useState<Map<string, Record<string, string>>>(new Map());
   const [newFieldName, setNewFieldName] = useState<Record<string, string>>({});
@@ -76,6 +88,75 @@ function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
     setNewSectionName('');
     reportChanges(fieldEdits, pendingNewFields, updated);
   };
+
+  useImperativeHandle(ref, () => ({
+    flush: (): BuilderChanges => {
+      const newSections = [...pendingNewSections];
+      const looseSection = newSectionName.trim();
+      if (looseSection) newSections.push(looseSection);
+      const newFields = [...pendingNewFields];
+      for (const [sectionName, raw] of Object.entries(newFieldName)) {
+        const name = raw.trim();
+        if (name) {
+          newFields.push({ sectionName, name, fieldType: newFieldType[sectionName] || 'Single-Line Text' });
+        }
+      }
+      return { fieldUpdates: fieldEdits, newFields, newSections };
+    },
+    reset: () => {
+      setFieldEdits(new Map());
+      setNewFieldName({});
+      setNewFieldType({});
+      setPendingNewFields([]);
+      setNewSectionName('');
+      setPendingNewSections([]);
+    },
+  }), [fieldEdits, newFieldName, newFieldType, pendingNewFields, newSectionName, pendingNewSections]);
+
+  const rowGrid = 'grid grid-cols-[1fr_150px_1fr_60px_60px] gap-px px-3 py-1 border-b items-center';
+
+  const addFieldRow = (sectionName: string) => (
+    <div className={rowGrid}>
+      <Input
+        placeholder="Add a new field"
+        value={newFieldName[sectionName] ?? ''}
+        onChange={(e) => setNewFieldName(prev => ({ ...prev, [sectionName]: e.target.value }))}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleAddField(sectionName); }}
+        className="pl-4 text-xs h-7"
+      />
+      <Select
+        value={newFieldType[sectionName] ?? 'Single-Line Text'}
+        onValueChange={(v) => setNewFieldType(prev => ({ ...prev, [sectionName]: v }))}
+      >
+        <SelectTrigger size="sm" className="text-xs w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {fieldTypes?.map(ft => <SelectItem key={ft} value={ft}>{ft}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+
+  // Staged-but-unsaved field: display-only, no editable props yet (it doesn't
+  // exist as an item until Save creates it).
+  const pendingFieldRow = (key: string, name: string, fieldType: string) => (
+    <div key={key} className={`${rowGrid} italic text-muted-foreground`}>
+      <span className="pl-4">{name}</span>
+      <span className="text-xs">{fieldType}</span>
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+
+  const pendingFieldsFor = (sectionName: string) =>
+    pendingNewFields
+      .filter(f => f.sectionName === sectionName)
+      .map((f, i) => pendingFieldRow(`pending-${sectionName}-${i}`, f.name, f.fieldType));
 
   return (
     <div className="border rounded-md overflow-hidden text-sm">
@@ -132,29 +213,18 @@ function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
                 </span>
               </div>
             ))}
-            <div className="grid grid-cols-[1fr_150px_1fr_60px_60px] gap-px px-3 py-1 border-b items-center">
-              <Input
-                placeholder="Add a new field"
-                value={newFieldName[section.name] ?? ''}
-                onChange={(e) => setNewFieldName(prev => ({ ...prev, [section.name]: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddField(section.name); }}
-                className="pl-4 text-xs h-7"
-              />
-              <Select
-                value={newFieldType[section.name] ?? 'Single-Line Text'}
-                onValueChange={(v) => setNewFieldType(prev => ({ ...prev, [section.name]: v }))}
-              >
-                <SelectTrigger size="sm" className="text-xs w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {fieldTypes?.map(ft => <SelectItem key={ft} value={ft}>{ft}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <span />
-              <span />
-              <span />
+            {pendingFieldsFor(section.name)}
+            {addFieldRow(section.name)}
+          </div>
+        ))}
+        {pendingNewSections.map(sectionName => (
+          <div key={`pending-section-${sectionName}`}>
+            <div className="px-3 py-1.5 bg-muted/50 font-medium border-b italic">
+              {sectionName}{' '}
+              <span className="text-xs font-normal text-muted-foreground">(unsaved)</span>
             </div>
+            {pendingFieldsFor(sectionName)}
+            {addFieldRow(sectionName)}
           </div>
         ))}
         <div className="px-3 py-1.5 border-b">
@@ -169,22 +239,23 @@ function TemplateBuilder({ sections, onChanges }: TemplateBuilderProps) {
       </div>
     </div>
   );
-}
+});
 
 interface TemplateEditorProps {
   item: ItemDetail;
-  sectionFilter: 'content' | 'standard';
+  sectionFilter: 'content' | 'standard' | 'builder';
   selectedLang: string;
   selectedVersion: number;
   viewMode: 'normal' | 'raw';
   onFieldChange: (fieldId: string, value: string) => void;
   builderChanges?: BuilderChanges | null;
   onBuilderChanges?: (changes: BuilderChanges) => void;
+  builderRef?: React.Ref<TemplateBuilderHandle>;
   editing?: boolean;
   onNavigate?: (id: string) => void;
 }
 
-export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVersion, viewMode, onFieldChange, onBuilderChanges, editing = true, onNavigate }: TemplateEditorProps) {
+export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVersion, viewMode, onFieldChange, onBuilderChanges, builderRef, editing = true, onNavigate }: TemplateEditorProps) {
   const { state } = useTabState();
   const editedFields = state.editedFields;
   const { data: schema } = useTemplateSchema(item.id);
@@ -286,7 +357,31 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
   const allSectionNames = visibleSections.map(s => s.title);
   if (showOtherFields) allSectionNames.push('Other Fields');
 
-  const showBuilder = sectionFilter === 'content' && item.type === 'template' && schema?.builderSections && schema.builderSections.length > 0 && onBuilderChanges;
+  // Show the Builder for ANY template item, not just ones that already have
+  // their own sections. A template with only inherited sections (notably a
+  // Rendering Parameters template, whose fields all come from Standard
+  // Rendering Parameters) has an empty `builderSections` array - it must still
+  // get the Builder so the user can add the first section/field, exactly as
+  // Sitecore's Template Builder does. The API only sets `builderSections` for
+  // template items, so its presence (even empty) is the template signal.
+  const showBuilder = item.type === 'template' && Array.isArray(schema?.builderSections) && !!onBuilderChanges;
+
+  // The Builder is its own tab (before Content). In builder mode render ONLY the
+  // Builder - never the field editors.
+  if (sectionFilter === 'builder') {
+    if (!showBuilder) {
+      return (
+        <div className="text-sm text-muted-foreground p-4">
+          The Builder is available for template items only.
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-4">
+        <TemplateBuilder ref={builderRef} sections={schema!.builderSections!} onChanges={onBuilderChanges!} />
+      </div>
+    );
+  }
 
   // Standard tab fallback when no schema: show only the renamed-by-convention "Standard" buckets
   if (sectionFilter === 'standard' && useFallback) {
@@ -299,13 +394,6 @@ export function TemplateEditor({ item, sectionFilter, selectedLang, selectedVers
 
   return (
     <div className="space-y-4">
-      {showBuilder && (
-        <TemplateBuilder
-          sections={schema!.builderSections!}
-          onChanges={onBuilderChanges!}
-        />
-      )}
-
       {useFallback ? (
         <div className="space-y-3">
           {item.sharedFields.length > 0 && (

@@ -1,7 +1,7 @@
 import type {
   TreeNode, ItemDetail, ValidationResult, CreateItemRequest, UpdateItemRequest,
   TemplateSchema, TrimVersionsRequest, LookupSourceItem,
-  RenderingMeta, RenderingPlaceholderPath, CompatibleRenderingsResponse,
+  RenderingMeta, RenderingPlaceholderPath, ComposedLayout, CompatibleRenderingsResponse,
   InsertOptionsResponse, InsertItemRequest, InsertItemResponse,
   DuplicateItemRequest, CopyItemRequest, MoveItemRequest, AllTemplatesResponse,
   DescendantItem,
@@ -86,7 +86,7 @@ export const api = {
       body: JSON.stringify({ type: 'moveTo', ...data }),
     }),
   refreshItem: (id: string) =>
-    request<{ rootItemId: string; refreshed: number; item: ItemDetail }>(
+    request<{ rootItemId: string; refreshed: number; removed: number; item: ItemDetail }>(
       `/api/items/${bareGuid(id)}/refresh`,
       { method: 'POST', body: '{}' },
     ),
@@ -94,6 +94,11 @@ export const api = {
     request<ItemDetail>(`/api/items/${bareGuid(id)}/rename`, {
       method: 'POST',
       body: JSON.stringify({ name: newName }),
+    }),
+  createStandardValues: (id: string) =>
+    request<ItemDetail>(`/api/items/${bareGuid(id)}/standard-values`, {
+      method: 'POST',
+      body: '{}',
     }),
   updateItem: (id: string, data: UpdateItemRequest) =>
     request<ItemDetail>(`/api/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -120,6 +125,10 @@ export const api = {
   getPlaceholderPaths: (itemId: string, language: string = 'en') =>
     request<{ paths: RenderingPlaceholderPath[] }>(
       `/api/items/${bareGuid(itemId)}/placeholder-paths?language=${encodeURIComponent(language)}`,
+    ),
+  getComposedLayout: (itemId: string, language: string = 'en') =>
+    request<ComposedLayout>(
+      `/api/items/${bareGuid(itemId)}/composed-layout?language=${encodeURIComponent(language)}`,
     ),
   getSxaVariants: (renderingId: string) =>
     request<{ variants: Array<{ id: string; name: string; displayName: string; folderName: string; isShared: boolean }> }>(

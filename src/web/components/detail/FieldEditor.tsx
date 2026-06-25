@@ -4,7 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldContent, FieldLabel } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFieldTypes } from '@/hooks/useValidation';
-import { FieldShell, GoToFieldLink, LookupFieldEditor, TreelistFieldEditor, ImageFieldEditor, GeneralLinkFieldEditor, DatetimeFieldEditor, NumberFieldEditor, NameValueListEditor, RenderingsFieldEditor, fieldAnchorId } from './field-editors';
+import { FieldShell, GoToFieldLink, LookupFieldEditor, DroptreeFieldEditor, TreelistFieldEditor, ImageFieldEditor, GeneralLinkFieldEditor, DatetimeFieldEditor, NumberFieldEditor, NameValueListEditor, RenderingsFieldEditor, fieldAnchorId } from './field-editors';
 import { normalizeFieldType } from './field-editors/utils';
 
 interface FieldEditorProps {
@@ -124,11 +124,25 @@ export function FieldEditor({ fieldId, hint, value, fieldType, fieldSource, cont
     }
   }
 
-  if (ftn === 'droplink' || ftn === 'droplist' || ftn === 'droptree') {
-    const lookupKind =
-      ftn === 'droplink' ? 'Droplink'
-      : ftn === 'droplist' ? 'Droplist'
-      : 'Droptree';
+  // Droptree gets a real single-select tree picker (rooted at the field's
+  // Source); Droplink/Droplist remain flat dropdowns.
+  if (ftn === 'droptree') {
+    return (
+      <DroptreeFieldEditor
+        fieldId={fieldId}
+        label={label}
+        value={value}
+        fieldSource={fieldSource ?? ''}
+        contextItemId={contextItemId}
+        editing={editing}
+        onChange={onChange}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+
+  if (ftn === 'droplink' || ftn === 'droplist') {
+    const lookupKind = ftn === 'droplink' ? 'Droplink' : 'Droplist';
     return (
       <LookupFieldEditor
         kind={lookupKind}

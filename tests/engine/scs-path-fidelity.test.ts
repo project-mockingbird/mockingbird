@@ -304,6 +304,31 @@ describe('resolveChildFilePath - longest-prefix include match', () => {
     expect(result).toBe(resolve('/content/home/Home/NewChild.yml'));
   });
 
+  it('routes a descendant create to the scope-covering include, not a SingleItem seed at the same path', () => {
+    // Two includes at the SAME Sitecore path: an authoring "seed" (SingleItem,
+    // covers only the node itself) and a content include (ItemAndDescendants).
+    // A new descendant must land in the content include - else it is written
+    // out-of-scope under the seed and dropped on the next scan.
+    const authoringMod: ModuleConfig = {
+      namespace: 'Authoring',
+      filePath: resolve('/authoring/auth.module.json'),
+      items: { includes: [{ name: 'home-seed', path: '/sitecore/content/Site/Home', scope: 'SingleItem' }] },
+    };
+    const contentMod: ModuleConfig = {
+      namespace: 'Content',
+      filePath: resolve('/content/content.module.json'),
+      items: { includes: [{ name: 'home', path: '/sitecore/content/Site/Home', scope: 'ItemAndDescendants' }] },
+    };
+    const parentFilePath = resolve('/content/home/Home/section/leaf.yml');
+    // Authoring listed FIRST: reproduces the scope-blind tie going to the seed.
+    const result = resolveChildFilePath(
+      parentFilePath,
+      '/sitecore/content/Site/Home/section/leaf/new-page',
+      [authoringMod, contentMod],
+    );
+    expect(result).toBe(resolve('/content/home/Home/section/leaf/new-page.yml'));
+  });
+
   it('falls back to parent-stem when no include matches parentFilePath', () => {
     const mod: ModuleConfig = {
       namespace: 'Test',

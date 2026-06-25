@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Engine } from '../../engine/index.js';
 import { resolveSxaContext } from '../../engine/sxa/site-context.js';
+import { sxaSiteRootForSite } from '../../engine/sites/index.js';
 import { resolveVariantsForRendering } from '../../engine/sxa/variant-options.js';
 import { resolveStyleOptions } from '../../engine/sxa/style-options.js';
 import { resolveGridOptions } from '../../engine/sxa/grid-options.js';
@@ -14,7 +15,7 @@ export function registerSxaRoutes(app: FastifyInstance, engine: Engine): void {
     if (!renderingId) {
       return reply.code(400).send({ error: 'renderingId is required' });
     }
-    const ctx = resolveSxaContext(request.site.rootPath);
+    const ctx = resolveSxaContext(sxaSiteRootForSite(request.site));
     if (!ctx) return reply.code(404).send({ error: 'Site root not found' });
     return resolveVariantsForRendering(engine, ctx.siteRootPath, ctx.commonRootPath, renderingId);
   });
@@ -27,7 +28,7 @@ export function registerSxaRoutes(app: FastifyInstance, engine: Engine): void {
     if (!renderingId) {
       return reply.code(400).send({ error: 'renderingId is required' });
     }
-    const ctx = resolveSxaContext(request.site.rootPath);
+    const ctx = resolveSxaContext(sxaSiteRootForSite(request.site));
     if (!ctx) return reply.code(404).send({ error: 'Site root not found' });
     return resolveStyleOptions(engine, ctx.siteRootPath, ctx.commonRootPath, renderingId);
   });
@@ -36,7 +37,7 @@ export function registerSxaRoutes(app: FastifyInstance, engine: Engine): void {
     if (!request.site) {
       return reply.code(400).send({ error: 'no site context (set ?site=<name> or send Host header matching a Site Grouping)' });
     }
-    const ctx = resolveSxaContext(request.site.rootPath);
+    const ctx = resolveSxaContext(sxaSiteRootForSite(request.site));
     if (!ctx) return reply.code(404).send({ error: 'Site root not found' });
     return resolveGridOptions(engine, ctx.siteRootPath);
   });
