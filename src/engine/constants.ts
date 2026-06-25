@@ -222,6 +222,44 @@ export const TEMPLATE_FOLDER_TEMPLATE_ID = '0437fee2-44c9-46a6-abe9-28858d9fee8c
 // item's template.
 export const BRANCH_TEMPLATE_ID = '35e75c72-4985-4e09-88c3-0eac6cd1e64f';
 
+// `Sitecore.TemplateIDs.CommandMaster` - "System/Masters/Command Master"
+// (verified against Sitecore.Kernel 10.4: TemplateIDs.CommandMaster =
+// {B2613CC1-A748-46A3-A0DB-3774574BD339}). Items templated on this are
+// "command masters" (a.k.a. command templates), e.g. the OOTB "New Template"
+// at /sitecore/templates/Branches/System/Templates/New Template. Picking one
+// as an Insert option does NOT clone a branch or stamp the master's own id -
+// Sitecore runs the command in the master's `Command` field instead. Without
+// this, Mockingbird stamped the command master's id onto the new item, so
+// "Insert > New Template" produced an `unknown`-typed item rather than a
+// real Template.
+export const COMMAND_MASTER_TEMPLATE_ID = 'b2613cc1-a748-46a3-a0db-3774574bd339';
+
+// The `Command` field on a Command Master (holds e.g.
+// "templates:new(id=$ParentID)"). Field id read from the OOTB "New Template"
+// command master's shared fields.
+export const COMMAND_FIELD_ID = '854cc8f6-94ad-4521-a4b6-44ed8f794c98';
+
+// Maps a Sitecore command (the part before the "(") to the template the
+// command produces. `templates:new` is the OOTB "New Template" command, which
+// creates an item on `TemplateIDs.Template` ({AB86861A-...}). Extend this as
+// further command masters are validated against the Sitecore assemblies -
+// keys are lowercase command names, values are template ids.
+export const COMMAND_MASTER_PRODUCES: Record<string, string> = {
+  'templates:new': TEMPLATE_TEMPLATE_ID,
+};
+
+/**
+ * Given a Command Master's `Command` field value (e.g.
+ * `templates:new(id=$ParentID)`), return the template id the command produces,
+ * or null when the command is unknown/unsupported (caller decides how to
+ * handle - e.g. surface an error rather than create a broken item).
+ */
+export function producedTemplateForCommand(commandValue: string | undefined): string | null {
+  if (!commandValue) return null;
+  const name = commandValue.split('(')[0].trim().toLowerCase();
+  return COMMAND_MASTER_PRODUCES[name] ?? null;
+}
+
 // Valid SitecoreAI field types
 export const VALID_FIELD_TYPES = [
   'Checkbox',

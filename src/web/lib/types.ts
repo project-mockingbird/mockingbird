@@ -288,6 +288,8 @@ export interface InsertItemRequest {
   parentPath: string;
   templateId: string;
   name: string;
+  /** Base template for a new Template definition. Ignored for other inserts. */
+  baseTemplateId?: string;
 }
 
 /** POST /api/items with type=fromTemplate returns the created node, serialized as ItemDetail. */

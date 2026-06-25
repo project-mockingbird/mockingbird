@@ -89,9 +89,16 @@ export interface TemplateSchema {
 // ---------------------------------------------------------------------------
 
 const schemaCache = new Map<string, TemplateSchema>();
+// Tree generation the cache was built against. Any tree mutation (create /
+// delete / move / rename of a template, section, or field item) bumps
+// `engine.treeGeneration`, which invalidates the whole cache on the next read.
+// Without this the Builder served a frozen schema: a section added to an
+// already-opened template never appeared until the process restarted.
+let cacheGeneration = -1;
 
 export function clearTemplateSchemaCache(): void {
   schemaCache.clear();
+  cacheGeneration = -1;
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +268,15 @@ export function getRenderingParametersSchema(engine: Engine, renderingId: string
 
 export function getTemplateSchema(templateId: string, engine: Engine): TemplateSchema {
   const normalizedId = templateId.toLowerCase();
+
+  // Invalidate the whole cache when the tree has changed since it was built.
+  // Schemas compose across the base-template chain, so a change to any one
+  // template can affect every derived template's schema - clearing wholesale
+  // is correct and cheap (entries recompute lazily on next access).
+  if (engine.treeGeneration !== cacheGeneration) {
+    schemaCache.clear();
+    cacheGeneration = engine.treeGeneration;
+  }
 
   const cached = schemaCache.get(normalizedId);
   if (cached) return cached;

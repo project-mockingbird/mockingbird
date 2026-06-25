@@ -86,7 +86,7 @@ export const api = {
       body: JSON.stringify({ type: 'moveTo', ...data }),
     }),
   refreshItem: (id: string) =>
-    request<{ rootItemId: string; refreshed: number; item: ItemDetail }>(
+    request<{ rootItemId: string; refreshed: number; removed: number; item: ItemDetail }>(
       `/api/items/${bareGuid(id)}/refresh`,
       { method: 'POST', body: '{}' },
     ),
@@ -94,6 +94,11 @@ export const api = {
     request<ItemDetail>(`/api/items/${bareGuid(id)}/rename`, {
       method: 'POST',
       body: JSON.stringify({ name: newName }),
+    }),
+  createStandardValues: (id: string) =>
+    request<ItemDetail>(`/api/items/${bareGuid(id)}/standard-values`, {
+      method: 'POST',
+      body: '{}',
     }),
   updateItem: (id: string, data: UpdateItemRequest) =>
     request<ItemDetail>(`/api/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

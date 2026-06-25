@@ -14,6 +14,7 @@ import {
   mdiUnfoldLessHorizontal,
 } from '@mdi/js';
 import { Icon } from '@/lib/icon';
+import { isFolderTemplate } from '@/lib/folder-templates';
 import { useTree, useChildren, useCreateItem, useDeleteItem, useAncestors } from '@/hooks/useItems';
 import { useValidation } from '@/hooks/useValidation';
 import { useEngineStatus } from '@/hooks/useEngineStatus';
@@ -43,6 +44,7 @@ import { useCopyItem } from '@/hooks/useCopyItem';
 import { useMoveItem } from '@/hooks/useMoveItem';
 import { useRefreshItem } from '@/hooks/useRefreshItem';
 import { useRenameItem } from '@/hooks/useRenameItem';
+import { useCreateStandardValues } from '@/hooks/useCreateStandardValues';
 import { NoProjectState } from '@/components/no-project/NoProjectState';
 import { InsertItemDialog } from './InsertItemDialog';
 import { HeadlessSiteCollectionDialog } from './HeadlessSiteCollectionDialog';
@@ -82,6 +84,13 @@ const TYPE_ICON_PATHS: Record<string, string> = {
 };
 
 function nodeIconPath(node: TreeNode): string {
+  // Folder-style templates (Template Folder, Media folder, generic Folder,
+  // ...) are containers and must show the folder icon even when EMPTY -
+  // otherwise a freshly-created, childless Template Folder falls through to
+  // the type map and renders as a generic file/cube, which reads as a leaf
+  // item and confuses authors. The hasChildren heuristic below still covers
+  // non-folder items that happen to have children.
+  if (isFolderTemplate(node.template)) return mdiFolder;
   if (node.hasChildren) return mdiFolder;
   return TYPE_ICON_PATHS[node.type] ?? mdiFile;
 }
@@ -249,7 +258,16 @@ function ContentTreeNode({
   // Context menu state
   const createItem = useCreateItem();
   const deleteItem = useDeleteItem();
+  const createStandardValues = useCreateStandardValues();
   const [createDialog, setCreateDialog] = useState<{ label: string; type: CreateType } | null>(null);
+
+  // Whether this template already has a `__Standard Values` child among the
+  // children we've loaded. Drives whether the "Create Standard Values" menu
+  // entry shows. When children aren't loaded yet this is false and the entry
+  // shows; the engine still rejects a duplicate, so the worst case is a toast.
+  const hasStandardValuesChild = rawChildren.some(
+    (c) => c.name.toLowerCase() === '__standard values',
+  );
 
   // Insert submenu state. The submenu OPEN signal flips `insertSubOpen` true,
   // which gates the lazy useInsertOptions fetch (no fetch on every right-click).
@@ -429,7 +447,7 @@ function ContentTreeNode({
     );
   };
 
-  const handleInsert = async (name: string) => {
+  const handleInsert = async (name: string, baseTemplateId?: string) => {
     if (!insertDialog) return;
     setInsertServerError(null);
     try {
@@ -438,6 +456,7 @@ function ContentTreeNode({
         parentPath: node.path,
         templateId: insertDialog.templateId,
         name,
+        baseTemplateId,
       });
       setInsertDialog(null);
       toast.success(`Inserted "${name}"`);
@@ -585,7 +604,7 @@ function ContentTreeNode({
     return (myChildrenQuery.data ?? []).map((c: { name: string }) => c.name);
   }, [myChildrenQuery.data]);
 
-  const handleIconInsert = async (req: { templateId: string; name: string }) => {
+  const handleIconInsert = async (req: { templateId: string; name: string; baseTemplateId?: string }) => {
     setIconInsertServerError(null);
     try {
       await insertItem.mutateAsync({
@@ -593,6 +612,7 @@ function ContentTreeNode({
         parentPath: node.path,
         templateId: req.templateId,
         name: req.name,
+        baseTemplateId: req.baseTemplateId,
       });
       setIconInsertDialogOpen(false);
       toast.success(`Inserted "${req.name}"`);
@@ -650,6 +670,16 @@ function ContentTreeNode({
     } catch (err) {
       toast.error(`Create failed: ${err instanceof Error ? err.message : String(err)}`);
       throw err;
+    }
+  };
+
+  const handleCreateStandardValues = async () => {
+    try {
+      const sv = await createStandardValues.mutateAsync(node.id);
+      onSelect(sv.id);
+      toast.success('Created __Standard Values');
+    } catch (err) {
+      toast.error(`Create failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -856,6 +886,15 @@ function ContentTreeNode({
             </>
           )}
 
+          {/* Standard values: only on serialized template items that don't
+              already have a __Standard Values child (Sitecore "Standard
+              values" command). */}
+          {node.type === 'template' && !isRegistry && !hasStandardValuesChild && (
+            <ContextMenuItem onSelect={handleCreateStandardValues}>
+              Create Standard Values
+            </ContextMenuItem>
+          )}
+
           <ContextMenuSeparator />
 
           <ContextMenuItem
@@ -965,6 +1004,7 @@ function ContentTreeNode({
         <InsertItemDialog
           open={!!insertDialog}
           templateName={insertDialog.templateName}
+          templateId={insertDialog.templateId}
           parentPath={node.path}
           onConfirm={handleInsert}
           onClose={() => {

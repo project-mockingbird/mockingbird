@@ -1,8 +1,16 @@
 import type { Engine } from './index.js';
 import type { ItemNode, ScsItem } from './types.js';
 import { sitecoreDate } from './index.js';
-import { generateGuid } from './guid.js';
-import { BRANCH_TEMPLATE_ID, FIELD_IDS } from './constants.js';
+import { generateGuid, formatGuidBraced } from './guid.js';
+import {
+  BRANCH_TEMPLATE_ID,
+  COMMAND_MASTER_TEMPLATE_ID,
+  COMMAND_FIELD_ID,
+  FIELD_IDS,
+  TEMPLATE_TEMPLATE_ID,
+  STANDARD_TEMPLATE_ID,
+  producedTemplateForCommand,
+} from './constants.js';
 import { getNameVsSiblingsError, getSiblingNames } from './name-validation.js';
 import { getTemplateSchema, type TemplateFieldSchema } from './template-schema.js';
 import { readFieldViaStandardValuesCascade } from './layout/item-fields.js';
@@ -27,6 +35,12 @@ export type InsertItemArgs = {
   parentId: string;
   templateId: string;
   name: string;
+  /**
+   * Base template assigned to the new item when it is a Template definition
+   * (its resolved template is `TEMPLATE_TEMPLATE_ID`). Defaults to Standard
+   * template. Ignored for non-template inserts (folders, content items).
+   */
+  baseTemplateId?: string;
 };
 
 export type InsertItemResult = {
@@ -67,13 +81,15 @@ export async function insertItem(engine: Engine, args: InsertItemArgs): Promise<
   return insertItemAtParent(
     engine,
     { item: { id: parentNode.item.id, path: parentNode.item.path }, filePath: parentNode.filePath },
-    { templateId: args.templateId, name: args.name },
+    { templateId: args.templateId, name: args.name, baseTemplateId: args.baseTemplateId },
   );
 }
 
 export type InsertItemAtParentArgs = {
   templateId: string;
   name: string;
+  /** See {@link InsertItemArgs.baseTemplateId}. */
+  baseTemplateId?: string;
 };
 
 /**
@@ -104,7 +120,11 @@ export async function insertItemAtParent(
   if (!tplFromTree && !tplFromRegistry) {
     throw new Error(`Template not found: ${args.templateId}`);
   }
-  const templateId = tplFromTree?.id ?? tplFromRegistry!.id;
+  // The master's own template decides how Sitecore inserts it (ported from
+  // Sitecore.Kernel `AddMaster.Add`): CommandMaster -> run its `Command`;
+  // BranchTemplate -> clone the branch subtree; otherwise -> create an item
+  // ON the master template.
+  const masterTpl = (tplFromTree?.template ?? tplFromRegistry?.template ?? '').toLowerCase();
 
   // 2. Validate name against existing siblings (tree + registry combined).
   const parentTreeNode = engine.getItemById(parent.item.id);
@@ -118,13 +138,32 @@ export async function insertItemAtParent(
   if (err) throw new Error(err);
 
   // 3. Branch templates dispatch to the multi-item subtree-clone path.
-  const tplOfTpl = (tplFromTree?.template ?? tplFromRegistry?.template ?? '').toLowerCase();
-  const isBranch = tplOfTpl === BRANCH_TEMPLATE_ID;
-  if (isBranch) {
+  if (masterTpl === BRANCH_TEMPLATE_ID) {
     if (!tplFromTree) {
       throw new Error(`Branch template must be tree-resolved (registry-only branches not supported): ${args.templateId}`);
     }
     return await insertBranch(engine, parent, tplFromTree, args.name);
+  }
+
+  // 4. Resolve the template the new item is created ON. A Command Master
+  // (Sitecore `TemplateIDs.CommandMaster`, e.g. the OOTB "New Template") is NOT
+  // the new item's template - AddMaster runs the master's `Command` (e.g.
+  // `templates:new`, which creates a Template item). Resolve the produced
+  // template so the skeleton below is the correct type, rather than an orphan
+  // typed on the command master item itself.
+  let templateId = tplFromTree?.id ?? tplFromRegistry!.id;
+  if (masterTpl === COMMAND_MASTER_TEMPLATE_ID) {
+    const commandValue = tplFromTree
+      ? tplFromTree.sharedFields.find(f => f.id === COMMAND_FIELD_ID)?.value
+      : tplFromRegistry!.sharedFields[COMMAND_FIELD_ID];
+    const produced = producedTemplateForCommand(commandValue);
+    if (!produced) {
+      throw new Error(
+        `Unsupported command template "${tplFromTree?.path ?? tplFromRegistry?.path ?? args.templateId}"` +
+        ` (command: ${commandValue ?? 'none'})`,
+      );
+    }
+    templateId = produced;
   }
 
   // Build skeleton item.
@@ -151,6 +190,17 @@ export async function insertItemAtParent(
     ],
   };
 
+  // New Template definitions inherit a base template (CE parity: the create
+  // dialog assigns one, defaulting to Standard template). Only applies when the
+  // new item IS a Template - ordinary content/folder inserts get no base.
+  if (templateId === TEMPLATE_TEMPLATE_ID) {
+    newItem.sharedFields.push({
+      id: FIELD_IDS.baseTemplate,
+      hint: '__Base template',
+      value: formatGuidBraced(args.baseTemplateId ?? STANDARD_TEMPLATE_ID),
+    });
+  }
+
   expandTokenBearingSvFields(engine, newItem, templateId);
 
   const filePath = await engine.writeItemFileAt(
@@ -158,7 +208,7 @@ export async function insertItemAtParent(
     engine.computeChildFilePath(parent.filePath, newItem.path),
   );
 
-  const newNode = engine.getTree().addItem(newItem, filePath);
+  const newNode = engine.addCreatedItem(newItem, filePath);
 
   return { rootItemId: newId, createdItems: [newNode] };
 }

@@ -1,5 +1,11 @@
 import type { Engine } from './index.js';
-import { FIELD_IDS, BRANCH_TEMPLATE_ID } from './constants.js';
+import {
+  FIELD_IDS,
+  BRANCH_TEMPLATE_ID,
+  COMMAND_MASTER_TEMPLATE_ID,
+  COMMAND_FIELD_ID,
+  producedTemplateForCommand,
+} from './constants.js';
 import { parseGuidList } from './guid.js';
 import { readFieldWithSvFallback } from './layout/item-fields.js';
 
@@ -60,8 +66,23 @@ export function getInsertOptions(engine: Engine, itemId: string): InsertOption[]
       : reg?.name;
     if (!path || !name) continue; // unresolvable - skip silently
     const tplOfTpl = (resolved?.item.template ?? reg?.template ?? '').toLowerCase();
+    // Command Masters (Sitecore `TemplateIDs.CommandMaster`, e.g. "New
+    // Template") are not real templates: AddMaster runs their `Command` field
+    // (e.g. `templates:new`, which creates a Template). Surface the PRODUCED
+    // template as the option's templateId so the insert makes the right item
+    // type, keeping the master's display name ("New Template"). An unknown
+    // command master is skipped rather than offered as a broken insert.
+    let templateId = guid;
+    if (tplOfTpl === COMMAND_MASTER_TEMPLATE_ID) {
+      const commandValue = resolved
+        ? resolved.item.sharedFields.find(f => f.id === COMMAND_FIELD_ID)?.value
+        : reg!.sharedFields[COMMAND_FIELD_ID];
+      const produced = producedTemplateForCommand(commandValue);
+      if (!produced) continue;
+      templateId = produced;
+    }
     results.push({
-      templateId: guid,
+      templateId,
       templateName: name,
       templatePath: path,
       kind: tplOfTpl === BRANCH_TEMPLATE_ID ? 'branch' : 'template',
