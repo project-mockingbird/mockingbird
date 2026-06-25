@@ -56,6 +56,11 @@ export async function refreshItem(
 
   const rootItem = await parseItem(node.filePath);
   tree.addItem(rootItem, node.filePath, node.module);
+  // Stamp provenance for items the open/merge never saw (idempotent: a no-op
+  // for items that already carry it). The layer is derived from the file path,
+  // so a refresh-surfaced item gets the right "bar" colour even though it was
+  // never part of the layer merge. See Engine.recordCreatedItemProvenance.
+  engine.recordCreatedItemProvenance(rootItem.id, rootItem.parent, node.filePath);
   refreshed++;
 
   // Walk the wrapping children directory if it exists. The convention is:
@@ -77,6 +82,7 @@ export async function refreshItem(
     try {
       const item = await parseItem(abs);
       tree.addItem(item, abs, node.module);
+      engine.recordCreatedItemProvenance(item.id, item.parent, abs);
       refreshed++;
     } catch {
       // Skip unparseable YAMLs; surface via the per-call result count.

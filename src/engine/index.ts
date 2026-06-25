@@ -1364,35 +1364,63 @@ export class Engine {
    *
    * Every user-initiated create path (insert-from-template, New
    * Section/Field/Template/Rendering, branch instantiation, copy/duplicate,
-   * SXA scaffolding) routes its tree insertion through here. Indexing, scan,
-   * cache-load and refresh paths intentionally call `tree.addItem` directly:
-   * their provenance is computed by the open/merge logic and must not be
-   * overwritten with the active-layer stamp.
+   * SXA scaffolding) routes its tree insertion through here. Indexing, scan and
+   * cache-load paths call `tree.addItem` directly; their provenance is computed
+   * by the open/merge logic. The refresh path also calls `tree.addItem`
+   * directly but then stamps via `recordCreatedItemProvenance` for any item it
+   * surfaces that the open/merge never saw (see `refresh-item.ts`).
    */
   addCreatedItem(item: ScsItem, filePath: string, module?: string): ItemNode {
     const node = this.tree.addItem(item, filePath, module);
-    this.recordCreatedItemProvenance(item.id, item.parent);
+    this.recordCreatedItemProvenance(item.id, item.parent, filePath);
     return node;
   }
 
   /**
-   * Stamp provenance for a newly created item. The winning layer is inherited
-   * from the item's parent's winner (correct for multi-layer mode: a new child
-   * belongs to whatever layer its parent's file lives in), falling back to the
-   * primary (first) layer, which is the sole layer in single-layer mode.
+   * Stamp provenance for a newly created (or refresh-surfaced) item. The winning
+   * layer is the one whose serialization root actually contains the item's file
+   * (the ground truth - see {@link _layerNameForFilePath}); when no file path is
+   * supplied it falls back to the parent's winner, then the primary (first)
+   * layer. Deriving from the file path rather than parent inheritance keeps an
+   * item correct even when its parent has no provenance yet (e.g. a parent the
+   * Refresh surfaced), which is why a content-layer item no longer gets the
+   * authoring-layer default.
    *
    * No-op when no workspace layers are open (legacy `init()` / no-project
    * mode) - matching the pre-existing "no provenance bars without a layered
    * workspace" behavior - and idempotent: re-adding an item that already has
    * provenance neither re-stamps it nor double-counts it in the layer stats.
    */
-  recordCreatedItemProvenance(itemId: string, parentId: string | undefined): void {
+  recordCreatedItemProvenance(itemId: string, parentId: string | undefined, filePath?: string): void {
     if (this._layers.length === 0) return;
     if (this._itemProvenance.has(itemId)) return;
+    const byFile = filePath ? this._layerNameForFilePath(filePath) : undefined;
     const parentProv = parentId ? this._itemProvenance.get(parentId) : undefined;
-    const layerName = parentProv?.winnerLayer ?? this._layers[0].name;
+    const layerName = byFile ?? parentProv?.winnerLayer ?? this._layers[0].name;
     this._itemProvenance.set(itemId, { winnerLayer: layerName, contributingLayers: [layerName] });
     this._layerStats.set(layerName, (this._layerStats.get(layerName) ?? 0) + 1);
+  }
+
+  /**
+   * Returns the name of the open layer whose serialization root (the directory
+   * holding its `sitecore.json`) contains `filePath`, by LONGEST-prefix match.
+   * Nested roots are why longest-prefix matters: an authoring layer rooted at
+   * the workspace and a content layer rooted at `<workspace>/migration` both
+   * "contain" a file under `migration/`, and the deeper (content) root must win.
+   * Returns undefined when no open layer root contains the file.
+   */
+  private _layerNameForFilePath(filePath: string): string | undefined {
+    let bestName: string | undefined;
+    let bestRootLen = -1;
+    for (const layer of this._layers) {
+      const root = dirname(layer.sitecoreJsonPath);
+      const rootWithSep = root.endsWith(sep) ? root : root + sep;
+      if (filePath.startsWith(rootWithSep) && root.length > bestRootLen) {
+        bestRootLen = root.length;
+        bestName = layer.name;
+      }
+    }
+    return bestName;
   }
 
   /**
