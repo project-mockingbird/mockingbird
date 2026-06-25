@@ -58,6 +58,7 @@ Full configuration reference, environment variables, GraphQL schema, and archite
 | Tag | Notes |
 |---|---|
 | `latest` | Most recent release |
+| `0.12.0` | Composed (page-design-aware) Layout editor; multi-layer fixes: SXA variants for env-fallback sites, dynamic-placeholder auto-assign, scope-aware new-item placement, file-path-derived provenance, and warm-start cache self-heal for items added while the container was down |
 | `0.11.4` | GraphQL schema generator declares transitively-implemented interfaces, so inline fragments on a base interface resolve on every type that reaches it through an intermediate interface |
 | `0.11.3` | Per-developer session state moved to `config.mockingbird.local` so team members don't stomp on each other in the tracked file |
 | `0.11.2` | Security patch: clears 5 HIGH CVEs (pwsh 7.4.15, fast-uri 3.x override, npm bump) |
