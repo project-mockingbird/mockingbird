@@ -1,7 +1,7 @@
 import { mkdir, writeFile, stat, rm } from 'fs/promises';
 import { resolve, dirname, sep } from 'path';
 import { createHash } from 'crypto';
-import { scanDirectory, scanAdditionalRoot } from './scanner.js';
+import { scanDirectory, scanAdditionalRoot, collectFileTargets, type FileTarget } from './scanner.js';
 import { ItemTree } from './tree.js';
 import { Registry } from './registry.js';
 import { loadCachedTree, writeCachedTree, deleteStaleCache, type CacheRoot } from './index-cache.js';
@@ -91,6 +91,10 @@ export class Engine {
    * `readiness` on the watcher caused the 0.1.3 container-hang regression.
    */
   private _watcherReady: Promise<void> = Promise.resolve();
+  /** Resolves when the post-open cache self-heal (multi-layer warm start)
+   *  finishes. `Promise.resolve()` when no reconcile ran. See
+   *  `_reconcileCacheHitLayers`. */
+  private _reconcilePromise: Promise<void> = Promise.resolve();
   // Cached for the close-time cache rewrite so we don't re-run discoverModules on shutdown.
   private _cacheRoots: CacheRoot[] = [];
   private _layers: LayerSpec[] = [];
@@ -111,6 +115,13 @@ export class Engine {
   /** Awaits the file watcher's initial scan. Mainly useful for tests. */
   async awaitWatcherReady(): Promise<void> {
     await this._watcherReady;
+  }
+
+  /** Awaits the multi-layer warm-start cache self-heal. Resolves immediately
+   *  when no reconcile ran (cold open, single-layer, or no drift). Tests await
+   *  this to observe the reconciled tree deterministically. */
+  async awaitReconcile(): Promise<void> {
+    await this._reconcilePromise;
   }
 
   async startInit(): Promise<void> {
@@ -1062,6 +1073,8 @@ export class Engine {
       await this._cacheWritePromise.catch(() => {});
       this._cacheWritePromise = null;
     }
+    // Drain the warm-start reconcile (it bails on the _closed flag set above).
+    await this._reconcilePromise.catch(() => {});
     // Write a fresh cache reflecting in-session mutations (PUT, trim, etc.) so the next graceful start is both warm AND fresh. Hard kills fall back to the existing verify-and-delete path.
     if (this.options.indexCachePath && this.readiness.isReady() && this._cacheRoots.length > 0) {
       console.error(`  [index] writing cache on shutdown to ${this.options.indexCachePath}`);
@@ -1094,6 +1107,10 @@ export class Engine {
       try { await this._cacheWritePromise; } catch { /* swallow - tear-down */ }
       this._cacheWritePromise = null;
     }
+    // Drain any in-flight warm-start reconcile before swapping the tree, so it
+    // can't add stale items into the next workspace's fresh tree.
+    try { await this._reconcilePromise; } catch { /* swallow - tear-down */ }
+    this._reconcilePromise = Promise.resolve();
     this.tree = new ItemTree();
     this.modules = [];
     this._cacheRoots = [];
@@ -1214,6 +1231,11 @@ export class Engine {
       Array<{ name: string; ops: AllowedPushOperations | undefined }>
     >();
     const layerCacheWrites: Promise<void>[] = [];
+    // Layers served from a (possibly stale) per-layer cache - candidates for
+    // the warm-start self-heal below. Each carries the set of file paths the
+    // cache actually contained, so the reconcile can spot what disk has that
+    // the cache missed.
+    const cacheHitLayers: Array<{ name: string; layerRoot: string; cachedPaths: Set<string> }> = [];
 
     for (const layer of layers) {
       const layerRoot = dirname(layer.sitecoreJsonPath);
@@ -1229,8 +1251,14 @@ export class Engine {
         if (cached) {
           partialTree = cached.tree;
           this.readiness.markProgress(cached.entryCount, cached.entryCount);
+          cacheHitLayers.push({
+            name: layer.name,
+            layerRoot,
+            cachedPaths: new Set(partialTree.getAllNodes().map((n) => n.filePath.toLowerCase())),
+          });
           // Fire-and-forget signature verify; delete stale cache so the next
-          // open of this layer re-scans cold.
+          // open of this layer re-scans cold (catches edits + host-side
+          // deletes). Adds are healed in-session by the reconcile below.
           void cached.verifyPromise.then(async (match) => {
             if (!match) {
               await deleteStaleCache(layerCachePath);
@@ -1305,6 +1333,70 @@ export class Engine {
     }
 
     this.readiness.markReady();
+
+    // Warm-start self-heal: a cache-hit layer can be missing items that landed
+    // on disk after its cache was written (e.g. an item created via the API in
+    // a previous session, then the container restarted). The file watcher is
+    // disabled in multi-layer mode and the signature verify only deletes the
+    // stale cache for the NEXT restart, so without this the item is absent for
+    // the whole first post-restart session. Runs in the background (no added
+    // time-to-serve); tests await `awaitReconcile()`.
+    if (cacheHitLayers.length > 0) {
+      this._reconcilePromise = this._reconcileCacheHitLayers(cacheHitLayers);
+    }
+  }
+
+  /**
+   * Add-only warm-start self-heal for multi-layer cache hits. For each layer
+   * served from a (possibly stale) per-layer cache, list its on-disk YAMLs and
+   * add any the cache never captured - the "item created last session,
+   * container restarted, item vanished until Refresh" case. Provenance is
+   * stamped from the file's layer root and `onItemChange` fires so an open UI
+   * updates without a manual Refresh.
+   *
+   * Scoped to ADDS on purpose: edits and host-side deletes are still handled by
+   * the signature verify (which deletes the stale cache so the next start
+   * cold-rebuilds) and by manual Refresh - neither of which can cascade-delete
+   * live descendants the way a naive prune here could. Best-effort and
+   * idempotent: a file whose id is already in the live tree is skipped, so a
+   * re-run (next warm start, if the cache wasn't deleted) is safe.
+   */
+  private async _reconcileCacheHitLayers(
+    layers: Array<{ name: string; layerRoot: string; cachedPaths: Set<string> }>,
+  ): Promise<void> {
+    for (const layer of layers) {
+      if (this._closed) return;
+      let onDisk: FileTarget[];
+      try {
+        onDisk = await collectFileTargets(layer.layerRoot);
+      } catch {
+        continue; // can't list disk - skip this layer's reconcile
+      }
+      let added = 0;
+      for (const target of onDisk) {
+        if (this._closed) return;
+        if (layer.cachedPaths.has(target.absolutePath.toLowerCase())) continue;
+        let item: ScsItem;
+        try {
+          item = await parseItem(target.absolutePath);
+        } catch {
+          continue; // unparseable YAML - skip, same as the scan/refresh paths
+        }
+        // Only a "first sighting" id is a genuine add; an id another open layer
+        // already provides is owned by the precedence merge - leave it alone.
+        if (this.tree.getById(item.id)) continue;
+        this.tree.addItem(item, target.absolutePath, target.namespace);
+        this.recordCreatedItemProvenance(item.id, item.parent, target.absolutePath);
+        this.options.onItemChange?.({ type: 'added', itemId: item.id, itemPath: item.path });
+        added++;
+      }
+      if (added > 0) {
+        // New nodes may arrive before their parents; rebuild the children index
+        // so the tree walk is consistent.
+        this.tree.rebuildChildrenIndex();
+        console.error(`  [index] warm-start reconcile(${layer.name}): +${added} item(s) from disk`);
+      }
+    }
   }
 
   /**
