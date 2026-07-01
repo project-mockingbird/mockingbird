@@ -897,6 +897,14 @@ export class Engine {
     return insertItemImpl(this, args);
   }
 
+  async addSerializationRoot(
+    input: import('./serialization/orchestrator.js').AddSerializationRootInput,
+    opts: { dryRun?: boolean } = {},
+  ): Promise<import('./serialization/orchestrator.js').AddSerializationRootResult> {
+    const { addSerializationRoot } = await import('./serialization/orchestrator.js');
+    return addSerializationRoot(this, input, opts);
+  }
+
   deleteItem(idOrPath: string): string[] {
     const node =
       this.tree.getById(idOrPath) ?? this.tree.getByPath(idOrPath);
