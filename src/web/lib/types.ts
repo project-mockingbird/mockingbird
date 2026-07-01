@@ -19,6 +19,8 @@ export interface TreeNode {
   template: string;
   type: 'template' | 'templateSection' | 'templateField' | 'rendering' | 'unknown';
   source: 'serialized' | 'registry';
+  /** True when a serialization root covers this node (so children can be inserted). Always true for serialized items. Absent/falsy on locally-constructed nodes is treated as not insertable. */
+  insertable?: boolean;
   hasChildren: boolean;
   /** `__Sortorder`; default 100 when missing. */
   sortOrder?: number;

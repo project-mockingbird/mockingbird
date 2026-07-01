@@ -833,7 +833,7 @@ function ContentTreeNode({
         <ContextMenuContent>
           {/* Insert - first item (Sitecore Content Editor parity). */}
           <ContextMenuSub onOpenChange={setInsertSubOpen}>
-            <ContextMenuSubTrigger disabled={isRegistry && !isContentRoot && !isJssTenant}>
+            <ContextMenuSubTrigger disabled={isRegistry && !node.insertable && !isContentRoot && !isJssTenant}>
               Insert
             </ContextMenuSubTrigger>
             <ContextMenuSubContent>
@@ -875,7 +875,7 @@ function ContentTreeNode({
             </ContextMenuSubContent>
           </ContextMenuSub>
 
-          {isRegistry && (
+          {isRegistry && !node.insertable && (
             <ContextMenuItem onSelect={() => setAddRootDialogOpen(true)}>
               Add serialization root here...
             </ContextMenuItem>
