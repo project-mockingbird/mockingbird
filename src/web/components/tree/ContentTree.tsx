@@ -773,6 +773,7 @@ function ContentTreeNode({
         )}
         <RowActionIcons
           isRegistry={isRegistry}
+          insertable={node.insertable}
           onInsert={() => setIconInsertDialogOpen(true)}
           onDuplicate={() => setDuplicateDialogOpen(true)}
           onRefresh={handleRefresh}
