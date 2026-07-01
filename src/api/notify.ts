@@ -9,7 +9,7 @@ export function notifyItemChange(engine: Engine, event: ItemChangeEvent): void {
 }
 
 export interface TreeRefreshEvent {
-  reason: 'scaffold';
+  reason: 'scaffold' | 'serialization-root';
   rootItemPath: string;
   createdCount: number;
 }
