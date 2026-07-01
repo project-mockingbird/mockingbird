@@ -375,6 +375,26 @@ function scopeCoversChild(
 }
 
 /**
+ * Whether some user include's scope covers a NEW depth-1 child created under
+ * `parentSitecorePath`. Used to decide if a registry-only parent should expose
+ * an insert affordance. Scope-aware (unlike Engine.findCoveringInclude, which
+ * is path-prefix only): a SingleItem include at the exact path does NOT cover
+ * children, so it returns false.
+ */
+export function coversNewChildAt(
+  parentSitecorePath: string,
+  modules: ReadonlyArray<ModuleConfig>,
+): boolean {
+  const probe = parentSitecorePath.replace(/\/+$/, '') + '/__mb_probe';
+  for (const mod of modules) {
+    for (const include of mod.items.includes) {
+      if (scopeCoversChild(include.path, include.scope, probe)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Find the include whose Sitecore item-path covers `childItemSitecorePath`
  * (path prefix AND scope) with the longest path. Used as the primary lookup in
  * {@link resolveChildFilePath} so a registry-only parent (whose ghost

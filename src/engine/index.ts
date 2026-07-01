@@ -24,7 +24,7 @@ import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, Va
 import { comparePushOps, pushOpStrength, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
 import type { MutationPlan } from './mutation-plan.js';
 import { insertItem as insertItemImpl, type InsertItemArgs, type InsertItemResult } from './insert-item.js';
-import { resolveChildFilePath } from './child-file-path.js';
+import { resolveChildFilePath, coversNewChildAt as coversNewChildAtImpl } from './child-file-path.js';
 import { ReadinessState } from './readiness.js';
 import { startPhase } from './index-timing.js';
 import { loadPublishDateOverrides } from './layout/publish-dates.js';
@@ -528,6 +528,11 @@ export class Engine {
       }
     }
     return undefined;
+  }
+
+  /** Scope-aware: does any loaded include cover a new child under this path? */
+  coversNewChildAt(itemSitecorePath: string): boolean {
+    return coversNewChildAtImpl(itemSitecorePath, this.modules);
   }
 
   /**
