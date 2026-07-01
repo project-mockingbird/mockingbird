@@ -20,6 +20,11 @@ serialization/
 # tree.
 !tests/fixtures/**
 
+# Engine source directory that happens to be named "serialization" - it is
+# committed source code, not a bind-mount root. Negate the directory itself
+# so git descends into it (per-file negations don't work on excluded dirs).
+!src/engine/serialization
+
 # Local scratch space.
 /.scratch/
 
