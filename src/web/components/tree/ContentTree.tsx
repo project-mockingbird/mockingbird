@@ -59,6 +59,7 @@ import { InsertDialogWithTemplateDropdown } from './InsertDialogWithTemplateDrop
 import { InsertFromTemplateDialog } from './InsertFromTemplateDialog';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { AddToPackageDialog } from '@/components/package/AddToPackageDialog';
+import { AddSerializationRootDialog } from './AddSerializationRootDialog';
 import {
   useTreeKeyboardNav,
   TreeKeyboardNavProvider,
@@ -713,6 +714,8 @@ function ContentTreeNode({
   const openAddToPackage = () => { setPackageDialogMode('cart'); setPackageDialogOpen(true); };
   const openDownloadTree = () => { setPackageDialogMode('download'); setPackageDialogOpen(true); };
 
+  const [addRootDialogOpen, setAddRootDialogOpen] = useState(false);
+
   const iconPath = nodeIconPath(node);
 
   const menuItems = [
@@ -870,6 +873,12 @@ function ContentTreeNode({
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
+
+          {isRegistry && (
+            <ContextMenuItem onSelect={() => setAddRootDialogOpen(true)}>
+              Add serialization root here...
+            </ContextMenuItem>
+          )}
 
           {menuItems.length > 0 && (
             <>
@@ -1186,6 +1195,15 @@ function ContentTreeNode({
           mode={packageDialogMode}
           onDownloadSuccess={(filename) => toast.success(`Downloaded ${filename}`)}
           onDownloadError={(message) => toast.error(message)}
+        />
+      )}
+
+      {addRootDialogOpen && (
+        <AddSerializationRootDialog
+          open={addRootDialogOpen}
+          onOpenChange={setAddRootDialogOpen}
+          itemPath={node.path}
+          database={database}
         />
       )}
 
