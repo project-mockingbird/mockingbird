@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Engine } from '../../engine/index.js';
-import { SerializationRootError } from '../../engine/serialization/add-serialization-root.js';
+import { SerializationRootError, type RootScope } from '../../engine/serialization/add-serialization-root.js';
 import { notifyTreeRefresh } from '../notify.js';
 
 const CODE_TO_STATUS: Record<string, number> = {
@@ -40,7 +40,7 @@ export function registerSerializationRootRoutes(app: FastifyInstance, engine: En
         {
           path: body.path,
           database: body.database,
-          scope: body.scope as never,
+          scope: body.scope as RootScope | undefined,
           name: body.name,
           target: body.target,
         },

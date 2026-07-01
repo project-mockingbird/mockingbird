@@ -47,6 +47,27 @@ export async function addSerializationRoot(
     warnings.push('Scope SingleItem covers only the item itself; it will not enable creating children under this path.');
   }
 
+  // Cross-module exact-path collision: an include for this exact Sitecore path
+  // in ANY loaded module means ambiguous routing. Reject per the spec error table.
+  const lowerPath = input.path.toLowerCase();
+  for (const mod of engine.getModules()) {
+    for (const inc of mod.items.includes) {
+      if (inc.path.toLowerCase() === lowerPath) {
+        throw new SerializationRootError(
+          'include-collision',
+          `An include already covers ${input.path} in ${mod.filePath}`,
+        );
+      }
+    }
+  }
+  // Non-fatal redundancy: if new children under this path are already covered by a
+  // broader (e.g. ancestor) include, this new root is likely redundant.
+  if (engine.coversNewChildAt(input.path)) {
+    warnings.push(
+      'New children under this path are already covered by an existing include; this serialization root may be redundant.',
+    );
+  }
+
   // 2. Resolve target contents.
   let targetFilePath: string;
   let contents: string;
