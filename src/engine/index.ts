@@ -537,14 +537,28 @@ export class Engine {
 
   /**
    * Re-run `discoverModules` to pick up newly-written `*.module.json` files
-   * (the scaffold orchestrators emit these for new tenants/sites). Replaces
-   * the in-memory module list; does NOT touch the parsed tree, registry,
-   * or cache. Subsequent `resolveFilePath` / `findCoveringInclude` calls
-   * see the new includes immediately.
+   * (the scaffold orchestrators emit these for new tenants/sites, and the
+   * add-serialization-root wizard appends includes to existing modules).
+   * Replaces the in-memory module list; does NOT touch the parsed tree,
+   * registry, or cache. Subsequent `resolveFilePath` / `findCoveringInclude`
+   * calls see the new includes immediately.
+   *
+   * Scans the REAL module sources so multi-layer `openWorkspace` callers are
+   * covered: those paths load modules from each layer root and never set
+   * `options.rootDir`, so keying only on `rootDir` would no-op there.
    */
   async reloadModules(): Promise<void> {
-    if (!this.options.rootDir) return;
-    this.modules = await discoverModules(this.options.rootDir).catch(() => []);
+    // Prefer layer roots when a multi-layer workspace is open. Each layer root
+    // is the dirname of its sitecoreJsonPath, matching the initial scan order.
+    const layerRoots = this._layers.map(l => dirname(l.sitecoreJsonPath));
+    const roots = layerRoots.length > 0
+      ? layerRoots
+      : [this.options.rootDir, ...(this.options.contentPaths ?? [])].filter(
+          (r): r is string => typeof r === 'string' && r.length > 0,
+        );
+    if (roots.length === 0) return;
+    const scanned = await Promise.all(roots.map(r => discoverModules(r).catch(() => [])));
+    this.modules = scanned.flat();
   }
 
   /** Read-only view of the engine's currently-loaded module list. */

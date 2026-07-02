@@ -36,12 +36,8 @@ import type { ModuleConfig } from '../types.js';
  *   glob `serialization/*.json` (mb dev)       -> serialization/mb-X.json
  */
 export function deriveEmitTarget(engine: Engine, baseName: string): string {
-  const rootDir = engine.getRootDir();
-  if (!rootDir) {
-    throw new Error('Scaffolding requires an open project (rootDir is undefined)');
-  }
-
-  // 1. Mirror an existing loaded module's directory + extension.
+  // 1. Mirror an already-loaded module's directory + extension. Needs no
+  //    rootDir, so it works in single-root AND multi-layer open modes.
   for (const mod of engine.getModules()) {
     if (typeof mod.filePath === 'string' && mod.filePath.length > 0) {
       const dir = dirname(mod.filePath);
@@ -53,7 +49,17 @@ export function deriveEmitTarget(engine: Engine, baseName: string): string {
     }
   }
 
-  // 2. Parse the first glob from sitecore.json.
+  // 2. No loaded modules to mirror - fall back to parsing sitecore.json, which
+  //    needs a single rootDir. Multi-layer workspaces have none; with zero
+  //    loaded modules there is nowhere unambiguous to emit.
+  const rootDir = engine.getRootDir();
+  if (!rootDir) {
+    throw new Error(
+      'Cannot derive a serialization target: no modules are loaded and the workspace has no single root directory (multi-layer). Append to an existing module instead.',
+    );
+  }
+
+  // 3. Parse the first glob from sitecore.json.
   let glob = 'serialization/*.module.json';
   try {
     const raw = readFileSync(resolve(rootDir, 'sitecore.json'), 'utf-8');
@@ -75,7 +81,7 @@ export function deriveEmitTarget(engine: Engine, baseName: string): string {
     );
   }
 
-  // 3. Parse glob -> static directory + filename suffix.
+  // 4. Parse glob -> static directory + filename suffix.
   const parts = glob.replace(/\\/g, '/').split('/');
   let firstWildcardIdx = parts.findIndex(p => p.includes('*'));
   if (firstWildcardIdx === -1) firstWildcardIdx = parts.length;
