@@ -1680,9 +1680,10 @@ export class Engine {
   }
 
   resolveFilePath(itemSitecorePath: string, itemName: string): string {
-    if (!this.options.rootDir) {
-      throw new Error('resolveFilePath is not available in no-project mode');
-    }
+    // The include-matching branch below derives each candidate location from a
+    // loaded module's own dir, so it needs no rootDir and works in multi-layer
+    // openWorkspace (which has modules but no single rootDir). Only the final
+    // fallback requires a rootDir, so the no-project guard lives there.
     const normalizedItem = itemSitecorePath.toLowerCase();
     for (const mod of this.modules) {
       const modDir = dirname(mod.filePath);
@@ -1699,7 +1700,12 @@ export class Engine {
         }
       }
     }
-    // Fallback: rootDir / <path segments after "sitecore"> / itemName / itemName.yml
+    // Fallback: rootDir / <path segments after "sitecore"> / itemName / itemName.yml.
+    // Needs a single rootDir; multi-layer workspaces have none, and if no
+    // include covered the item there is no unambiguous location to place it.
+    if (!this.options.rootDir) {
+      throw new Error('resolveFilePath is not available in no-project mode');
+    }
     const pathSegments = itemSitecorePath.split('/').filter(Boolean);
     const fallbackBase = resolve(this.options.rootDir);
     const resolved = resolve(fallbackBase, ...pathSegments.slice(1), `${itemName}.yml`);
