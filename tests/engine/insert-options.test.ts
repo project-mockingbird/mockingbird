@@ -165,4 +165,101 @@ describe('getInsertOptions', () => {
     const opts = getInsertOptions(engine, 'i1');
     expect(opts).toEqual([]);
   });
+
+  // M7: registry-only parent - sharedFields carry __Masters directly.
+  // Mirrors the live consumer case: /sitecore/system/Tasks/Commands is an OOTB
+  // item that is never serialized in any layer, yet its registry sharedFields
+  // contain __Masters pointing to the "Command" template.
+  it('returns insert options when parent is registry-only and sharedFields carry __Masters', () => {
+    const masterId = 'aabbccdd-0001-0000-0000-000000000001';
+    const parentId = 'aabbccdd-0002-0000-0000-000000000002';
+    const engine = buildEngineWithRegistry({
+      tree: [],
+      registry: [
+        {
+          id: parentId,
+          name: 'Commands',
+          parent: 'some-parent',
+          template: TEMPLATE_TEMPLATE_ID,
+          path: '/sitecore/system/Tasks/Commands',
+          database: 'master',
+          sharedFields: { [FIELD_IDS.masters]: `{${masterId.toUpperCase()}}` },
+        },
+        {
+          id: masterId,
+          name: 'Command',
+          parent: parentId,
+          template: TEMPLATE_TEMPLATE_ID,
+          path: '/sitecore/templates/System/Tasks/Command',
+          database: 'master',
+          sharedFields: {},
+        },
+      ],
+    });
+    const opts = getInsertOptions(engine, parentId);
+    expect(opts).toHaveLength(1);
+    expect(opts[0]).toMatchObject({
+      templateId: masterId,
+      templateName: 'Command',
+      kind: 'template',
+    });
+  });
+
+  // M8: registry-only parent whose template has __Masters on its __Standard Values
+  // (SV cascade path for registry parents). The parent has no own __Masters,
+  // but its template's __Standard Values item in the registry carries __Masters.
+  it('resolves __Masters via SV cascade when parent is registry-only and owns no __Masters', () => {
+    const masterId = 'bbccddee-0001-0000-0000-000000000001';
+    const parentId = 'bbccddee-0002-0000-0000-000000000002';
+    const parentTemplateId = 'bbccddee-0003-0000-0000-000000000003';
+    const svId = 'bbccddee-0004-0000-0000-000000000004';
+    const engine = buildEngineWithRegistry({
+      tree: [],
+      registry: [
+        {
+          id: parentId,
+          name: 'Schedules',
+          parent: 'some-parent',
+          template: parentTemplateId,
+          path: '/sitecore/system/Tasks/Schedules',
+          database: 'master',
+          sharedFields: {},
+        },
+        {
+          id: parentTemplateId,
+          name: 'Schedule Folder',
+          parent: 'templates-parent',
+          template: TEMPLATE_TEMPLATE_ID,
+          path: '/sitecore/templates/System/Tasks/Schedule Folder',
+          database: 'master',
+          sharedFields: {},
+        },
+        {
+          id: svId,
+          name: '__Standard Values',
+          parent: parentTemplateId,
+          template: parentTemplateId,
+          path: '/sitecore/templates/System/Tasks/Schedule Folder/__Standard Values',
+          database: 'master',
+          sharedFields: { [FIELD_IDS.masters]: `{${masterId.toUpperCase()}}` },
+        },
+        {
+          id: masterId,
+          name: 'Schedule',
+          parent: parentTemplateId,
+          template: TEMPLATE_TEMPLATE_ID,
+          path: '/sitecore/templates/System/Tasks/Schedule',
+          database: 'master',
+          sharedFields: {},
+        },
+      ],
+    });
+    const opts = getInsertOptions(engine, parentId);
+    expect(opts).toHaveLength(1);
+    expect(opts[0]).toMatchObject({
+      templateId: masterId,
+      templateName: 'Schedule',
+      kind: 'template',
+    });
+  });
 });

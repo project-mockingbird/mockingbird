@@ -7,7 +7,7 @@ import {
   producedTemplateForCommand,
 } from './constants.js';
 import { parseGuidList } from './guid.js';
-import { readFieldWithSvFallback } from './layout/item-fields.js';
+import { readFieldWithSvFallback, readFieldViaStandardValuesCascade } from './layout/item-fields.js';
 
 export type InsertOption = {
   /** Canonical lowercased GUID, no braces. */
@@ -38,19 +38,27 @@ export type InsertOption = {
 export function getInsertOptions(engine: Engine, itemId: string): InsertOption[] {
   const node = engine.getItemById(itemId);
   const item = node?.item;
+  // Registry-only parents (OOTB items not serialized in any layer) resolve
+  // their insert options from the baked registry instead of the tree.
+  const reg = item ? undefined : engine.getRegistryItem(itemId);
 
-  // Step 1: item-level `__Masters` (defensive; rare in practice).
+  // Resolve the parent's `__Masters` value: item-own field first, then the
+  // template `__Standard Values` cascade. Works for both tree and registry parents.
   let mastersValue = '';
   if (item) {
     const own = item.sharedFields.find(f => f.id === FIELD_IDS.masters);
     if (own?.value) mastersValue = own.value;
-  }
-
-  // Step 2: template SV `__Masters` (common case). `readFieldWithSvFallback`
-  // walks the base-template SV chain transparently.
-  if (!mastersValue && item) {
-    const svValue = readFieldWithSvFallback(engine, item, FIELD_IDS.masters, 'en');
-    if (svValue) mastersValue = svValue;
+    if (!mastersValue) {
+      const svValue = readFieldWithSvFallback(engine, item, FIELD_IDS.masters, 'en');
+      if (svValue) mastersValue = svValue;
+    }
+  } else if (reg) {
+    const own = reg.sharedFields[FIELD_IDS.masters];
+    if (own) mastersValue = own;
+    if (!mastersValue) {
+      const svValue = readFieldViaStandardValuesCascade(engine, reg.template, FIELD_IDS.masters, 'en');
+      if (svValue) mastersValue = svValue;
+    }
   }
 
   if (!mastersValue) return [];
