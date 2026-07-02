@@ -15,6 +15,8 @@ import { copyItem } from '../../engine/copy-item.js';
 import { moveItem } from '../../engine/move-item.js';
 import { refreshItem } from '../../engine/refresh-item.js';
 import { renameItem } from '../../engine/rename-item.js';
+import { insertItemAtParent } from '../../engine/insert-item.js';
+import { resolveInsertParent } from '../../engine/insert-branch.js';
 import { buildRegistryItemDetail } from '../items-from-registry.js';
 import { serializeItem } from '../../engine/serializer.js';
 import { applyFieldEdit, readCurrentFieldValue } from '../../engine/mutate-fields.js';
@@ -239,16 +241,26 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
           if (!body.templateId) {
             return reply.status(400).send({ error: 'templateId required for fromTemplate', statusCode: 400 });
           }
-          const parent = engine.getItemByPath(body.parentPath!);
-          if (!parent) {
-            return reply.status(404).send({ error: `Parent path not found: ${body.parentPath}`, statusCode: 404 });
+          const treeParent = engine.getItemByPath(body.parentPath!);
+          let result;
+          if (treeParent) {
+            result = await engine.insertItem({
+              parentId: treeParent.item.id,
+              templateId: body.templateId,
+              name: body.name!,
+              baseTemplateId: body.baseTemplateId,
+            });
+          } else {
+            const regParent = resolveInsertParent(engine, body.parentPath!);
+            if (!regParent) {
+              return reply.status(404).send({ error: `Parent path not found: ${body.parentPath}`, statusCode: 404 });
+            }
+            result = await insertItemAtParent(engine, regParent, {
+              templateId: body.templateId,
+              name: body.name!,
+              baseTemplateId: body.baseTemplateId,
+            });
           }
-          const result = await engine.insertItem({
-            parentId: parent.item.id,
-            templateId: body.templateId,
-            name: body.name!,
-            baseTemplateId: body.baseTemplateId,
-          });
           for (const created of result.createdItems) {
             notifyItemChange(engine, { type: 'added', itemId: created.item.id, itemPath: created.item.path });
           }

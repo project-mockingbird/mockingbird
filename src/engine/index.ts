@@ -24,7 +24,7 @@ import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, Va
 import { comparePushOps, pushOpStrength, type AllowedPushOperations, type LayerSpec } from './layer-spec.js';
 import type { MutationPlan } from './mutation-plan.js';
 import { insertItem as insertItemImpl, type InsertItemArgs, type InsertItemResult } from './insert-item.js';
-import { resolveChildFilePath } from './child-file-path.js';
+import { resolveChildFilePath, coversNewChildAt as coversNewChildAtImpl } from './child-file-path.js';
 import { ReadinessState } from './readiness.js';
 import { startPhase } from './index-timing.js';
 import { loadPublishDateOverrides } from './layout/publish-dates.js';
@@ -530,16 +530,35 @@ export class Engine {
     return undefined;
   }
 
+  /** Scope-aware: does any loaded include cover a new child under this path? */
+  coversNewChildAt(itemSitecorePath: string): boolean {
+    return coversNewChildAtImpl(itemSitecorePath, this.modules);
+  }
+
   /**
    * Re-run `discoverModules` to pick up newly-written `*.module.json` files
-   * (the scaffold orchestrators emit these for new tenants/sites). Replaces
-   * the in-memory module list; does NOT touch the parsed tree, registry,
-   * or cache. Subsequent `resolveFilePath` / `findCoveringInclude` calls
-   * see the new includes immediately.
+   * (the scaffold orchestrators emit these for new tenants/sites, and the
+   * add-serialization-root wizard appends includes to existing modules).
+   * Replaces the in-memory module list; does NOT touch the parsed tree,
+   * registry, or cache. Subsequent `resolveFilePath` / `findCoveringInclude`
+   * calls see the new includes immediately.
+   *
+   * Scans the REAL module sources so multi-layer `openWorkspace` callers are
+   * covered: those paths load modules from each layer root and never set
+   * `options.rootDir`, so keying only on `rootDir` would no-op there.
    */
   async reloadModules(): Promise<void> {
-    if (!this.options.rootDir) return;
-    this.modules = await discoverModules(this.options.rootDir).catch(() => []);
+    // Prefer layer roots when a multi-layer workspace is open. Each layer root
+    // is the dirname of its sitecoreJsonPath, matching the initial scan order.
+    const layerRoots = this._layers.map(l => dirname(l.sitecoreJsonPath));
+    const roots = layerRoots.length > 0
+      ? layerRoots
+      : [this.options.rootDir, ...(this.options.contentPaths ?? [])].filter(
+          (r): r is string => typeof r === 'string' && r.length > 0,
+        );
+    if (roots.length === 0) return;
+    const scanned = await Promise.all(roots.map(r => discoverModules(r).catch(() => [])));
+    this.modules = scanned.flat();
   }
 
   /** Read-only view of the engine's currently-loaded module list. */
@@ -890,6 +909,14 @@ export class Engine {
 
   async insertItem(args: InsertItemArgs): Promise<InsertItemResult> {
     return insertItemImpl(this, args);
+  }
+
+  async addSerializationRoot(
+    input: import('./serialization/orchestrator.js').AddSerializationRootInput,
+    opts: { dryRun?: boolean } = {},
+  ): Promise<import('./serialization/orchestrator.js').AddSerializationRootResult> {
+    const { addSerializationRoot } = await import('./serialization/orchestrator.js');
+    return addSerializationRoot(this, input, opts);
   }
 
   deleteItem(idOrPath: string): string[] {
@@ -1653,9 +1680,10 @@ export class Engine {
   }
 
   resolveFilePath(itemSitecorePath: string, itemName: string): string {
-    if (!this.options.rootDir) {
-      throw new Error('resolveFilePath is not available in no-project mode');
-    }
+    // The include-matching branch below derives each candidate location from a
+    // loaded module's own dir, so it needs no rootDir and works in multi-layer
+    // openWorkspace (which has modules but no single rootDir). Only the final
+    // fallback requires a rootDir, so the no-project guard lives there.
     const normalizedItem = itemSitecorePath.toLowerCase();
     for (const mod of this.modules) {
       const modDir = dirname(mod.filePath);
@@ -1672,7 +1700,12 @@ export class Engine {
         }
       }
     }
-    // Fallback: rootDir / <path segments after "sitecore"> / itemName / itemName.yml
+    // Fallback: rootDir / <path segments after "sitecore"> / itemName / itemName.yml.
+    // Needs a single rootDir; multi-layer workspaces have none, and if no
+    // include covered the item there is no unambiguous location to place it.
+    if (!this.options.rootDir) {
+      throw new Error('resolveFilePath is not available in no-project mode');
+    }
     const pathSegments = itemSitecorePath.split('/').filter(Boolean);
     const fallbackBase = resolve(this.options.rootDir);
     const resolved = resolve(fallbackBase, ...pathSegments.slice(1), `${itemName}.yml`);

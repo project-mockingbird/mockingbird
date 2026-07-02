@@ -47,6 +47,7 @@ interface TreeNodeResponse {
   template: string;
   type: string;
   source: 'serialized' | 'registry';
+  insertable: boolean;
   hasChildren: boolean;
   sortOrder?: number;
   /** `__Display Name` value, falling back to name. Used by display-name sort. */
@@ -186,6 +187,7 @@ function buildRegistryNode(item: RegistryItem, engine: Engine, maxDepth: number,
     template: item.template,
     type: classifyItem(item.template),
     source: 'registry',
+    insertable: engine.coversNewChildAt(item.path),
     hasChildren,
     sortOrder: sortOrderValue ? Number(sortOrderValue) : undefined,
     displayName: displayNameValue && displayNameValue !== '' ? displayNameValue : undefined,
@@ -221,6 +223,7 @@ function buildSerializedSubtree(node: ItemNode, engine: Engine, maxDepth: number
     template: node.item.template,
     type: classifyItem(node.item.template),
     source: 'serialized',
+    insertable: true,
     hasChildren,
     sortOrder: sortOrderValue !== undefined ? Number(sortOrderValue) : undefined,
     displayName: displayNameValue !== undefined && displayNameValue !== '' ? displayNameValue : undefined,

@@ -61,7 +61,7 @@ MOCKINGBIRD_WORKSPACE=C:/projects   # Windows
 MOCKINGBIRD_WORKSPACE=~/code         # macOS / Linux
 ```
 
-> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, set `MOCKINGBIRD_IMAGE=projectmockingbird/mockingbird:0.12.0` in `.env` so a Hub republish doesn't move the floor.
+> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, set `MOCKINGBIRD_IMAGE=projectmockingbird/mockingbird:0.13.0` in `.env` so a Hub republish doesn't move the floor.
 
 ## Project registry: `config.mockingbird`
 
@@ -144,7 +144,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 ## Best Practices
 
-- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:0.12.0` at the time of writing).
+- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:0.13.0` at the time of writing).
 - **Commit serialized YAML alongside the code that depends on it.** Author items in Mockingbird, let the file watcher emit clean YAML, and PR the YAML alongside the React / Next.js changes that consume it. Reviewers see the item changes in the diff.
 - **One `sitecore.json` per layer.** Each layer points at one `sitecore.json` and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. A project is a stack of layers - common shapes are one layer (single repo) or two (e.g. a tenant template layer + a content layer) - merged at open time via SCS `allowedPushOperations` strength (CreateOnly < CreateAndUpdate < CreateUpdateAndDelete).
 - **Treat the cache as disposable.** `.mockingbird/cache/index-*.json.gz` are derived artifacts; they rebuild from your YAML on the next boot. Safe to delete at any time, gitignored by default, safe to skip backing up.
@@ -279,7 +279,7 @@ The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mock
 | Variable | Purpose | Default |
 |---|---|---|
 | `MOCKINGBIRD_WORKSPACE` | Host path bound to `/workspaces` in the container. The first-run wizard's folder browser navigates this mount so you can pick `sitecore.json` files as project layers. | `./` |
-| `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:0.12.0`) in shared environments. | `projectmockingbird/mockingbird:latest` |
+| `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:0.13.0`) in shared environments. | `projectmockingbird/mockingbird:latest` |
 | `MOCKINGBIRD_PORT` | Host port mockingbird binds (loopback-only). Container always listens on 3333 internally. | `3333` |
 | `MOCKINGBIRD_HOST` | Container's internal listener address. `0.0.0.0` so Docker's port-NAT can forward; almost never needs changing. | `0.0.0.0` |
 | `COMPOSE_PROJECT_NAME` | Override the docker container name. | `mockingbird` |
@@ -330,7 +330,7 @@ These are pinned values inside the compose `environment:` block; not configurabl
 
 **Container starts but `EADDRINUSE` on the port.** Another process is bound to the host-side `MOCKINGBIRD_PORT`. Check `netstat -ano | findstr :3333` (Windows) or `lsof -i :3333` (Linux/Mac) and stop the other process or change `MOCKINGBIRD_PORT` in `.env`.
 
-**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:0.12.0`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
+**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:0.13.0`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
 
 **Docker build fails on `chown -R node:node /app`.** Almost always a slow bind-mount or a previous `npm install` that ran as root and left files the `node` user can't traverse. Clear the build cache (`docker builder prune`) and retry; if the problem persists, check that no `.dockerignore`-excluded path is being COPYed into stage 2.
 

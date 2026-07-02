@@ -274,6 +274,9 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
     });
   }
 
+  const { registerSerializationRootRoutes } = await import('./routes/serialization-roots.js');
+  registerSerializationRootRoutes(app, engine);
+
   const { registerAdminLogsRoutes } = await import('./routes/admin-logs.js');
   await registerAdminLogsRoutes(app);
 

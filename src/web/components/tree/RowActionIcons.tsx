@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 
 interface RowActionIconsProps {
   isRegistry: boolean;
+  insertable?: boolean;
   onInsert: () => void;
   onDuplicate: () => void;
   onRefresh: () => void;
@@ -22,13 +23,23 @@ interface RowActionIconsProps {
  */
 export function RowActionIcons({
   isRegistry,
+  insertable = false,
   onInsert,
   onDuplicate,
   onRefresh,
   onDelete,
   isRefreshing = false,
 }: RowActionIconsProps) {
-  if (isRegistry) return null;
+  if (isRegistry) {
+    if (!insertable) return null;
+    // Registry-but-insertable: only Insert applies (the OOTB item itself is not
+    // duplicable / deletable / refreshable).
+    return (
+      <div className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
+        <IconButton label="Insert" iconPath={mdiPlus} onClick={onInsert} />
+      </div>
+    );
+  }
   return (
     <div className="hidden items-center gap-0.5 group-hover:flex group-focus-within:flex">
       <IconButton label="Insert" iconPath={mdiPlus} onClick={onInsert} />

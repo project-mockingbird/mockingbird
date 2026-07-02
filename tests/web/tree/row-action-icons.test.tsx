@@ -57,4 +57,16 @@ describe('RowActionIcons', () => {
     expect(onInsert).toHaveBeenCalledOnce();
     expect(onRowClick).not.toHaveBeenCalled();
   });
+
+  it('renders only the Insert icon for an insertable registry node', () => {
+    render(<RowActionIcons isRegistry insertable onInsert={() => {}} onDuplicate={() => {}} onRefresh={() => {}} onDelete={() => {}} />);
+    expect(screen.getByLabelText('Insert')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Duplicate')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Delete')).not.toBeInTheDocument();
+  });
+
+  it('renders nothing for an uncovered registry node', () => {
+    const { container } = render(<RowActionIcons isRegistry insertable={false} onInsert={() => {}} onDuplicate={() => {}} onRefresh={() => {}} onDelete={() => {}} />);
+    expect(container).toBeEmptyDOMElement();
+  });
 });
