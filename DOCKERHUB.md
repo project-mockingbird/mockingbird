@@ -58,6 +58,7 @@ Full configuration reference, environment variables, GraphQL schema, and archite
 | Tag | Notes |
 |---|---|
 | `latest` | Most recent release |
+| `0.13.0` | Add Serialization Root wizard: register a serialization root on an OOTB registry path (append to a module include or new file) and insert items under it, with coverage-driven Insert gating; multi-layer engine fixes for module reload, emit target, insert options, and file-path resolution; de-duplicates cross-database registry children so OOTB template fields no longer render twice in the item detail pane |
 | `0.12.0` | Composed (page-design-aware) Layout editor; multi-layer fixes: SXA variants for env-fallback sites, dynamic-placeholder auto-assign, scope-aware new-item placement, file-path-derived provenance, and warm-start cache self-heal for items added while the container was down |
 | `0.11.4` | GraphQL schema generator declares transitively-implemented interfaces, so inline fragments on a base interface resolve on every type that reaches it through an intermediate interface |
 | `0.11.3` | Per-developer session state moved to `config.mockingbird.local` so team members don't stomp on each other in the tracked file |
