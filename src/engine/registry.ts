@@ -159,10 +159,22 @@ export class Registry {
   getChildren(parentId: string, database?: string): RegistryItem[] {
     const pid = normalizeGuid(parentId);
     if (!database) {
+      // Db-agnostic: OOTB items exist in both master and core, so the SAME child
+      // id can appear under this parent in multiple dbs. De-dupe by id with
+      // master-first preference (mirroring getById / collectByTemplate) - without
+      // it, template-schema doubles every field of any core+master template (the
+      // Content Editor "Data" section rendered Command/Items/Schedule/... twice).
+      // Distinct-id children across dbs (mis-located twins) are all preserved.
+      const seen = new Set<string>();
       const all: RegistryItem[] = [];
-      for (const m of this.byParent.values()) {
-        const c = m.get(pid);
-        if (c) all.push(...c);
+      for (const db of this.dbOrder()) {
+        const c = this.byParent.get(db)?.get(pid);
+        if (!c) continue;
+        for (const child of c) {
+          if (seen.has(child.id)) continue;
+          seen.add(child.id);
+          all.push(child);
+        }
       }
       return all;
     }

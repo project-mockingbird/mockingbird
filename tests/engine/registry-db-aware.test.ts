@@ -76,3 +76,42 @@ describe('db-aware registry', () => {
     expect(branchHits[0].database).toBe('master');
   });
 });
+
+// True cross-db twins: the SAME child id under the SAME parent in both core and
+// master (how OOTB system templates ship - e.g. the Schedule template's "Data"
+// section and its fields exist identically in both dbs). db-agnostic getChildren
+// must return each child ONCE (master-preferred). Regression guard for the
+// Content Editor "Data" section rendering Command/Items/Schedule/... twice.
+describe('db-agnostic getChildren de-dupes true cross-db twins', () => {
+  const SECTION = 'dddd4444-0000-0000-0000-000000000004';
+  const F_COMMAND = 'eeee5555-0000-0000-0000-000000000005';
+  const F_ITEMS = 'ffff6666-0000-0000-0000-000000000006';
+  const TWIN_DATA = {
+    version: 'test', source: 'test', extractedAt: '2026-05-28T00:00:00Z',
+    items: [
+      // identical section + fields in BOTH dbs (same ids = true twins)
+      { id: SECTION, name: 'Data', parent: '00000000-0000-0000-0000-000000000000', template: TPL, path: '/data', database: 'core', sharedFields: {} },
+      { id: F_COMMAND, name: 'Command', parent: SECTION, template: TPL, path: '/data/Command', database: 'core', sharedFields: {} },
+      { id: F_ITEMS, name: 'Items', parent: SECTION, template: TPL, path: '/data/Items', database: 'core', sharedFields: {} },
+      { id: SECTION, name: 'Data', parent: '00000000-0000-0000-0000-000000000000', template: TPL, path: '/data', database: 'master', sharedFields: {} },
+      { id: F_COMMAND, name: 'Command', parent: SECTION, template: TPL, path: '/data/Command', database: 'master', sharedFields: {} },
+      { id: F_ITEMS, name: 'Items', parent: SECTION, template: TPL, path: '/data/Items', database: 'master', sharedFields: {} },
+    ],
+  };
+  let dir: string;
+  let reg: Registry;
+  beforeAll(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'reg-twin-'));
+    writeFileSync(join(dir, 'r.json'), JSON.stringify(TWIN_DATA));
+    reg = new Registry();
+    await reg.loadFromJson(join(dir, 'r.json'));
+  });
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('returns each twin child once (no db), master-preferred', () => {
+    const kids = reg.getChildren(SECTION);
+    expect(kids).toHaveLength(2);
+    expect(kids.map(c => c.name).sort()).toEqual(['Command', 'Items']);
+    expect(kids.every(c => c.database === 'master')).toBe(true);
+  });
+});
