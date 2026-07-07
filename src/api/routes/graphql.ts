@@ -25,10 +25,13 @@ import {
   searchItemId,
   type SearchWhere,
 } from '../../engine/search/index.js';
-import { parseGuidList, toCanonicalGuid, formatGuidEdge } from '../../engine/guid.js';
+import { parseGuidList, toCanonicalGuid, formatGuidEdge, normalizeGuid } from '../../engine/guid.js';
 import { FIELD_IDS } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
 import { getTemplateSchema } from '../../engine/template-schema.js';
+import { parseAuthoredAttrs } from '../../engine/render-field/html-utils.js';
+import { buildMediaSrc, buildMediaUrlPath, readSharedString } from '../../engine/render-field/media.js';
+import { EXTENSION_FIELD_ID, MIME_TYPE_FIELD_ID } from '../../engine/constants.js';
 import { referenceUrl } from '../../engine/layout/url-utils.js';
 import { rewriteRichText, expandXaVariableSpans, containsXaVariableSpan } from '../../engine/render-field/rich-text.js';
 import {
@@ -180,6 +183,14 @@ const GRAPHIQL_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+/**
+ * URI-decode a string, suppressing any `URIError` on malformed sequences.
+ * Used by the Name Value List resolver to decode `key=value` pairs.
+ */
+function safeDecodeURI(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
 export const BASE_SCHEMA = `
   scalar JSON
   scalar Long
@@ -287,6 +298,190 @@ export const BASE_SCHEMA = `
   }
 
   type TextField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type NameValueListValue {
+    name: String!
+    value: String!
+  }
+
+  type LinkField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    anchor: String
+    queryString: String
+    className: String
+    text: String
+    target: String
+    linkType: String
+    url: String
+  }
+
+  type ImageField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    src(maxWidth: Int, maxHeight: Int): String
+    alt: String
+    width: String
+    height: String
+  }
+
+  type FileField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    url: String
+  }
+
+  type MediaItemField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    title: String
+    keywords: String
+    description: String
+    extension: String
+    mimeType: String
+    size: Int
+  }
+
+  type DateField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    formattedDateValue(format: String, offset: String): String
+  }
+
+  type CheckboxField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type NumberField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type IntegerField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    intValue: Int
+  }
+
+  type LookupField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type MultilistField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    targetIds: [String!]
+    count: Int
+  }
+
+  type NameValueListField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+    values: [NameValueListValue!]
+  }
+
+  type RichTextField implements ItemField {
     id(format: String = "N"): ID!
     name: String!
     jsonValue: JSON!
@@ -578,7 +773,7 @@ export async function registerGraphQLRoutes(
   // back to TextField. Phase C2 adds the remaining concrete types.
   const FIELD_TYPE_TO_GQL: Record<string, string> = {
     'general link': 'LinkField', 'link': 'LinkField',
-    'image': 'ImageField', 'file': 'FileField',
+    'image': 'ImageField', 'file': 'FileField', 'media item': 'MediaItemField',
     'date': 'DateField', 'datetime': 'DateField',
     'checkbox': 'CheckboxField',
     'number': 'NumberField', 'integer': 'IntegerField',
@@ -603,7 +798,7 @@ export async function registerGraphQLRoutes(
     },
     name: (parent: { name?: string }) => parent.name ?? '',
     value: (parent: { value?: string }) => parent.value ?? null,
-    jsonValue: (parent: { jsonValue?: unknown }) => parent.jsonValue ?? null,
+    jsonValue: (parent: { jsonValue?: unknown }) => parent.jsonValue ?? { value: '' },
     boolValue: (parent: { boolValue?: boolean | null }) => parent.boolValue ?? null,
     numberValue: (parent: { numberValue?: number | null }) => parent.numberValue ?? null,
     dateValue: (parent: { dateValue?: string | null }) => parent.dateValue ?? null,
@@ -627,6 +822,158 @@ export async function registerGraphQLRoutes(
         if (node) out.push(node.item);
       }
       return out;
+    },
+  };
+
+  // ---------------------------------------------------------------------------
+  // Per-type resolver additions for C2 concrete ItemField subtypes.
+  // Each object is spread with sharedItemFieldResolver when registering
+  // the type's resolver map entry. Parent shape is the readHint result:
+  //   { __fieldType, __id, name, value, boolValue, numberValue, dateValue, jsonValue, definition }
+  // ---------------------------------------------------------------------------
+
+  /** Read the jsonValue attrs object for link/image fields. */
+  const jvAttrs = (parent: { jsonValue?: unknown }): Record<string, string> | null => {
+    const jv = parent.jsonValue as { value?: unknown } | undefined;
+    const v = jv?.value;
+    return v && typeof v === 'object' ? (v as Record<string, string>) : null;
+  };
+
+  const linkFieldResolvers = {
+    url: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.href ?? null,
+    text: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.text ?? null,
+    anchor: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.anchor ?? null,
+    queryString: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.querystring ?? null,
+    className: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.class ?? null,
+    target: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.target ?? null,
+    linkType: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.linktype ?? null,
+  };
+
+  const imageFieldResolvers = {
+    // src honors optional maxWidth/maxHeight args; always applies mediaBaseUrl
+    // from the outer closure so the CDN prefix is consistent.
+    src: (parent: { value?: string }, args: { maxWidth?: number; maxHeight?: number } | null) => {
+      const attrs = parseAuthoredAttrs(parent.value ?? '');
+      const mediaId = normalizeGuid(attrs.mediaid ?? '');
+      if (!mediaId) return null;
+      const node = engine.getItemById(mediaId);
+      if (!node) return null;
+      const w = args?.maxWidth != null ? String(args.maxWidth) : (attrs.width ?? '');
+      const h = args?.maxHeight != null ? String(args.maxHeight) : (attrs.height ?? '');
+      const { src } = buildMediaSrc(node.item, mediaBaseUrl, w, h);
+      return src;
+    },
+    // alt/width/height are already in the pre-computed jsonValue.value attrs
+    alt: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.alt ?? null,
+    width: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.width ?? null,
+    height: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.height ?? null,
+  };
+
+  const fileFieldResolvers = {
+    url: (parent: { value?: string }) => {
+      // File field XML: <file mediaid="{GUID}" /> - parse mediaid and build path
+      const attrs = parseAuthoredAttrs(parent.value ?? '');
+      const mediaId = normalizeGuid(attrs.mediaid ?? '');
+      if (!mediaId) return null;
+      const node = engine.getItemById(mediaId);
+      if (!node) return null;
+      return `${mediaBaseUrl}${buildMediaUrlPath(node.item)}`;
+    },
+  };
+
+  // Helper: resolve the first GUID in `value` to a media item and return it.
+  const resolveMediaItem = (value: string | undefined): ScsItem | null => {
+    const ids = parseGuidList(value);
+    for (const id of ids) {
+      const node = engine.getItemById(id);
+      if (node) return node.item;
+    }
+    return null;
+  };
+
+  const mediaItemFieldResolvers = {
+    title: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readItemFieldByHint(media, 'title')?.value ?? null) : null;
+    },
+    keywords: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readItemFieldByHint(media, 'keywords')?.value ?? null) : null;
+    },
+    description: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readItemFieldByHint(media, 'description')?.value ?? null) : null;
+    },
+    extension: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readSharedString(media, EXTENSION_FIELD_ID) || null) : null;
+    },
+    mimeType: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readSharedString(media, MIME_TYPE_FIELD_ID) || null) : null;
+    },
+    size: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      if (!media) return null;
+      const raw = readItemFieldByHint(media, 'size')?.value;
+      if (!raw) return null;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) ? n : null;
+    },
+  };
+
+  const dateFieldResolvers = {
+    // Best-effort formatted date string; format/offset args accepted for
+    // schema parity with real Edge but not yet applied (returns ISO string).
+    formattedDateValue: (parent: { value?: string }, _args: { format?: string; offset?: string } | null) => {
+      return parseFieldDate(parent.value ?? '');
+    },
+  };
+
+  const integerFieldResolvers = {
+    intValue: (parent: { value?: string }) => {
+      const trimmed = (parent.value ?? '').trim();
+      if (!trimmed) return null;
+      const n = parseInt(trimmed, 10);
+      return Number.isFinite(n) ? n : null;
+    },
+  };
+
+  const multilistFieldResolvers = {
+    targetIds: (parent: { value?: string }) => parseGuidList(parent.value ?? undefined),
+    count: (parent: { value?: string }) => parseGuidList(parent.value ?? undefined).length,
+    // targetItems is already covered by sharedItemFieldResolver; keep here for
+    // clarity so MultilistField has an explicit targetItems entry.
+    targetItems: (parent: { value?: string }) => {
+      const ids = parseGuidList(parent.value ?? undefined);
+      const out: ScsItem[] = [];
+      for (const id of ids) {
+        const node = engine.getItemById(id);
+        if (node) out.push(node.item);
+      }
+      return out;
+    },
+  };
+
+  const nameValueListFieldResolvers = {
+    // Sitecore Name Value List stores `key=value` pairs separated by `&`.
+    // Keys and values may be URI-encoded; decode them before returning.
+    values: (parent: { value?: string }) => {
+      const raw = (parent.value ?? '').trim();
+      if (!raw) return [];
+      return raw.split('&')
+        .map(pair => {
+          const eq = pair.indexOf('=');
+          if (eq === -1) {
+            const name = safeDecodeURI(pair.trim());
+            return name ? { name, value: '' } : null;
+          }
+          return {
+            name: safeDecodeURI(pair.slice(0, eq).trim()),
+            value: safeDecodeURI(pair.slice(eq + 1).trim()),
+          };
+        })
+        .filter((p): p is { name: string; value: string } => !!p?.name);
     },
   };
 
@@ -789,15 +1136,30 @@ export async function registerGraphQLRoutes(
       Item: { resolveType: resolveTypename },
       UnknownItem: sharedItemResolver,
       // ItemField is now an interface - resolveType dispatches to the right
-      // concrete type. Phase C1: always returns TextField (the only registered
-      // implementer). Phase C2 will activate FIELD_TYPE_TO_GQL to route image,
-      // link, etc. to their own concrete types once those types are added.
+      // concrete type using FIELD_TYPE_TO_GQL. Unknown field types (no template
+      // declaration, or a type not in the map) fall back to TextField.
       ItemField: {
-        resolveType: (_f: { __fieldType?: string }) => 'TextField',
+        resolveType: (f: { __fieldType?: string }) =>
+          FIELD_TYPE_TO_GQL[(f.__fieldType ?? '').toLowerCase()] ?? 'TextField',
       },
       // TextField is the fallback concrete implementer of ItemField. All field
       // resolvers are shared with C2 subtypes via sharedItemFieldResolver.
       TextField: sharedItemFieldResolver,
+      // C2 concrete subtypes - each spreads sharedItemFieldResolver for the 10
+      // interface fields and adds per-type resolvers for the extra fields.
+      LinkField: { ...sharedItemFieldResolver, ...linkFieldResolvers },
+      ImageField: { ...sharedItemFieldResolver, ...imageFieldResolvers },
+      FileField: { ...sharedItemFieldResolver, ...fileFieldResolvers },
+      MediaItemField: { ...sharedItemFieldResolver, ...mediaItemFieldResolvers },
+      DateField: { ...sharedItemFieldResolver, ...dateFieldResolvers },
+      // Checkbox/Number/Lookup/RichText have no added fields beyond the interface
+      CheckboxField: sharedItemFieldResolver,
+      NumberField: sharedItemFieldResolver,
+      IntegerField: { ...sharedItemFieldResolver, ...integerFieldResolvers },
+      LookupField: sharedItemFieldResolver,
+      MultilistField: { ...sharedItemFieldResolver, ...multilistFieldResolvers },
+      NameValueListField: { ...sharedItemFieldResolver, ...nameValueListFieldResolvers },
+      RichTextField: sharedItemFieldResolver,
       ItemTemplate: {
         // Walk the template item's `__Base template` shared field (standard
         // Sitecore field, id 12c33f3f-…) and return one ItemTemplate record
