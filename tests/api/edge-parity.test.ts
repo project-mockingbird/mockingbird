@@ -451,3 +451,36 @@ describe('GraphQL Edge parity - Phase B2: ownFields field-level filter regressio
     expect(headingAll).toBeDefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase C1: ItemField interface + resolveType + TextField fallback
+// ---------------------------------------------------------------------------
+
+describe('GraphQL Edge parity - Phase C1: ItemField interface + TextField', () => {
+  let app: FastifyInstance;
+  beforeAll(async () => { app = await createTestApp(); });
+  afterAll(async () => { await app.close(); });
+
+  it('field(name) __typename is TextField and name matches the requested field name', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            field(name: "Title") { __typename name value jsonValue }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const f = body.data.item.field;
+    expect(f.__typename).toBe('TextField');
+    expect(f.name).toBe('Title');
+    expect(f.value).toBe('Home v2');
+    expect(f.jsonValue).toEqual({ value: 'Home v2' });
+  });
+});

@@ -25,7 +25,7 @@ import {
   searchItemId,
   type SearchWhere,
 } from '../../engine/search/index.js';
-import { parseGuidList, toCanonicalGuid } from '../../engine/guid.js';
+import { parseGuidList, toCanonicalGuid, formatGuidEdge } from '../../engine/guid.js';
 import { FIELD_IDS } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
 import { getTemplateSchema } from '../../engine/template-schema.js';
@@ -273,9 +273,25 @@ export const BASE_SCHEMA = `
     scheme: String!
   }
 
-  type ItemField {
-    value: String
+  interface ItemField {
+    id(format: String = "N"): ID!
+    name: String!
     jsonValue: JSON
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    dateValue: String
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type TextField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON
+    value: String
+    definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
     dateValue: String
@@ -493,14 +509,57 @@ export async function registerGraphQLRoutes(
     } else {
       value = raw;
     }
-    const result = {
+
+    // Look up the field-definition item in the template schema so we can
+    // expose its GUID (for ItemField.id) and its full metadata (for
+    // ItemField.definition). Falls back to ZERO_GUID / null when the item
+    // has no typed template or the field isn't declared there.
+    let fieldDefId = ZERO_GUID;
+    let definition: {
+      name: string; title: string; type: string; source: string;
+      shared: boolean; unversioned: boolean; sortOrder: number;
+      section: string; sectionSortOrder: number;
+    } | null = null;
+    try {
+      const tmplSchema = getTemplateSchema(item.template, ctx.engine);
+      const target = hint.toLowerCase();
+      let found = false;
+      for (const section of tmplSchema.sections) {
+        if (found) break;
+        for (const f of section.fields) {
+          if (f.name && f.name.toLowerCase() === target) {
+            fieldDefId = f.id || ZERO_GUID;
+            definition = {
+              name: f.name,
+              title: f.displayName,
+              type: f.type,
+              source: f.source,
+              shared: f.shared,
+              unversioned: f.unversioned,
+              sortOrder: f.sortOrder,
+              section: section.name,
+              sectionSortOrder: section.sortOrder,
+            };
+            found = true;
+            break;
+          }
+        }
+      }
+    } catch {
+      // template schema unavailable - fieldDefId stays ZERO_GUID
+    }
+
+    return {
+      __fieldType: fieldType,
+      __id: fieldDefId,
+      name: hint,
       value,
       boolValue: raw === '1' ? true : false,
       numberValue: parseFieldNumber(raw),
       dateValue: parseFieldDate(raw),
       jsonValue: buildJsonValue(raw, ctx.engine, rootPath, fieldType),
+      definition,
     };
-    return result;
   };
 
   // True iff `item` has at least one version in `language`. Mockingbird
@@ -514,6 +573,63 @@ export async function registerGraphQLRoutes(
   };
 
   const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
+
+  // Sitecore field-type string -> GraphQL concrete type name. Any type not
+  // listed here (or any type whose concrete type isn't yet registered) falls
+  // back to TextField. Phase C2 adds the remaining concrete types.
+  const FIELD_TYPE_TO_GQL: Record<string, string> = {
+    'general link': 'LinkField', 'link': 'LinkField',
+    'image': 'ImageField', 'file': 'FileField',
+    'date': 'DateField', 'datetime': 'DateField',
+    'checkbox': 'CheckboxField',
+    'number': 'NumberField', 'integer': 'IntegerField',
+    'droplink': 'LookupField', 'droptree': 'LookupField', 'reference': 'LookupField',
+    'multilist': 'MultilistField', 'treelist': 'MultilistField', 'checklist': 'MultilistField',
+    'name value list': 'NameValueListField', 'name lookup value list': 'NameValueListField',
+    'rich text': 'RichTextField',
+  };
+
+  // Shared field-level resolver for TextField (and reused by C2 subtypes).
+  // The parent object is the enriched readHint result:
+  //   { __fieldType, __id, name, value, boolValue, numberValue, dateValue, jsonValue, definition }
+  const sharedItemFieldResolver = {
+    id: (parent: { __id?: string }, args: { format?: string }) => {
+      const fmt = (args?.format ?? 'N').toUpperCase();
+      const raw = parent.__id ?? ZERO_GUID;
+      const canonical = toCanonicalGuid(raw) ?? raw;
+      if (fmt === 'D') return canonical;
+      if (fmt === 'B') return `{${canonical.toUpperCase()}}`;
+      // Default "N" - 32-hex uppercase, no dashes
+      return formatGuidEdge(canonical);
+    },
+    name: (parent: { name?: string }) => parent.name ?? '',
+    value: (parent: { value?: string }) => parent.value ?? null,
+    jsonValue: (parent: { jsonValue?: unknown }) => parent.jsonValue ?? null,
+    boolValue: (parent: { boolValue?: boolean | null }) => parent.boolValue ?? null,
+    numberValue: (parent: { numberValue?: number | null }) => parent.numberValue ?? null,
+    dateValue: (parent: { dateValue?: string | null }) => parent.dateValue ?? null,
+    definition: (parent: { definition?: unknown }) => parent.definition ?? null,
+    // targetItem / targetItems: parse GUIDs from the raw field value and
+    // resolve each against the engine tree - identical to the old ItemField
+    // plain-type resolvers, now on the concrete TextField implementer.
+    targetItem: (parent: { value?: string }) => {
+      const ids = parseGuidList(parent?.value ?? undefined);
+      for (const id of ids) {
+        const node = engine.getItemById(id);
+        if (node) return node.item;
+      }
+      return null;
+    },
+    targetItems: (parent: { value?: string }) => {
+      const ids = parseGuidList(parent?.value ?? undefined);
+      const out: ScsItem[] = [];
+      for (const id of ids) {
+        const node = engine.getItemById(id);
+        if (node) out.push(node.item);
+      }
+      return out;
+    },
+  };
 
   // Shared resolver for every generated `Item` implementer. Base fields
   // are identical across types; template-specific fields delegate to the
@@ -673,31 +789,16 @@ export async function registerGraphQLRoutes(
       Long: GraphQLLong,
       Item: { resolveType: resolveTypename },
       UnknownItem: sharedItemResolver,
+      // ItemField is now an interface - resolveType dispatches to the right
+      // concrete type. Phase C1: always returns TextField (the only registered
+      // implementer). Phase C2 will activate FIELD_TYPE_TO_GQL to route image,
+      // link, etc. to their own concrete types once those types are added.
       ItemField: {
-        // Real Experience Edge exposes both singular and plural reference
-        // accessors on an ItemField. `value` is the raw Sitecore field string
-        // (a brace-wrapped GUID for Droplink/Droptree, a pipe-delimited brace
-        // list for Treelist/Multilist). Parse GUIDs out and resolve each
-        // against the engine tree - items that aren't in the tree are
-        // dropped.
-        targetItem: (parent: { value?: string | null }) => {
-          const ids = parseGuidList(parent?.value ?? undefined);
-          for (const id of ids) {
-            const node = engine.getItemById(id);
-            if (node) return node.item;
-          }
-          return null;
-        },
-        targetItems: (parent: { value?: string | null }) => {
-          const ids = parseGuidList(parent?.value ?? undefined);
-          const out: ScsItem[] = [];
-          for (const id of ids) {
-            const node = engine.getItemById(id);
-            if (node) out.push(node.item);
-          }
-          return out;
-        },
+        resolveType: (_f: { __fieldType?: string }) => 'TextField',
       },
+      // TextField is the fallback concrete implementer of ItemField. All field
+      // resolvers are shared with C2 subtypes via sharedItemFieldResolver.
+      TextField: sharedItemFieldResolver,
       ItemTemplate: {
         // Walk the template item's `__Base template` shared field (standard
         // Sitecore field, id 12c33f3f-…) and return one ItemTemplate record
