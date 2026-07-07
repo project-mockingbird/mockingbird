@@ -170,4 +170,52 @@ describe('site.siteInfoCollection GraphQL resolver', () => {
     expect(redirects).toHaveLength(1);
     expect(redirects[0]).toMatchObject({ pattern: '/old', target: '/new' });
   });
+
+  it('SiteInfo exposes full scalar surface (name, rootPath, hostname, language) via siteInfo(site)', async () => {
+    // TDD anchor: SiteInfo gains name/rootPath/hostname/language scalars
+    // matching the Edge SiteData shape. These fields were absent before Task F1
+    // (they lived only on the now-retired SiteInfoSummary). The parent in both
+    // the siteInfo(site) and siteInfoCollection paths is a SiteDefinition, so
+    // the same resolvers serve both.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query { site { siteInfo(site: "SiteA") { name rootPath hostname language } } }`,
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    expect(body.data.site.siteInfo).toMatchObject({
+      name: 'SiteA',
+      rootPath: '/sitecore/content/Tenant/SiteA',
+      hostname: 'site-a.test',
+      language: 'en',
+    });
+  });
+
+  it('allSiteInfo paginates site definitions and returns total', async () => {
+    // TDD anchor: SiteData.allSiteInfo(pageSize, pageNumber) returns a
+    // SiteInfoResult with paginated results and a total count. Fixture has two
+    // sites so total=2; page 1 of size 10 returns both.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query { site { allSiteInfo(pageSize: 10, pageNumber: 1) { total results { name } } } }`,
+      },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const allSiteInfo = body.data.site.allSiteInfo;
+    expect(allSiteInfo.total).toBe(2);
+    expect(allSiteInfo.results).toHaveLength(2);
+    const names = allSiteInfo.results.map((r: { name: string }) => r.name);
+    expect(names).toContain('SiteA');
+    expect(names).toContain('SiteB');
+  });
 });

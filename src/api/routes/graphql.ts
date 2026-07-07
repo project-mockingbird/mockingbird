@@ -257,7 +257,7 @@ export const BASE_SCHEMA = `
 
   type Query {
     layout(site: String!, routePath: String!, language: String!): LayoutData
-    site: SiteQuery!
+    site: SiteData!
     item(path: String!, language: String!): Item
     search(where: ItemSearchPredicate!, first: Int = 10, after: String, orderBy: ItemSearchOrderByInput): ItemSearchResults
   }
@@ -579,20 +579,23 @@ export const BASE_SCHEMA = `
     item: Item
   }
 
-  type SiteQuery {
+  type SiteData {
     siteInfo(site: String!): SiteInfo
-    siteInfoCollection: [SiteInfoSummary!]!
+    siteInfoCollection: [SiteInfo!]!
+    allSiteInfo(pageSize: Int, pageNumber: Int): SiteInfoResult
   }
 
-  type SiteInfoSummary {
-    name: String!
-    hostname: String!
-    language: String!
-    rootPath: String!
-    startItem: String!
+  type SiteInfoResult {
+    results: [SiteInfo!]!
+    total: Int!
   }
 
   type SiteInfo {
+    name: String!
+    rootPath: String!
+    hostname: String
+    language: String
+    startItem: String
     redirects: [Redirect!]!
     errorHandling(language: String!): ErrorHandling!
     dictionary(language: String!, first: Int, after: String): DictionaryConnection!
@@ -1428,7 +1431,7 @@ export async function registerGraphQLRoutes(
           };
         },
       },
-      SiteQuery: {
+      SiteData: {
         siteInfo: (
           _root: unknown,
           args: { site: string },
@@ -1442,15 +1445,34 @@ export async function registerGraphQLRoutes(
           return site; // SiteDefinition or null - GraphQL handles null by skipping nested fields
         },
         siteInfoCollection: () => discoverSiteDefinitions(engine),
+        allSiteInfo: (
+          _root: unknown,
+          args: { pageSize?: number | null; pageNumber?: number | null },
+        ) => {
+          const all = discoverSiteDefinitions(engine);
+          const pageSize = args.pageSize ?? 10;
+          const pageNumber = args.pageNumber ?? 1;
+          const start = (pageNumber - 1) * pageSize;
+          const results = all.slice(start, start + pageSize);
+          return { results, total: all.length };
+        },
       },
       SiteInfo: {
+        // Scalar fields resolved directly from the SiteDefinition parent.
+        // Both siteInfo(site) and siteInfoCollection pass a SiteDefinition as
+        // the parent, so these resolvers work identically in both paths.
+        name: (parent: SiteDefinition) => parent.name,
+        rootPath: (parent: SiteDefinition) => parent.rootPath,
+        hostname: (parent: SiteDefinition) => parent.hostname || null,
+        language: (parent: SiteDefinition) => parent.language || null,
+        startItem: (parent: SiteDefinition) => parent.startItem || null,
         redirects: (parent: SiteDefinition) => {
           // resolveRedirects expects the start-item path: it slices the last
           // segment to recover the SXA site root, then locates Settings/
           // Redirects under that root. Pass routeBaseForSite, not parent.rootPath
           // (the SXA site root) - otherwise the slice drops one segment too far.
           const list = resolveRedirects(engine, parent.name, routeBaseForSite(parent));
-          console.log(`[graphql] redirects site=${parent.name} → ${list.length} entries`);
+          console.log(`[graphql] redirects site=${parent.name} -> ${list.length} entries`);
           return list;
         },
         // Stubs matching real Experience Edge output for sites with no error
