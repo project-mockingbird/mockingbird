@@ -242,6 +242,29 @@ function safeDecodeURI(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
 }
 
+/**
+ * Format a raw GUID string in .NET Guid.ToString(format) style for Edge parity.
+ * Shared by both ItemField.id and Item.id resolvers (DRY).
+ *
+ * Formats:
+ *   N (default): 32-hex uppercase, no dashes  (88DA64DE28B64620B1085D8C61564F6F)
+ *   D: lowercase hex with dashes              (88da64de-28b6-4620-b108-5d8c61564f6f)
+ *   B: {uppercase-dashed}                     ({88DA64DE-28B6-4620-B108-5D8C61564F6F})
+ *   P: (uppercase-dashed)                     ((88DA64DE-28B6-4620-B108-5D8C61564F6F))
+ *
+ * Non-GUID strings (test fixtures, partial ids) pass through: dashes removed and
+ * uppercased for N/B/P, left as-is for D.
+ */
+function applyGuidFormat(raw: string, format?: string): string {
+  const fmt = (format ?? 'N').toUpperCase();
+  const canonical = toCanonicalGuid(raw) ?? raw;
+  if (fmt === 'D') return canonical;
+  if (fmt === 'B') return `{${canonical.toUpperCase()}}`;
+  if (fmt === 'P') return `(${canonical.toUpperCase()})`;
+  // Default "N": 32-hex uppercase, no dashes
+  return formatGuidEdge(canonical);
+}
+
 export const BASE_SCHEMA = `
   scalar JSON
   scalar Long
@@ -272,7 +295,7 @@ export const BASE_SCHEMA = `
   }
 
   interface Item {
-    id: ID!
+    id(format: String = "N"): ID!
     name: String!
     displayName: String
     path: String!
@@ -291,7 +314,7 @@ export const BASE_SCHEMA = `
   }
 
   type UnknownItem implements Item {
-    id: ID!
+    id(format: String = "N"): ID!
     name: String!
     displayName: String
     path: String!
@@ -598,6 +621,8 @@ export const BASE_SCHEMA = `
     hostname: String
     language: String
     startItem: String
+    robots: String
+    sitemap: [String!]
     redirects: [RedirectInfo!]!
     errorHandling(language: String!): ErrorHandlingInfo
     routes(language: String!, includedPaths: [String!], excludedPaths: [String!], after: String, first: Int): RoutesResult
@@ -837,15 +862,8 @@ export async function registerGraphQLRoutes(
   // The parent object is the enriched readHint result:
   //   { __fieldType, __id, name, value, boolValue, numberValue, dateValue, jsonValue, definition }
   const sharedItemFieldResolver = {
-    id: (parent: { __id?: string }, args: { format?: string }) => {
-      const fmt = (args?.format ?? 'N').toUpperCase();
-      const raw = parent.__id ?? ZERO_GUID;
-      const canonical = toCanonicalGuid(raw) ?? raw;
-      if (fmt === 'D') return canonical;
-      if (fmt === 'B') return `{${canonical.toUpperCase()}}`;
-      // Default "N" - 32-hex uppercase, no dashes
-      return formatGuidEdge(canonical);
-    },
+    id: (parent: { __id?: string }, args: { format?: string }) =>
+      applyGuidFormat(parent.__id ?? ZERO_GUID, args?.format),
     name: (parent: { name?: string }) => parent.name ?? '',
     value: (parent: { value?: string }) => parent.value ?? null,
     jsonValue: (parent: { jsonValue?: unknown }) => parent.jsonValue ?? { value: '' },
@@ -1032,7 +1050,8 @@ export async function registerGraphQLRoutes(
   // generic `readItemFieldByHint` lookup via a `fieldResolverMap` that
   // translates each graphql field name back to its Sitecore source name.
   const sharedItemResolver: Record<string, (item: ScsItem, args: unknown, ctx: MercuriusContext) => unknown> = {
-    id: (item: ScsItem) => item.id,
+    id: (item: ScsItem, args: unknown) =>
+      applyGuidFormat(item.id, (args as { format?: string } | undefined)?.format),
     name: (item: ScsItem) => item.path.split('/').pop() ?? '',
     displayName: (item: ScsItem) => item.path.split('/').pop() ?? '',
     path: (item: ScsItem) => item.path,
@@ -1482,6 +1501,14 @@ export async function registerGraphQLRoutes(
         hostname: (parent: SiteDefinition) => parent.hostname || null,
         language: (parent: SiteDefinition) => parent.language || null,
         startItem: (parent: SiteDefinition) => parent.startItem || null,
+        // Fidelity gap: Mockingbird has no robots.txt source. Edge exposes a
+        // robots: String field populated from site-grouping data; return null
+        // (valid for a nullable String) until a source is wired in.
+        robots: () => null,
+        // Fidelity gap: Mockingbird has no sitemap source. Edge exposes
+        // sitemap: [String!] (list of sitemap URLs); return null (valid for a
+        // nullable list) until a source is wired in.
+        sitemap: () => null,
         redirects: (parent: SiteDefinition) => {
           // resolveRedirects expects the start-item path: it slices the last
           // segment to recover the SXA site root, then locates Settings/

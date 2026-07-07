@@ -173,7 +173,7 @@ function templateItemName(node: ItemNode): string {
  * this exact text. Keeping it inline instead of factoring to a fragment
  * variable avoids any ambiguity about SDL interpolation order.
  */
-const ANY_ITEM_FIELDS = `    id: ID!
+const ANY_ITEM_FIELDS = `    id(format: String = "N"): ID!
     name: String!
     displayName: String
     path: String!

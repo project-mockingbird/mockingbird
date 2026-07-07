@@ -484,7 +484,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.errors).toBeUndefined();
-    expect(body.data.item.id).toBe('home1111-home-home-home-homehomehome');
+    expect(body.data.item.id).toBe('HOME1111HOMEHOMEHOMEHOMEHOMEHOME');
     expect(body.data.item.template.id).toBe(pageTemplateId);
     expect(body.data.item.template.name).toBe('Content Page');
   });
@@ -516,12 +516,10 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(body.data.item.field.value).toBe('Welcome Home');
   });
 
-  it('Query.item.id emits canonical lowercase-dashed GUIDs (AnyItem path)', async () => {
-    // AnyItem/multilist/route-level id projections use canonical
-    // lowercase-dashed (`88da64de-28b6-4620-b108-5d8c61564f6f`). The bare
-    // 32-hex-uppercase form is reserved for the ComponentQuery executor's
-    // result rows (see Feature `data.datasource.links.results[*].id` -
-    // covered by the contents-resolvers spec).
+  it('Query.item.id emits N-format GUIDs (32-hex uppercase, no dashes) by default (AnyItem path)', async () => {
+    // Edge default: bare id returns the N format (32-hex uppercase, no dashes,
+    // e.g. `88DA64DE28B64620B1085D8C61564F6F`). Pass id(format:"D") to get the
+    // canonical lowercase-dashed form when needed.
     const response = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
@@ -533,10 +531,10 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.errors).toBeUndefined();
-    expect(body.data.item.id).toBe('home1111-home-home-home-homehomehome');
+    expect(body.data.item.id).toBe('HOME1111HOMEHOMEHOMEHOMEHOMEHOME');
   });
 
-  it('search results (full Item) return canonical lowercase-dashed id GUIDs', async () => {
+  it('search results (full Item) return N-format id GUIDs (32-hex uppercase, no dashes)', async () => {
     const response = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
@@ -554,7 +552,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     const body = response.json();
     expect(body.errors).toBeUndefined();
     expect(body.data.search.results.map((r: { id: string }) => r.id)).toEqual([
-      'home1111-home-home-home-homehomehome',
+      'HOME1111HOMEHOMEHOMEHOMEHOMEHOME',
     ]);
   });
 
@@ -618,7 +616,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         method: 'POST',
         url: '/api/graphql',
         payload: {
-          query: `{item(path:"/sitecore/content/tree",language:"en"){children(includeTemplateIDs:["tmpl-a"]){results{id}}}}`,
+          query: `{item(path:"/sitecore/content/tree",language:"en"){children(includeTemplateIDs:["tmpl-a"]){results{id(format:"D")}}}}`,
         },
       });
       const body = response.json();
@@ -632,6 +630,8 @@ describe('GraphQL site queries (Content SDK)', () => {
 
   describe('Query.item accepts GUID-shaped path arguments', () => {
     const guidItemId = '01b8917b-d36b-4fb1-91ad-017dfe055e55';
+    // Edge default: bare id returns N format (32-hex uppercase, no dashes).
+    const guidItemIdN = '01B8917BD36B4FB191AD017DFE055E55';
     const guidItem: ScsItem = makeItem({
       id: guidItemId,
       path: '/sitecore/content/tenant/site/Home',
@@ -657,31 +657,31 @@ describe('GraphQL site queries (Content SDK)', () => {
     it('resolves by content path (regression)', async () => {
       const body = await runItemQuery('/sitecore/content/tenant/site/Home');
       expect(body.errors).toBeUndefined();
-      expect(body.data.item.id).toBe(guidItemId);
+      expect(body.data.item.id).toBe(guidItemIdN);
     });
 
     it('resolves by brace-wrapped uppercase dashed GUID', async () => {
       const body = await runItemQuery('{01B8917B-D36B-4FB1-91AD-017DFE055E55}');
       expect(body.errors).toBeUndefined();
-      expect(body.data.item.id).toBe(guidItemId);
+      expect(body.data.item.id).toBe(guidItemIdN);
     });
 
     it('resolves by lowercase dashed GUID', async () => {
       const body = await runItemQuery('01b8917b-d36b-4fb1-91ad-017dfe055e55');
       expect(body.errors).toBeUndefined();
-      expect(body.data.item.id).toBe(guidItemId);
+      expect(body.data.item.id).toBe(guidItemIdN);
     });
 
     it('resolves by uppercase dashed GUID without braces', async () => {
       const body = await runItemQuery('01B8917B-D36B-4FB1-91AD-017DFE055E55');
       expect(body.errors).toBeUndefined();
-      expect(body.data.item.id).toBe(guidItemId);
+      expect(body.data.item.id).toBe(guidItemIdN);
     });
 
     it('resolves by 32-hex lowercase GUID without dashes', async () => {
       const body = await runItemQuery('01b8917bd36b4fb191ad017dfe055e55');
       expect(body.errors).toBeUndefined();
-      expect(body.data.item.id).toBe(guidItemId);
+      expect(body.data.item.id).toBe(guidItemIdN);
     });
 
     it('returns null for a nonexistent content path (regression)', async () => {
@@ -771,7 +771,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/droplink-holder",language:"en"){field(name:"ContactFieldName"){targetItem{id} targetItems{id}}}}`,
+            query: `{item(path:"/sitecore/content/droplink-holder",language:"en"){field(name:"ContactFieldName"){targetItem{id(format:"D")} targetItems{id(format:"D")}}}}`,
           },
         });
         const body = response.json();
@@ -877,7 +877,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.errors).toBeUndefined();
-    expect(body.data.item.id).toBe('home1111-home-home-home-homehomehome');
+    expect(body.data.item.id).toBe('HOME1111HOMEHOMEHOMEHOMEHOMEHOME');
   });
 
   it('Query.search matches ContentTokensPage query (template + language, no-braces format)', async () => {
@@ -927,8 +927,8 @@ describe('GraphQL site queries (Content SDK)', () => {
       expect(body.data.search.results).toHaveLength(3);
       expect(body.data.search.pageInfo.hasNext).toBe(false);
       const first = body.data.search.results[0];
-      // Canonical: lowercase hex with hyphens (no braces).
-      expect(first.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      // Edge default N format: 32-hex uppercase, no dashes.
+      expect(first.id).toMatch(/^[0-9A-F]{32}$/);
       expect(first.key.value).toBe('key-0');
       expect(first.tooltipValue.value).toBe('value-0');
     } finally {
@@ -1042,7 +1042,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         method: 'POST',
         url: '/api/graphql',
         payload: {
-          query: `{ item(path:"/sitecore/content/tree", language:"en"){ children(includeTemplateIDs:["{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"]){ results{ id } } } }`,
+          query: `{ item(path:"/sitecore/content/tree", language:"en"){ children(includeTemplateIDs:["{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"]){ results{ id(format:"D") } } } }`,
         },
       });
       expect(res1.json().errors).toBeUndefined();
@@ -1053,7 +1053,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         method: 'POST',
         url: '/api/graphql',
         payload: {
-          query: `{ item(path:"/sitecore/content/tree", language:"en"){ children(includeTemplateIDs:["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]){ results{ id } } } }`,
+          query: `{ item(path:"/sitecore/content/tree", language:"en"){ children(includeTemplateIDs:["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]){ results{ id(format:"D") } } } }`,
         },
       });
       expect(res2.json().errors).toBeUndefined();
@@ -1507,7 +1507,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"97ca43a5-3b10-473e-9326-5044c75f259f",language:"en"){id}}`,
+            query: `{item(path:"97ca43a5-3b10-473e-9326-5044c75f259f",language:"en"){id(format:"D")}}`,
           },
         });
         expect(direct.json().data.item.id).toBe('97ca43a5-3b10-473e-9326-5044c75f259f');
@@ -1516,7 +1516,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"${parentId}",language:"en"){children(includeTemplateIDs:["${demoLinkTmpl}"]){results{id}}}}`,
+            query: `{item(path:"${parentId}",language:"en"){children(includeTemplateIDs:["${demoLinkTmpl}"]){results{id(format:"D")}}}}`,
           },
         });
         const body = response.json();
@@ -2290,7 +2290,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/sort-parent",language:"en"){children{results{id}}}}`,
+            query: `{item(path:"/sitecore/content/sort-parent",language:"en"){children{results{id(format:"D")}}}}`,
           },
         });
         const body = response.json();
@@ -2343,7 +2343,7 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/sort-filter-parent",language:"en"){children(includeTemplateIDs:["${keep}"], first:2){results{id}}}}`,
+            query: `{item(path:"/sitecore/content/sort-filter-parent",language:"en"){children(includeTemplateIDs:["${keep}"], first:2){results{id(format:"D")}}}}`,
           },
         });
         const body = response.json();
@@ -2875,7 +2875,7 @@ describe('AnyItem.parent / ancestors / hasChildren (regression)', () => {
         method: 'POST',
         url: '/api/graphql',
         payload: {
-          query: `{item(path:"/sitecore/content/site/category-a/v1/read",language:"en"){parent{id name}}}`,
+          query: `{item(path:"/sitecore/content/site/category-a/v1/read",language:"en"){parent{id(format:"D") name}}}`,
         },
       });
       const body = response.json();

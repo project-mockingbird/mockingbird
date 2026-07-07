@@ -223,7 +223,7 @@ describe('LinkField', () => {
           query: `{
             item(path: "${item.path}", language: "en") {
               field(name: "f_link") {
-                ... on LinkField { targetItem { id } url }
+                ... on LinkField { targetItem { id(format: "D") } url }
               }
             }
           }`,
@@ -701,7 +701,7 @@ describe('LookupField', () => {
             item(path: "${item.path}", language: "en") {
               field(name: "f_drop") {
                 __typename
-                ... on LookupField { targetItem { id } }
+                ... on LookupField { targetItem { id(format: "D") } }
               }
             }
           }`,
@@ -745,7 +745,7 @@ describe('MultilistField', () => {
               field(name: "f_ml") {
                 __typename
                 ... on MultilistField {
-                  targetItems { id }
+                  targetItems { id(format: "D") }
                   targetIds
                   count
                 }
