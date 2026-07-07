@@ -484,3 +484,78 @@ describe('GraphQL Edge parity - Phase C1: ItemField interface + TextField', () =
     expect(f.jsonValue).toEqual({ value: 'Home v2' });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase C3: item.fields plural collection
+// ---------------------------------------------------------------------------
+
+describe('GraphQL Edge parity - Phase C3: item.fields plural collection', () => {
+  let app: FastifyInstance;
+  beforeAll(async () => { app = await createTestApp(); });
+  afterAll(async () => { await app.close(); });
+
+  it('item.fields returns an array of ItemField objects including known fields', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            fields { name value }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    expect(Array.isArray(body.data.item.fields)).toBe(true);
+    const titleF = (body.data.item.fields as Array<{ name: string; value: string | null }>).find(
+      f => f.name === 'Title',
+    );
+    expect(titleF).toBeDefined();
+    expect(titleF?.value).toBe('Home v2');
+  });
+
+  it('item.fields(ownFields: true) returns only direct-template fields, not inherited ones', async () => {
+    const server = Fastify({ logger: false });
+    const engine = buildEngine([
+      baseTemplate2, baseSectionContent, headingField,
+      derivedTemplate2, derivedSectionContent, bodyField,
+      derivedContentItem,
+    ]);
+    const { registerSiteContextHook } = await import('../../src/api/hooks/site-context.js');
+    registerSiteContextHook(server, engine, HOME);
+    await registerGraphQLRoutes(server, engine, { mediaBaseUrl: '' });
+
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            allFields: fields { name }
+            ownFieldsOnly: fields(ownFields: true) { name }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    await server.close();
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+
+    // fields (all) should include both Body (own) and Heading (inherited)
+    const allFields = body.data.item.allFields as Array<{ name: string }>;
+    expect(allFields.find(f => f.name === 'Body')).toBeDefined();
+    expect(allFields.find(f => f.name === 'Heading')).toBeDefined();
+
+    // ownFields: true should have Body but NOT Heading
+    const ownOnly = body.data.item.ownFieldsOnly as Array<{ name: string }>;
+    expect(ownOnly.find(f => f.name === 'Body')).toBeDefined();
+    expect(ownOnly.find(f => f.name === 'Heading')).toBeUndefined();
+  });
+});

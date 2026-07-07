@@ -230,6 +230,7 @@ export const BASE_SCHEMA = `
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
+    fields(ownFields: Boolean = false): [ItemField!]!
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
     parent: Item
     ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
@@ -248,6 +249,7 @@ export const BASE_SCHEMA = `
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
+    fields(ownFields: Boolean = false): [ItemField!]!
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
     parent: Item
     ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
@@ -997,6 +999,25 @@ export async function registerGraphQLRoutes(
     },
     url: (item: ScsItem, _args: unknown, ctx: MercuriusContext) => buildItemUrl(item, ctx),
     field: (item: ScsItem, args: unknown, ctx: MercuriusContext) => readHint(item, (args as { name: string }).name, ctx),
+    fields: (item: ScsItem, args: unknown, ctx: MercuriusContext) => {
+      const { ownFields: ownOnly } = (args ?? {}) as { ownFields?: boolean | null };
+      let tmplSchema: ReturnType<typeof getTemplateSchema>;
+      try {
+        tmplSchema = getTemplateSchema(item.template, ctx.engine);
+      } catch {
+        return [];
+      }
+      const normalizedTemplateId = item.template.toLowerCase();
+      const out: ReturnType<typeof readHint>[] = [];
+      for (const section of tmplSchema.sections) {
+        for (const f of section.fields) {
+          if (!f.name) continue;
+          if (ownOnly && f.sourceTemplateId.toLowerCase() !== normalizedTemplateId) continue;
+          out.push(readHint(item, f.name, ctx));
+        }
+      }
+      return out;
+    },
     children: (item: ScsItem, args: unknown) => {
       const node = engine.getItemById(item.id);
       if (!node) return { results: [] };

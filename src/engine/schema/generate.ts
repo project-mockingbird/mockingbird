@@ -180,6 +180,7 @@ const ANY_ITEM_FIELDS = `    id: ID!
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
+    fields(ownFields: Boolean = false): [ItemField!]!
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
     parent: Item
     ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
@@ -357,7 +358,7 @@ function addField(
   // Skip anything that collides with a base `Item` interface field - the
   // concrete type already declares those with specific types the field-bag
   // would shadow.
-  const RESERVED = new Set(['id', 'name', 'displayName', 'path', 'template', 'language', 'version', 'url', 'field', 'children', 'parent', 'ancestors', 'hasChildren', 'rendered', 'languages']);
+  const RESERVED = new Set(['id', 'name', 'displayName', 'path', 'template', 'language', 'version', 'url', 'field', 'fields', 'children', 'parent', 'ancestors', 'hasChildren', 'rendered', 'languages']);
   if (RESERVED.has(gqlName)) return;
   desc.fields.set(gqlName, field.name);
   // Last-writer-wins on the global map - fields with the same camelCase
