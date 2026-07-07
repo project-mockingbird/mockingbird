@@ -68,6 +68,28 @@ function langOf(item: ScsItem): string {
 }
 
 /**
+ * Symbol tag carrying the pre-built presentation envelope for a route item
+ * returned by the `layout` resolver. Mirrors the `LANG_SYM` pattern: the tag
+ * is scoped to this file, never collides with a real ScsItem property, and is
+ * read only by the `Item.rendered` field resolver.
+ *
+ * Items fetched via `Query.item` (no render context) leave this tag absent,
+ * so `rendered` correctly returns `{}` for those paths.
+ */
+const RENDERED_SYM: unique symbol = Symbol('mockingbird.rendered');
+type RenderedTaggedItem = LangTaggedItem & { [RENDERED_SYM]?: unknown };
+
+/**
+ * Return a language- and rendered-tagged copy of `item`. The returned object
+ * carries both `LANG_SYM` (so `langOf` reads the right language) and
+ * `RENDERED_SYM` (so `Item.rendered` returns the pre-built envelope). Both
+ * tags are stamped in one `Object.assign` call to avoid a second shallow-copy.
+ */
+function withRendered(item: ScsItem, language: string, rendered: unknown): RenderedTaggedItem {
+  return Object.assign({}, item, { [LANG_SYM]: language, [RENDERED_SYM]: rendered }) as RenderedTaggedItem;
+}
+
+/**
  * GraphQL input shape for the `ItemSearchPredicate` input type.
  * Mirrors the SDL declaration (recursive AND/OR, plus leaf clause fields).
  */
@@ -234,7 +256,7 @@ export const BASE_SCHEMA = `
   }
 
   type Query {
-    layout(site: String!, routePath: String!, language: String!): LayoutResponse
+    layout(site: String!, routePath: String!, language: String!): LayoutData
     site: SiteQuery!
     item(path: String!, language: String!): Item
     search(where: ItemSearchPredicate!, first: Int = 10, after: String, orderBy: ItemSearchOrderByInput): ItemSearchResults
@@ -553,12 +575,8 @@ export const BASE_SCHEMA = `
     pageInfo: PageInfo!
   }
 
-  type LayoutResponse {
-    item: LayoutItem
-  }
-
-  type LayoutItem {
-    rendered: JSON
+  type LayoutData {
+    item: Item
   }
 
   type SiteQuery {
@@ -590,9 +608,9 @@ export const BASE_SCHEMA = `
   }
 
   type ErrorHandling {
-    notFoundPage: LayoutItem
+    notFoundPage: Item
     notFoundPagePath: String!
-    serverErrorPage: LayoutItem
+    serverErrorPage: Item
     serverErrorPagePath: String!
   }
 
@@ -1067,10 +1085,15 @@ export async function registerGraphQLRoutes(
       if (!hasVersionsInLanguage(parentNode.item, lang)) return null;
       return withLanguage(parentNode.item, lang);
     },
-    // rendered: placeholder returning an empty object. Task E1 (layout) wires
-    // the actual presentation JSON via a tag. The field is declared here so
-    // the schema is valid and the field is selectable from the item interface.
-    rendered: () => ({}),
+    // rendered: returns the RENDERED_SYM envelope when the item was produced by
+    // the layout resolver (withRendered), otherwise returns an empty object.
+    // Items fetched via Query.item or search carry no RENDERED_SYM, so they
+    // correctly return {} - matching Sitecore Edge's contract where rendered
+    // is only meaningful on the layout route item.
+    rendered: (item: ScsItem) => {
+      const tagged = item as RenderedTaggedItem;
+      return tagged[RENDERED_SYM] ?? {};
+    },
     // languages: one language-tagged item per language that has at least one
     // version. Each returned item is tagged via withLanguage so its own field
     // reads resolve under that language. Mirrors Sitecore Edge's
@@ -1375,22 +1398,33 @@ export async function registerGraphQLRoutes(
           for (const arr of Object.values(route.placeholders)) walk(arr);
           console.log(`[graphql] layout site=${site.name} route=${routePath} lang=${language} → ${placeholders.length} ph, ${components} comp, ${elapsed}ms`);
 
-          return {
-            item: {
-              rendered: {
-                sitecore: {
-                  context: {
-                    pageEditing: false,
-                    site: { name: site.name },
-                    pageState: 'normal',
-                    editMode: 'chromes',
-                    language,
-                    itemPath: routePath,
-                  },
-                  route,
-                },
+          // Build the presentation envelope (unchanged structure from previous
+          // LayoutItem.rendered shape - existing tests continue to assert the
+          // exact sitecore.context and sitecore.route paths).
+          const envelope = {
+            sitecore: {
+              context: {
+                pageEditing: false,
+                site: { name: site.name },
+                pageState: 'normal',
+                editMode: 'chromes',
+                language,
+                itemPath: routePath,
               },
+              route,
             },
+          };
+
+          // Resolve the actual route item using route.itemId (avoids a second
+          // path lookup and guarantees we return the same item resolveLayout
+          // found - no path-vs-item divergence risk).
+          const routeItemNode = ctx.engine.getItemById(route.itemId);
+          if (!routeItemNode) {
+            return { item: null };
+          }
+
+          return {
+            item: withRendered(routeItemNode.item, language, envelope),
           };
         },
       },

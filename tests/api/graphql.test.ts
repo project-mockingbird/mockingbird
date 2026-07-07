@@ -209,6 +209,32 @@ describe('GraphQL Layout API', () => {
     expect(route.placeholders['headless-main'][0].componentName).toBe('HeroBanner');
     expect(route.placeholders['headless-main'][0].params).toEqual({ GridParameters: 'col-12', FieldNames: 'Default' });
   });
+
+  it('E1: layout.item exposes path, field(name), and rendered as the full Item interface', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($site:String!,$routePath:String!,$language:String!){
+          layout(site:$site,routePath:$routePath,language:$language){
+            item{
+              path
+              field(name:"Title"){ value }
+              rendered
+            }
+          }
+        }`,
+        variables: { site: 'site', routePath: '/', language: 'en' },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.errors).toBeUndefined();
+    const item = body.data.layout.item;
+    expect(item.path).toBe('/sitecore/content/site/Home');
+    expect(item.field.value).toBe('Welcome Home');
+    expect(item.rendered.sitecore.route).toBeDefined();
+  });
 });
 
 // Content SDK 2.x site queries - schema-only stubs for errorHandling +
