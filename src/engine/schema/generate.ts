@@ -96,8 +96,10 @@ function collectTemplateNodes(engine: Engine): ItemNode[] {
  * Read the `__Base template` shared field and parse out the referenced
  * template ids (brace-wrapped GUIDs). Returns an empty array when the
  * field is absent or empty.
+ *
+ * Exported for reuse in the search engine's transitive base-template walk.
  */
-function readBaseTemplateIds(item: ScsItem): string[] {
+export function readBaseTemplateIds(item: ScsItem): string[] {
   const raw = item.sharedFields.find(f => f.id.toLowerCase() === FIELD_IDS.baseTemplate)?.value;
   if (!raw) return [];
   const matches = raw.match(/\{[^}]+\}/g);

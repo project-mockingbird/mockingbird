@@ -666,3 +666,140 @@ describe('GraphQL Edge parity - Phase D1: ItemSearchResults + total', () => {
     expect(names).toEqual(['Child1', 'Child2']);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase D2: search orderBy + full operators + _name + nested OR
+// ---------------------------------------------------------------------------
+
+describe('GraphQL Edge parity - Phase D2: search orderBy, _name, CONTAINS base-template, nested OR', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    const server = Fastify({ logger: false });
+    // Items with a numeric Order field for orderBy tests
+    const orderedItem1 = makeItem({
+      id: 'ee000001-eeee-eeee-eeee-eeeeeeeeeeee',
+      path: HOME + '/OrderA',
+      template: pageTemplateId,
+      sharedFields: [{ id: 'f_ord', hint: 'f_order', value: '10' }],
+      languages: [{ language: 'en', fields: [], versions: [{ version: 1, fields: [] }] }],
+    });
+    const orderedItem2 = makeItem({
+      id: 'ee000002-eeee-eeee-eeee-eeeeeeeeeeee',
+      path: HOME + '/OrderB',
+      template: pageTemplateId,
+      sharedFields: [{ id: 'f_ord', hint: 'f_order', value: '5' }],
+      languages: [{ language: 'en', fields: [], versions: [{ version: 1, fields: [] }] }],
+    });
+    const orderedItem3 = makeItem({
+      id: 'ee000003-eeee-eeee-eeee-eeeeeeeeeeee',
+      path: HOME + '/OrderC',
+      template: pageTemplateId,
+      sharedFields: [{ id: 'f_ord', hint: 'f_order', value: '20' }],
+      languages: [{ language: 'en', fields: [], versions: [{ version: 1, fields: [] }] }],
+    });
+    const engine = buildEngine([
+      pageTemplate, pageSection, titleField,
+      orderedItem1, orderedItem2, orderedItem3,
+    ]);
+    const { registerSiteContextHook } = await import('../../src/api/hooks/site-context.js');
+    registerSiteContextHook(server, engine, HOME);
+    await registerGraphQLRoutes(server, engine, { mediaBaseUrl: '' });
+    app = server;
+  });
+
+  afterAll(async () => { await app.close(); });
+
+  it('search with orderBy DESC returns results sorted high-to-low by numeric field', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query {
+          search(
+            where: { AND: [{ name: "_templates", value: "${pageTemplateId}", operator: EQ }] },
+            first: 10,
+            orderBy: { name: "f_order", direction: DESC }
+          ) {
+            results { name }
+          }
+        }`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const names = (body.data.search.results as Array<{ name: string }>).map(r => r.name);
+    // OrderC (20) > OrderA (10) > OrderB (5)
+    expect(names).toEqual(['OrderC', 'OrderA', 'OrderB']);
+  });
+
+  it('search with orderBy ASC returns results sorted low-to-high by numeric field', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query {
+          search(
+            where: { AND: [{ name: "_templates", value: "${pageTemplateId}", operator: EQ }] },
+            first: 10,
+            orderBy: { name: "f_order", direction: ASC }
+          ) {
+            results { name }
+          }
+        }`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const names = (body.data.search.results as Array<{ name: string }>).map(r => r.name);
+    // OrderB (5) < OrderA (10) < OrderC (20)
+    expect(names).toEqual(['OrderB', 'OrderA', 'OrderC']);
+  });
+
+  it('search with _name EQ filters by item name', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query {
+          search(where: { AND: [{ name: "_name", value: "OrderA", operator: EQ }] }, first: 10) {
+            total
+            results { name }
+          }
+        }`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    expect(body.data.search.total).toBe(1);
+    expect(body.data.search.results[0].name).toBe('OrderA');
+  });
+
+  it('search with nested OR returns union of matching items', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query {
+          search(where: { OR: [
+            { name: "_name", value: "OrderA", operator: EQ },
+            { name: "_name", value: "OrderC", operator: EQ }
+          ] }, first: 10) {
+            total
+            results { name }
+          }
+        }`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    expect(body.data.search.total).toBe(2);
+    const names = (body.data.search.results as Array<{ name: string }>).map(r => r.name).sort();
+    expect(names).toContain('OrderA');
+    expect(names).toContain('OrderC');
+  });
+});

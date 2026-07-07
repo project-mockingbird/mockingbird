@@ -1294,8 +1294,8 @@ export async function registerGraphQLRoutes(
           console.log(`[graphql] item path=${args.path} lang=${args.language} → ${result ? result.id : 'null'}`);
           return result ? withLanguage(result, args.language) : null;
         },
-        search: (_root: unknown, args: { where?: ItemSearchPredicate; first?: number; after?: string; orderBy?: unknown }) => {
-          const page = resolveSearch(engine, args.where as unknown as SearchWhere, { first: args.first, after: args.after });
+        search: (_root: unknown, args: { where?: ItemSearchPredicate; first?: number; after?: string; orderBy?: { name: string; direction?: 'ASC' | 'DESC' | null } | null }) => {
+          const page = resolveSearch(engine, args.where as unknown as SearchWhere, { first: args.first, after: args.after, orderBy: args.orderBy ?? undefined });
           const lang = searchLanguageOf(args.where);
           console.log(`[graphql] search clauses=${args.where?.AND?.length ?? 0} → ${page.results.length} results (total=${page.total}), hasNext=${page.pageInfo.hasNext}`);
           return {
