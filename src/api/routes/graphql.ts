@@ -697,9 +697,12 @@ export async function registerGraphQLRoutes(
           return out;
         },
         // ownFields: fields defined directly on this template (not inherited).
-        // Filtered by section.sourceTemplateId matching the template's own id.
-        // Uses getTemplateSchema so field properties are read from the same
-        // source as other template-schema consumers (type, source, shared, etc.).
+        // Filters at the FIELD level using field.sourceTemplateId, which is
+        // populated per-field in collectOwnSections. This correctly handles the
+        // common Sitecore pattern of a derived template adding a field to an
+        // inherited section (same section name): the merged section carries the
+        // derived template's sourceTemplateId, but base-template fields appended
+        // into it keep their own field.sourceTemplateId, so they are excluded here.
         ownFields: (parent: { id: string }) => {
           const canonical = toCanonicalGuid(parent.id) ?? parent.id;
           const normalizedId = canonical.toLowerCase();
@@ -710,8 +713,8 @@ export async function registerGraphQLRoutes(
             section: string; sectionSortOrder: number;
           }> = [];
           for (const section of schema.sections) {
-            if (section.sourceTemplateId.toLowerCase() !== normalizedId) continue;
             for (const f of section.fields) {
+              if (f.sourceTemplateId.toLowerCase() !== normalizedId) continue;
               out.push({
                 name: f.name,
                 title: f.displayName,

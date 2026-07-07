@@ -238,9 +238,125 @@ describe('GraphQL Edge parity - Phase B2: ItemTemplate ownFields/fields + ItemTe
     expect(titleF).toBeDefined();
     expect(titleF.type).toBe('Single-Line Text');
     expect(titleF.section).toBe('Content');
-    expect(typeof titleF.shared).toBe('boolean');
-    expect(typeof titleF.unversioned).toBe('boolean');
+    // "Title" field is versioned (not shared, not unversioned) - assert real values
+    expect(titleF.shared).toBe(false);
+    expect(titleF.unversioned).toBe(false);
     expect(typeof titleF.sortOrder).toBe('number');
     expect(typeof titleF.sectionSortOrder).toBe('number');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: ownFields field-level sourceTemplateId filter
+// ---------------------------------------------------------------------------
+// Scenario: base template B declares section "Content" with field "Heading";
+// derived template A inherits from B and also declares section "Content" with
+// field "Body". getTemplateSchema merges both "Content" sections by name,
+// giving the merged section sourceTemplateId = A (most-derived wins). The OLD
+// section-level filter would then emit both Heading AND Body as ownFields of A.
+// The field-level filter emits only Body.
+
+const baseTemplateId2 = 'cccc0001-cccc-cccc-cccc-cccccccccccc';
+const derivedTemplateId2 = 'dddd0001-dddd-dddd-dddd-dddddddddddd';
+
+const baseTemplate2 = makeItem({
+  id: baseTemplateId2,
+  path: '/sitecore/templates/Project/site/Base',
+  template: TEMPLATE_TEMPLATE_ID,
+});
+const baseSectionContent = makeItem({
+  id: 'cccc0002-cccc-cccc-cccc-cccccccccccc',
+  parent: baseTemplateId2,
+  path: '/sitecore/templates/Project/site/Base/Content',
+  template: TEMPLATE_SECTION_TEMPLATE_ID,
+});
+const headingField = makeItem({
+  id: 'cccc0003-cccc-cccc-cccc-cccccccccccc',
+  parent: 'cccc0002-cccc-cccc-cccc-cccccccccccc',
+  path: '/sitecore/templates/Project/site/Base/Content/Heading',
+  template: TEMPLATE_FIELD_TEMPLATE_ID,
+  sharedFields: [{ id: FIELD_IDS.type, hint: 'Type', value: 'Single-Line Text' }],
+});
+
+// Derived template declares its own "Content" section (same name as Base's)
+// and adds field "Body".
+const derivedTemplate2 = makeItem({
+  id: derivedTemplateId2,
+  path: '/sitecore/templates/Project/site/Derived',
+  template: TEMPLATE_TEMPLATE_ID,
+  sharedFields: [
+    { id: FIELD_IDS.baseTemplate, hint: '__Base template', value: `{${baseTemplateId2.toUpperCase()}}` },
+  ],
+});
+const derivedSectionContent = makeItem({
+  id: 'dddd0002-dddd-dddd-dddd-dddddddddddd',
+  parent: derivedTemplateId2,
+  path: '/sitecore/templates/Project/site/Derived/Content',
+  template: TEMPLATE_SECTION_TEMPLATE_ID,
+});
+const bodyField = makeItem({
+  id: 'dddd0003-dddd-dddd-dddd-dddddddddddd',
+  parent: 'dddd0002-dddd-dddd-dddd-dddddddddddd',
+  path: '/sitecore/templates/Project/site/Derived/Content/Body',
+  template: TEMPLATE_FIELD_TEMPLATE_ID,
+  sharedFields: [{ id: FIELD_IDS.type, hint: 'Type', value: 'Multi-Line Text' }],
+});
+const derivedContentItem = makeItem({
+  id: 'eeee0001-eeee-eeee-eeee-eeeeeeeeeeee',
+  path: HOME,
+  template: derivedTemplateId2,
+  languages: [],
+});
+
+describe('GraphQL Edge parity - Phase B2: ownFields field-level filter regression', () => {
+  let app: FastifyInstance;
+  beforeAll(async () => {
+    const server = Fastify({ logger: false });
+    const engine = buildEngine([
+      baseTemplate2, baseSectionContent, headingField,
+      derivedTemplate2, derivedSectionContent, bodyField,
+      derivedContentItem,
+    ]);
+    const { registerSiteContextHook } = await import('../../src/api/hooks/site-context.js');
+    registerSiteContextHook(server, engine, HOME);
+    await registerGraphQLRoutes(server, engine, { mediaBaseUrl: '' });
+    app = server;
+  });
+  afterAll(async () => { await app.close(); });
+
+  it('ownFields contains only the derived-template field, not the inherited field in the same-named section', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            template {
+              ownFields { name type section }
+              fields { name type section }
+            }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const { ownFields, fields } = body.data.item.template;
+
+    // ownFields: only "Body" (declared directly on derived template)
+    const bodyOwn = (ownFields as Array<{ name: string }>).find(f => f.name === 'Body');
+    expect(bodyOwn).toBeDefined();
+
+    // ownFields: must NOT include "Heading" (declared on base template)
+    const headingOwn = (ownFields as Array<{ name: string }>).find(f => f.name === 'Heading');
+    expect(headingOwn).toBeUndefined();
+
+    // fields: includes both "Body" and "Heading"
+    const bodyAll = (fields as Array<{ name: string }>).find(f => f.name === 'Body');
+    expect(bodyAll).toBeDefined();
+    const headingAll = (fields as Array<{ name: string }>).find(f => f.name === 'Heading');
+    expect(headingAll).toBeDefined();
   });
 });
