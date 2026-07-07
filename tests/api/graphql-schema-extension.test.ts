@@ -33,6 +33,26 @@ afterEach(async () => {
   }
 });
 
+describe('item interface naming (Edge parity)', () => {
+  it('item interface is "Item", fallback is "UnknownItem"', async () => {
+    delete process.env.SCS_SITECORE_JSON;
+    delete process.env.SCS_CONTENT_SITECORE_JSON;
+    process.env.MOCKINGBIRD_WORKSPACE = workspaceTmp!;
+
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: { query: '{ i: __type(name:"Item"){kind} u: __type(name:"UnknownItem"){kind} }' },
+    });
+    const d = res.json().data;
+    expect(d.i.kind).toBe('INTERFACE');
+    expect(d.u.kind).toBe('OBJECT');
+  });
+});
+
 describe('GraphQL schema extension across openWorkspace', () => {
   it('extends the schema after a project opens via /api/projects/open', async () => {
     delete process.env.SCS_SITECORE_JSON;

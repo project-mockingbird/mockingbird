@@ -1062,7 +1062,7 @@ describe('GraphQL site queries (Content SDK)', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.errors).toBeUndefined();
-      expect(body.data.item.__typename).toBe('Item');
+      expect(body.data.item.__typename).toBe('UnknownItem');
     } finally {
       await app.close();
     }
@@ -3027,8 +3027,8 @@ describe('AnyItem.parent / ancestors / hasChildren (regression)', () => {
     }
   });
 
-  it('introspection lists parent / ancestors / hasChildren on AnyItem', async () => {
-    // Acceptance criterion: __type(name:"AnyItem") must include parent
+  it('introspection lists parent / ancestors / hasChildren on Item', async () => {
+    // Acceptance criterion: __type(name:"Item") must include parent
     // (and the additional fields restored).
     const app = await createTestApp(DEEP_NAV_FIXTURES);
     try {
@@ -3036,7 +3036,7 @@ describe('AnyItem.parent / ancestors / hasChildren (regression)', () => {
         method: 'POST',
         url: '/api/graphql',
         payload: {
-          query: `{ __type(name: "AnyItem") { fields { name } } }`,
+          query: `{ __type(name: "Item") { fields { name } } }`,
         },
       });
       const body = response.json();

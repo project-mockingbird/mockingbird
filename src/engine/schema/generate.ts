@@ -11,9 +11,9 @@ import { graphqlTypeize, graphqlFieldize } from './name-normalizer.js';
  * preserves underscores). Empty or whitespace-only input returns `'Item'`.
  */
 export function templateNameToTypeName(name: string): string {
-  if (!name || !name.trim()) return 'Item';
+  if (!name || !name.trim()) return 'UnknownItem';
   const result = graphqlTypeize(name);
-  return result || 'Item';
+  return result || 'UnknownItem';
 }
 
 /**
@@ -166,8 +166,8 @@ function templateItemName(node: ItemNode): string {
 }
 
 /**
- * Emit a single shared `AnyItem` fields block - every type (generated
- * type, generic `Item`, plus any base-template interface) re-declares
+ * Emit a single shared `Item` interface fields block - every type (generated
+ * type, generic `UnknownItem`, plus any base-template interface) re-declares
  * this exact text. Keeping it inline instead of factoring to a fragment
  * variable avoids any ambiguity about SDL interpolation order.
  */
@@ -180,23 +180,23 @@ const ANY_ITEM_FIELDS = `    id: ID!
     url: ItemUrl
     field(name: String!): ItemField
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!]): [Item!]!
     hasChildren(includeTemplateIDs: [String!]): Boolean!`;
 
 /**
  * Build the full generated schema text from the engine's template
  * registry. Emits (in order):
  *
- *   1. The `AnyItem` interface + shared helper types (`ItemTemplate`,
+ *   1. The `Item` interface + shared helper types (`ItemTemplate`,
  *      `ItemUrl`, `ItemField`, `AnyItemChildrenConnection`).
- *   2. A generic `type Item implements AnyItem` fallback for any runtime
+ *   2. A generic `type UnknownItem implements Item` fallback for any runtime
  *      item whose template isn't in the generated set.
  *   3. One `interface <BaseName>` per template whose name starts with `_`,
  *      carrying the flattened field set and declaring `implements` for every
  *      base interface it transitively inherits (e.g.
  *      `_BaseBeta implements _BaseAlpha`).
- *   4. One `type <Name> implements AnyItem & <interfaces>` per template, with
+ *   4. One `type <Name> implements Item & <interfaces>` per template, with
  *      the full flattened field set (own + base + transitive base fields).
  *      `<interfaces>` is the TRANSITIVE set of base interfaces, not just the
  *      direct bases - the GraphQL spec requires declaring every
@@ -208,9 +208,9 @@ const ANY_ITEM_FIELDS = `    id: ID!
  */
 export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResult {
   const templatesById = new Map<string, GeneratedTemplate>();
-  const concreteTypeNames: string[] = ['Item'];
+  const concreteTypeNames: string[] = ['UnknownItem'];
   const fieldResolverMap = new Map<string, string>();
-  const usedTypeNames = new Set<string>(['Item']);
+  const usedTypeNames = new Set<string>(['UnknownItem']);
 
   const templateNodes = collectTemplateNodes(engine);
 
@@ -280,14 +280,14 @@ export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResul
     .map(name => `    ${name}: ItemField`)
     .join('\n');
 
-  // Build the SDL text. The base interface (`AnyItem`), base concrete type
-  // (`Item`) and helper types live in BASE_SCHEMA and are already
+  // Build the SDL text. The base interface (`Item`), fallback concrete type
+  // (`UnknownItem`) and helper types live in BASE_SCHEMA and are already
   // registered by the time this runs - the generator only emits the
   // dynamic *additions*, delivered via mercurius's `extendSchema` API.
   const parts: string[] = [];
   if (allFieldsBlock) {
     parts.push(`
-  extend type Item {
+  extend type UnknownItem {
 ${allFieldsBlock}
   }`);
   }
@@ -324,7 +324,7 @@ ${fieldLines || '    _placeholder: ItemField'}
   // __typename will ever select them.
   for (const desc of templatesById.values()) {
     if (desc.isBase) continue;
-    const implementsList = ['AnyItem', ...desc.baseTypeNames];
+    const implementsList = ['Item', ...desc.baseTypeNames];
     const implementsClause = implementsList.join(' & ');
     const block = `
   type ${desc.typeName} implements ${implementsClause} {
@@ -351,9 +351,9 @@ function addField(
   if (!field.name) return;
   const gqlName = fieldNameToGraphQLFieldName(field.name);
   if (!gqlName) return;
-  // Skip anything that collides with a base `AnyItem` field - the concrete
-  // type already declares those with specific types the field-bag would
-  // shadow.
+  // Skip anything that collides with a base `Item` interface field - the
+  // concrete type already declares those with specific types the field-bag
+  // would shadow.
   const RESERVED = new Set(['id', 'name', 'displayName', 'path', 'template', 'language', 'url', 'field', 'children', 'parent', 'ancestors', 'hasChildren']);
   if (RESERVED.has(gqlName)) return;
   desc.fields.set(gqlName, field.name);

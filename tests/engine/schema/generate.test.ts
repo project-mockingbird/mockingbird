@@ -107,9 +107,9 @@ describe('templateNameToTypeName', () => {
   it('preserves underscore-prefixed names (T_ pattern)', () => {
     expect(templateNameToTypeName('T_Sample')).toBe('T_Sample');
   });
-  it('returns "Item" for empty input', () => {
-    expect(templateNameToTypeName('')).toBe('Item');
-    expect(templateNameToTypeName('   ')).toBe('Item');
+  it('returns "UnknownItem" for empty input', () => {
+    expect(templateNameToTypeName('')).toBe('UnknownItem');
+    expect(templateNameToTypeName('   ')).toBe('UnknownItem');
   });
 });
 
@@ -158,7 +158,7 @@ describe('generateSchemaFromRegistry', () => {
     ]);
     const engine = buildEngine(tmpl);
     const result = generateSchemaFromRegistry(engine);
-    expect(result.sdl).toContain('type DemoRoot implements AnyItem');
+    expect(result.sdl).toContain('type DemoRoot implements Item');
     expect(result.sdl).toContain('demoNodeText: ItemField');
     expect(result.sdl).toContain('demoIcon: ItemField');
     expect(result.sdl).toContain('demoHidden: ItemField');
@@ -172,13 +172,13 @@ describe('generateSchemaFromRegistry', () => {
     expect(result.sdl).toMatch(/interface _BaseAlpha\s*{[^}]*fieldLabel: ItemField/);
   });
 
-  it('concrete types implement all base-template interfaces AND AnyItem', () => {
+  it('concrete types implement all base-template interfaces AND Item', () => {
     const base = buildTemplate('_Base Alpha', [{ name: 'Field Label' }]);
     const baseId = base[0].id;
     const concrete = buildTemplate('Concrete Four', [{ name: 'Concrete Four Text' }], { baseTemplateIds: [baseId] });
     const engine = buildEngine([...base, ...concrete]);
     const result = generateSchemaFromRegistry(engine);
-    expect(result.sdl).toContain('type ConcreteFour implements AnyItem & _BaseAlpha');
+    expect(result.sdl).toContain('type ConcreteFour implements Item & _BaseAlpha');
     // Fields from both base and own template appear on the concrete type
     const concreteBlock = result.sdl.match(/type ConcreteFour[^{]*{[^}]*}/)?.[0] ?? '';
     expect(concreteBlock).toContain('fieldLabel: ItemField');
@@ -208,7 +208,7 @@ describe('generateSchemaFromRegistry', () => {
     // Split on `&` into exact interface tokens so `_BaseAlpha` isn't
     // falsely matched as a substring of `_BaseBeta`.
     const interfaces = clause.split('&').map(s => s.trim()).filter(Boolean);
-    expect(interfaces).toContain('AnyItem');
+    expect(interfaces).toContain('Item');
     expect(interfaces).toContain('_BaseBeta');
     expect(interfaces).toContain('_BaseAlpha');
   });
@@ -247,15 +247,15 @@ describe('generateSchemaFromRegistry', () => {
   });
 
   it('returns an empty SDL when the tree has no templates (BASE_SCHEMA handles the interface)', () => {
-    // The interface/helper-type declarations (AnyItem, ItemTemplate,
-    // ItemUrl, ItemField, AnyItemChildrenConnection, the base Item type)
+    // The interface/helper-type declarations (Item interface, ItemTemplate,
+    // ItemUrl, ItemField, AnyItemChildrenConnection, the UnknownItem fallback)
     // live in BASE_SCHEMA now - the generator is purely additive via
     // mercurius's extendSchema, so an empty tree produces an empty
     // extension document.
     const engine = buildEngine([]);
     const result = generateSchemaFromRegistry(engine);
     expect(result.sdl).toBe('');
-    expect(result.concreteTypeNames).toEqual(['Item']);
+    expect(result.concreteTypeNames).toEqual(['UnknownItem']);
   });
 
   it('returns a fieldResolverMap keying generated field names to the original Sitecore field name', () => {
@@ -281,10 +281,10 @@ describe('generateSchemaFromRegistry', () => {
     const engine = buildEngine([...one, ...two]);
     const result = generateSchemaFromRegistry(engine);
     // First occurrence keeps the clean name, second gets suffixed.
-    const typeMatches = result.sdl.match(/type Widget\w* implements AnyItem/g) ?? [];
+    const typeMatches = result.sdl.match(/type Widget\w* implements Item/g) ?? [];
     expect(typeMatches.length).toBe(2);
-    expect(typeMatches[0]).toBe('type Widget implements AnyItem');
-    expect(typeMatches[1]).toMatch(/^type Widget_[a-f0-9]+ implements AnyItem$/);
+    expect(typeMatches[0]).toBe('type Widget implements Item');
+    expect(typeMatches[1]).toMatch(/^type Widget_[a-f0-9]+ implements Item$/);
   });
 });
 
@@ -297,12 +297,12 @@ describe('generateSchemaFromRegistry', () => {
  * mercurius does at runtime.
  */
 const MINIMAL_BASE = `
-  type Query { item(path: String!): AnyItem }
+  type Query { item(path: String!): Item }
   type ItemTemplate { id: ID! }
   type ItemUrl { url: String! }
   type ItemField { value: String }
-  type AnyItemChildrenConnection { results: [AnyItem!]! }
-  interface AnyItem {
+  type AnyItemChildrenConnection { results: [Item!]! }
+  interface Item {
     id: ID!
     name: String!
     displayName: String
@@ -312,11 +312,11 @@ const MINIMAL_BASE = `
     url: ItemUrl
     field(name: String!): ItemField
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!]): [Item!]!
     hasChildren(includeTemplateIDs: [String!]): Boolean!
   }
-  type Item implements AnyItem {
+  type UnknownItem implements Item {
     id: ID!
     name: String!
     displayName: String
@@ -326,8 +326,8 @@ const MINIMAL_BASE = `
     url: ItemUrl
     field(name: String!): ItemField
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!]): [Item!]!
     hasChildren(includeTemplateIDs: [String!]): Boolean!
   }
 `;

@@ -142,11 +142,11 @@ const BASE_SCHEMA = `
   type Query {
     layout(site: String!, routePath: String!, language: String!): LayoutResponse
     site: SiteQuery!
-    item(path: String!, language: String!): AnyItem
+    item(path: String!, language: String!): Item
     search(where: SearchWhere, first: Int = 50, after: String): SearchResults!
   }
 
-  interface AnyItem {
+  interface Item {
     id: ID!
     name: String!
     displayName: String
@@ -156,12 +156,12 @@ const BASE_SCHEMA = `
     url: ItemUrl
     field(name: String!): ItemField
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!]): [Item!]!
     hasChildren(includeTemplateIDs: [String!]): Boolean!
   }
 
-  type Item implements AnyItem {
+  type UnknownItem implements Item {
     id: ID!
     name: String!
     displayName: String
@@ -171,8 +171,8 @@ const BASE_SCHEMA = `
     url: ItemUrl
     field(name: String!): ItemField
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!]): [Item!]!
     hasChildren(includeTemplateIDs: [String!]): Boolean!
   }
 
@@ -194,12 +194,12 @@ const BASE_SCHEMA = `
     boolValue: Boolean
     numberValue: Float
     dateValue: String
-    targetItem: AnyItem
-    targetItems: [AnyItem!]
+    targetItem: Item
+    targetItems: [Item!]
   }
 
   type AnyItemChildrenConnection {
-    results: [AnyItem!]!
+    results: [Item!]!
   }
 
   input SearchWhere {
@@ -330,18 +330,18 @@ export async function registerGraphQLRoutes(
   // once `engine.readiness.ready()` resolves.
   //
   // `templatesById` and `generatedTypeNames` are shared mutable state
-  // between the initial resolver (which just returns 'Item') and the
+  // between the initial resolver (which just returns 'UnknownItem') and the
   // post-readiness augmentation. Before indexing completes, no query
   // reaches mercurius anyway - the readiness gate 503s `/api/*`.
   let generatedTemplatesById = new Map<string, { typeName: string }>();
-  let generatedTypeNames = new Set<string>(['Item']);
+  let generatedTypeNames = new Set<string>(['UnknownItem']);
 
   const resolveTypename = (item: ScsItem): string => {
     const tmplDesc = generatedTemplatesById.get(item.template.toLowerCase());
     if (tmplDesc && generatedTypeNames.has(tmplDesc.typeName)) {
       return tmplDesc.typeName;
     }
-    return 'Item';
+    return 'UnknownItem';
   };
 
   // Field wrappers must never be null for an explicitly-queried field -
@@ -417,7 +417,7 @@ export async function registerGraphQLRoutes(
 
   const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
 
-  // Shared resolver for every generated `AnyItem` implementer. Base fields
+  // Shared resolver for every generated `Item` implementer. Base fields
   // are identical across types; template-specific fields delegate to the
   // generic `readItemFieldByHint` lookup via a `fieldResolverMap` that
   // translates each graphql field name back to its Sitecore source name.
@@ -554,8 +554,8 @@ export async function registerGraphQLRoutes(
     queryDepth,
     resolvers: {
       JSON: GraphQLJSON,
-      AnyItem: { resolveType: resolveTypename },
-      Item: sharedItemResolver,
+      Item: { resolveType: resolveTypename },
+      UnknownItem: sharedItemResolver,
       ItemField: {
         // Real Experience Edge exposes both singular and plural reference
         // accessors on an ItemField. `value` is the raw Sitecore field string
@@ -795,17 +795,17 @@ export async function registerGraphQLRoutes(
         return;
       }
 
-      // Update the __typename dispatch map so Item resolver returns the
-      // right concrete type for each item's template at runtime.
+      // Update the __typename dispatch map so the resolveType function returns
+      // the right concrete type for each item's template at runtime.
       generatedTemplatesById = generated.templatesById;
       generatedTypeNames = new Set(generated.concreteTypeNames);
 
       // Extend the schema with base interfaces + per-template concrete
-      // types + the `extend type Item` field union.
+      // types + the `extend type UnknownItem` field union.
       app.graphql.extendSchema(generated.sdl);
 
       // Build resolvers for every newly-declared type. Every concrete
-      // template type AND the existing `Item` fallback share the same
+      // template type AND the existing `UnknownItem` fallback share the same
       // shared resolver - the difference is just which __typename graphql-js
       // routes each item to. Template-specific field resolvers are added
       // to `sharedItemResolver` dynamically so all types pick them up.
@@ -815,10 +815,10 @@ export async function registerGraphQLRoutes(
       }
 
       const perTypeResolvers: Record<string, Record<string, unknown>> = {
-        Item: sharedItemResolver as unknown as Record<string, unknown>,
+        UnknownItem: sharedItemResolver as unknown as Record<string, unknown>,
       };
       for (const name of generated.concreteTypeNames) {
-        if (name === 'Item') continue;
+        if (name === 'UnknownItem') continue;
         perTypeResolvers[name] = sharedItemResolver as unknown as Record<string, unknown>;
       }
       app.graphql.defineResolvers(perTypeResolvers);
