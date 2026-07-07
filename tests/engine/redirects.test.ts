@@ -167,7 +167,7 @@ describe('resolveRedirects', () => {
     const types = result.map(r => r.redirectType);
     expect(types).toContain('REDIRECT_301');
     expect(types).toContain('REDIRECT_302');
-    expect(types).toContain('REDIRECT_SERVER_TRANSFER');
+    expect(types).toContain('SERVER_TRANSFER');
   });
 
   it('defaults redirectType to REDIRECT_301 when the field is absent', () => {

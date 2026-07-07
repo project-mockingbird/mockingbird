@@ -466,9 +466,9 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(body.errors).toBeUndefined();
     expect(body.data.site.siteInfo.errorHandling).toEqual({
       notFoundPage: null,
-      notFoundPagePath: '',
+      notFoundPagePath: null,
       serverErrorPage: null,
-      serverErrorPagePath: '',
+      serverErrorPagePath: null,
     });
   });
 

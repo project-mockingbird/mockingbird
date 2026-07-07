@@ -27,7 +27,7 @@ import {
   decodeCursor,
 } from '../../engine/search/index.js';
 import { parseGuidList, toCanonicalGuid, formatGuidEdge, normalizeGuid } from '../../engine/guid.js';
-import { FIELD_IDS, FINAL_RENDERINGS_FIELD_ID } from '../../engine/constants.js';
+import { FIELD_IDS, FINAL_RENDERINGS_FIELD_ID, RENDERINGS_FIELD_ID } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
 import { getTemplateSchema } from '../../engine/template-schema.js';
 import { parseAuthoredAttrs } from '../../engine/render-field/html-utils.js';
@@ -1494,9 +1494,9 @@ export async function registerGraphQLRoutes(
         // ErrorHandlingInfo - return empty defaults (site definition does not expose
         // 404/500 page settings; real Edge returns empty strings when unset).
         errorHandling: (_parent: SiteDefinition, _args: { language: string }) => ({
-          notFoundPagePath: '',
+          notFoundPagePath: null,
           notFoundPage: null,
-          serverErrorPagePath: '',
+          serverErrorPagePath: null,
           serverErrorPage: null,
         }),
         // routes: walk descendants of the site start item that have presentation.
@@ -1514,8 +1514,6 @@ export async function registerGraphQLRoutes(
             after?: string | null;
           },
         ) => {
-          // Well-known Sitecore shared renderings field id (__Renderings).
-          const RENDERINGS_FIELD_ID = 'f1a1fe9e-a60c-4ddb-a3a0-bb5b29fe732e';
           const routeBase = routeBaseForSite(parent);
           const routeBaseLower = routeBase.toLowerCase();
           const allRoutes: Array<{ route: ScsItem; routePath: string }> = [];
