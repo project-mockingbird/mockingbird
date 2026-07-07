@@ -276,7 +276,7 @@ export const BASE_SCHEMA = `
   interface ItemField {
     id(format: String = "N"): ID!
     name: String!
-    jsonValue: JSON
+    jsonValue: JSON!
     value: String
     definition: ItemTemplateField
     boolValue: Boolean
@@ -289,7 +289,7 @@ export const BASE_SCHEMA = `
   type TextField implements ItemField {
     id(format: String = "N"): ID!
     name: String!
-    jsonValue: JSON
+    jsonValue: JSON!
     value: String
     definition: ItemTemplateField
     boolValue: Boolean
@@ -458,27 +458,28 @@ export async function registerGraphQLRoutes(
     return 'UnknownItem';
   };
 
+  const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
+
   // Field wrappers must never be null for an explicitly-queried field -
   // real Experience Edge always returns the object and sets the inner
   // scalar to the type-appropriate "unset" default. Consuming apps chain
   // into `wrapper.jsonValue.value.src` and similar without guarding on the
   // wrapper itself, so returning null here crashes the component tree.
   //
-  // For an unset field: `value = ""`, `boolValue = false`, `jsonValue = null`.
+  // For an unset field: `value = ""`, `boolValue = false`, `jsonValue = { value: "" }`.
   // For a set field: the raw string is exposed via `value`; `boolValue`
   // maps Sitecore checkbox `"1"`/`"0"` to true/false (any other value is
   // false - consuming apps only read `boolValue` on actual checkbox
   // fields); `jsonValue` is routed through `buildJsonValue`, which emits
   // the Edge-shape parsed object for image / link XML and falls through
-  // to `{ value: raw }` for anything else.
+  // to `{ value: raw }` for anything else. `jsonValue` is always non-null
+  // (JSON!) matching the real Edge contract.
   const readHint = (item: ScsItem, hint: string, ctx: MercuriusContext) => {
     const v = readItemFieldByHint(item, hint, langOf(item));
     const raw = v?.value ?? '';
     // `lookupFieldType` walks the item's template (cached) so buildJsonValue
-    // can emit the empty-string image/link shape for unset image/link
-    // fields instead of `null`. Unknown types fall back to `null` so we
-    // don't synthesize `{ value: "" }` on text/integer fields consuming
-    // apps never query `jsonValue` on.
+    // can emit the typed empty shape for unset image/link fields, and
+    // `{ value: "" }` for unknown/generic types. Never returns null.
     const fieldType = lookupFieldType(item, hint, ctx.engine);
     // 0.4.0.31: `.value` on Rich Text fields is the rewritten (rendered)
     // output - dynamic-link tokens, media tokens, and xa-variable spans
@@ -571,8 +572,6 @@ export async function registerGraphQLRoutes(
     const lang = item.languages.find(l => l.language === language);
     return !!lang && lang.versions.length > 0;
   };
-
-  const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
 
   // Sitecore field-type string -> GraphQL concrete type name. Any type not
   // listed here (or any type whose concrete type isn't yet registered) falls

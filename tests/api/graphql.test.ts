@@ -2355,7 +2355,7 @@ describe('GraphQL site queries (Content SDK)', () => {
         expect(body.data.item.field).not.toBeNull();
         expect(body.data.item.field.value).toBe('');
         expect(body.data.item.field.boolValue).toBe(false);
-        expect(body.data.item.field.jsonValue).toBeNull();
+        expect(body.data.item.field.jsonValue).toEqual({ value: '' });
       } finally {
         await app.close();
       }
@@ -2453,7 +2453,7 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('image field jsonValue is null when the field is unset (empty mediaid)', async () => {
+    it('image field jsonValue is { value: "" } when the field is unset and type is unknown', async () => {
       const holder = makeItem({
         id: 'ho000000-0000-0000-0000-000000000002',
         path: '/sitecore/content/holder-image-unset',
@@ -2470,7 +2470,9 @@ describe('GraphQL site queries (Content SDK)', () => {
         const body = response.json();
         expect(body.errors).toBeUndefined();
         expect(body.data.item.field).not.toBeNull();
-        expect(body.data.item.field.jsonValue).toBeNull();
+        // Item has no template so lookupFieldType returns ''; generic fallback is { value: '' }.
+        // If the template declared DemoIcon as an image field, this would be { value: {} }.
+        expect(body.data.item.field.jsonValue).toEqual({ value: '' });
       } finally {
         await app.close();
       }
