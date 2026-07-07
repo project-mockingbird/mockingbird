@@ -166,3 +166,81 @@ describe('GraphQL Edge parity - Phase B: ItemLanguage object + version', () => {
     expect(lang.displayName.length).toBeGreaterThan(0);
   });
 });
+
+describe('GraphQL Edge parity - Phase B2: ItemTemplate ownFields/fields + ItemTemplateField', () => {
+  let app: FastifyInstance;
+  beforeAll(async () => { app = await createTestApp(); });
+  afterAll(async () => { await app.close(); });
+
+  it('item.template.fields returns the flattened fields with name/type/section', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            template {
+              name
+              fields {
+                name
+                type
+                section
+              }
+            }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const tmpl = body.data.item.template;
+    expect(tmpl.name).toBe('Page');
+    expect(Array.isArray(tmpl.fields)).toBe(true);
+    const titleF = tmpl.fields.find((f: { name: string }) => f.name === 'Title');
+    expect(titleF).toBeDefined();
+    expect(titleF.type).toBe('Single-Line Text');
+    expect(titleF.section).toBe('Content');
+  });
+
+  it('item.template.ownFields returns direct-template fields with all ItemTemplateField scalars', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            template {
+              ownFields {
+                name
+                title
+                type
+                source
+                shared
+                unversioned
+                sortOrder
+                section
+                sectionSortOrder
+              }
+            }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const { ownFields } = body.data.item.template;
+    expect(Array.isArray(ownFields)).toBe(true);
+    const titleF = ownFields.find((f: { name: string }) => f.name === 'Title');
+    expect(titleF).toBeDefined();
+    expect(titleF.type).toBe('Single-Line Text');
+    expect(titleF.section).toBe('Content');
+    expect(typeof titleF.shared).toBe('boolean');
+    expect(typeof titleF.unversioned).toBe('boolean');
+    expect(typeof titleF.sortOrder).toBe('number');
+    expect(typeof titleF.sectionSortOrder).toBe('number');
+  });
+});

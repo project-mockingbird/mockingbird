@@ -28,6 +28,7 @@ import {
 import { parseGuidList, toCanonicalGuid } from '../../engine/guid.js';
 import { FIELD_IDS } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
+import { getTemplateSchema } from '../../engine/template-schema.js';
 import { referenceUrl } from '../../engine/layout/url-utils.js';
 import { rewriteRichText, expandXaVariableSpans, containsXaVariableSpan } from '../../engine/render-field/rich-text.js';
 import {
@@ -244,6 +245,20 @@ const BASE_SCHEMA = `
     id: ID!
     name: String!
     baseTemplates: [ItemTemplate!]
+    ownFields: [ItemTemplateField!]
+    fields: [ItemTemplateField!]
+  }
+
+  type ItemTemplateField {
+    name: String!
+    title: String!
+    type: String!
+    source: String!
+    shared: Boolean!
+    unversioned: Boolean!
+    sortOrder: Int!
+    section: String!
+    sectionSortOrder: Int!
   }
 
   type ItemUrl {
@@ -678,6 +693,65 @@ export async function registerGraphQLRoutes(
               id: node.item.id,
               name: node.item.path.split('/').pop() ?? '',
             });
+          }
+          return out;
+        },
+        // ownFields: fields defined directly on this template (not inherited).
+        // Filtered by section.sourceTemplateId matching the template's own id.
+        // Uses getTemplateSchema so field properties are read from the same
+        // source as other template-schema consumers (type, source, shared, etc.).
+        ownFields: (parent: { id: string }) => {
+          const canonical = toCanonicalGuid(parent.id) ?? parent.id;
+          const normalizedId = canonical.toLowerCase();
+          const schema = getTemplateSchema(canonical, engine);
+          const out: Array<{
+            name: string; title: string; type: string; source: string;
+            shared: boolean; unversioned: boolean; sortOrder: number;
+            section: string; sectionSortOrder: number;
+          }> = [];
+          for (const section of schema.sections) {
+            if (section.sourceTemplateId.toLowerCase() !== normalizedId) continue;
+            for (const f of section.fields) {
+              out.push({
+                name: f.name,
+                title: f.displayName,
+                type: f.type,
+                source: f.source,
+                shared: f.shared,
+                unversioned: f.unversioned,
+                sortOrder: f.sortOrder,
+                section: section.name,
+                sectionSortOrder: section.sortOrder,
+              });
+            }
+          }
+          return out;
+        },
+        // fields: the full flattened field set (own + inherited via base templates).
+        // Mirrors real Edge's ItemTemplate.fields which includes all fields
+        // visible on the template regardless of where they were defined.
+        fields: (parent: { id: string }) => {
+          const canonical = toCanonicalGuid(parent.id) ?? parent.id;
+          const schema = getTemplateSchema(canonical, engine);
+          const out: Array<{
+            name: string; title: string; type: string; source: string;
+            shared: boolean; unversioned: boolean; sortOrder: number;
+            section: string; sectionSortOrder: number;
+          }> = [];
+          for (const section of schema.sections) {
+            for (const f of section.fields) {
+              out.push({
+                name: f.name,
+                title: f.displayName,
+                type: f.type,
+                source: f.source,
+                shared: f.shared,
+                unversioned: f.unversioned,
+                sortOrder: f.sortOrder,
+                section: section.name,
+                sectionSortOrder: section.sortOrder,
+              });
+            }
           }
           return out;
         },
