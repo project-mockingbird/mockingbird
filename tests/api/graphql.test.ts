@@ -1091,12 +1091,12 @@ describe('GraphQL site queries (Content SDK)', () => {
                               demoNodeText { value }, demoNodeLink { jsonValue },
                               demoNodeSubtitleText { value }, demoNodeDescription { value },
                               demoIcon { jsonValue }, demoFlagOne { boolValue }, demoFlagTwo { boolValue },
-                              demoNodeTags { targetItems { ... on DemoLinkTag { demoLinkTagText { value }, demoLinkTagCssClass { value } } } },
+                              demoNodeTags { targetItems { ... on DemoLinkTag { demoLinkTagText { value }, demoLinkTagCSSClass { value } } } },
                               links: children(includeTemplateIDs:["{C792B58A-DB19-408F-9D55-09A28C89C00A}"]){
                                 results { ... on DemoLink {
                                   id, demoNodeText { value }, demoNodeLink { jsonValue }, demoNodeDescription { value },
                                   demoFlagOne { boolValue }, demoFlagTwo { boolValue },
-                                  demoNodeTags { targetItems { ... on DemoLinkTag { demoLinkTagText { value }, demoLinkTagCssClass { value } } } }
+                                  demoNodeTags { targetItems { ... on DemoLinkTag { demoLinkTagText { value }, demoLinkTagCSSClass { value } } } }
                                 } }
                               }
                             },

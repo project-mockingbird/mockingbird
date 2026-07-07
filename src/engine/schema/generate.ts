@@ -3,28 +3,17 @@ import type { Engine } from '../index.js';
 import type { ScsItem, ItemNode } from '../types.js';
 import { TEMPLATE_TEMPLATE_ID, FIELD_IDS } from '../constants.js';
 import { getTemplateSchema, type TemplateFieldSchema } from '../template-schema.js';
+import { graphqlTypeize, graphqlFieldize } from './name-normalizer.js';
 
 /**
  * Convert a Sitecore template **name** into a GraphQL type identifier.
- * Splits on any run of non-alphanumeric characters (spaces, dashes,
- * punctuation) and PascalCases each word. Preserves a leading run of
- * underscores so Sitecore base templates (`_BaseAlpha`, `__StandardValues`)
- * remain distinguishable. Empty input returns the generic fallback `Item`.
+ * Uses the Sitecore-faithful NameNormalizer (splits on spaces only,
+ * preserves underscores). Empty or whitespace-only input returns `'Item'`.
  */
 export function templateNameToTypeName(name: string): string {
   if (!name || !name.trim()) return 'Item';
-  // Preserve the leading underscore run (Sitecore base-template convention).
-  const leadingUnderscores = /^(_+)/.exec(name)?.[1] ?? '';
-  const body = name.slice(leadingUnderscores.length);
-  const words = splitIdentifierWords(body);
-  if (words.length === 0) return leadingUnderscores || 'Item';
-  const pascal = words
-    .map(w => {
-      const lower = w.toLowerCase();
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join('');
-  return `${leadingUnderscores}${pascal}`;
+  const result = graphqlTypeize(name);
+  return result || 'Item';
 }
 
 /**
@@ -34,54 +23,16 @@ export function templateNameToTypeName(name: string): string {
 const GRAPHQL_RESERVED_FIELDS = new Set(['__typename', '__schema', '__type']);
 
 /**
- * Split a mixed-format identifier into word tokens. Handles both
- * space/dash/underscore-separated ("Demo Node Text") AND camelCase /
- * PascalCase ("DemoNodeText") inputs - Sitecore project templates
- * mostly use the latter, OOTB templates the former.
- *
- * Splits:
- *  - on runs of non-alphanumerics ("Demo Node" → Demo, Node)
- *  - on lower→upper transitions ("demoNode" → demo, Node)
- *  - on consecutive upper followed by lower ("CSSClass" → CSS, Class)
- */
-function splitIdentifierWords(name: string): string[] {
-  const cleaned = name.replace(/[^A-Za-z0-9]+/g, ' ').trim();
-  if (!cleaned) return [];
-  const tokens: string[] = [];
-  for (const chunk of cleaned.split(/\s+/)) {
-    if (!chunk) continue;
-    // Split on aA and AAa boundaries.
-    const subTokens = chunk
-      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-      .split(/\s+/);
-    for (const t of subTokens) if (t) tokens.push(t);
-  }
-  return tokens;
-}
-
-/**
  * Convert a Sitecore field **name** into a GraphQL field identifier.
- * camelCases whatever word tokens `splitIdentifierWords` produces.
- * Prefixes the result with `_` when it would otherwise start with a
- * digit, and when it collides with a GraphQL reserved name.
+ * Uses the Sitecore-faithful NameNormalizer (splits on spaces only,
+ * preserves underscores). Prefixes with `_` when the result starts with
+ * a digit or collides with a GraphQL reserved name.
  */
 export function fieldNameToGraphQLFieldName(name: string): string {
   if (!name) return '';
-  const words = splitIdentifierWords(name);
-  if (words.length === 0) return '';
-  const camel = words
-    .map((w, i) => {
-      // Normalize each word to lower-then-uppercase-first so all-caps
-      // chunks like "CSS" collapse to "Css" for readability.
-      const lower = w.toLowerCase();
-      if (i === 0) return lower;
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join('');
-  let result = camel;
-  if (/^[0-9]/.test(result)) result = `_${result}`;
-  if (GRAPHQL_RESERVED_FIELDS.has(result)) result = `_${result}`;
+  const result = graphqlFieldize(name);
+  if (!result) return '';
+  if (GRAPHQL_RESERVED_FIELDS.has(result)) return `_${result}`;
   return result;
 }
 

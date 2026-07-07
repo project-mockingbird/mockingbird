@@ -95,14 +95,17 @@ describe('templateNameToTypeName', () => {
   it('preserves a leading underscore', () => {
     expect(templateNameToTypeName('_Base Alpha')).toBe('_BaseAlpha');
   });
-  it('preserves a leading double underscore', () => {
-    expect(templateNameToTypeName('__Standard Values')).toBe('__StandardValues');
+  it('strips a leading double underscore (Sitecore NameNormalizer behavior)', () => {
+    expect(templateNameToTypeName('__Standard Values')).toBe('StandardValues');
   });
   it('handles non-alpha separators', () => {
     expect(templateNameToTypeName('Demo Multi Word Panel')).toBe('DemoMultiWordPanel');
   });
-  it('handles dashes and underscores as internal separators', () => {
-    expect(templateNameToTypeName('Demo-Link_List')).toBe('DemoLinkList');
+  it('drops dashes but preserves underscores (spaces-only splitting)', () => {
+    expect(templateNameToTypeName('Demo-Link_List')).toBe('DemoLink_List');
+  });
+  it('preserves underscore-prefixed names (T_ pattern)', () => {
+    expect(templateNameToTypeName('T_Sample')).toBe('T_Sample');
   });
   it('returns "Item" for empty input', () => {
     expect(templateNameToTypeName('')).toBe('Item');
@@ -126,14 +129,17 @@ describe('fieldNameToGraphQLFieldName', () => {
   it('splits camelCase input into tokens', () => {
     expect(fieldNameToGraphQLFieldName('demoNodeText')).toBe('demoNodeText');
   });
-  it('collapses acronyms (all-caps segment becomes a single camelCase word)', () => {
-    expect(fieldNameToGraphQLFieldName('Demo Tag CSS Class')).toBe('demoTagCssClass');
+  it('preserves acronym casing within a word (spaces-only splitting)', () => {
+    expect(fieldNameToGraphQLFieldName('Demo Tag CSS Class')).toBe('demoTagCSSClass');
   });
   it('handles single-word names', () => {
     expect(fieldNameToGraphQLFieldName('Title')).toBe('title');
   });
-  it('handles non-alpha separators', () => {
-    expect(fieldNameToGraphQLFieldName('Is-Field_Required')).toBe('isFieldRequired');
+  it('drops dashes but preserves underscores in field names', () => {
+    expect(fieldNameToGraphQLFieldName('Is-Field_Required')).toBe('isField_Required');
+  });
+  it('preserves f_ prefix pattern (Sitecore convention)', () => {
+    expect(fieldNameToGraphQLFieldName('f_publishDate')).toBe('f_publishDate');
   });
   it('prefixes with underscore if result starts with a digit', () => {
     expect(fieldNameToGraphQLFieldName('2fa Enabled')).toBe('_2faEnabled');
