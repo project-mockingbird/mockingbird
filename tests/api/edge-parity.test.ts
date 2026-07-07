@@ -334,7 +334,7 @@ describe('GraphQL Edge parity - Phase B3: ItemUrl hostName/scheme + item.languag
     const body = res.json();
     expect(body.errors).toBeUndefined();
     const { url } = body.data.item;
-    expect(typeof url.hostName).toBe('string');
+    expect(url.hostName).toBe('*');
     expect(url.scheme).toBe('https');
   });
 
