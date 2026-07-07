@@ -23,9 +23,11 @@ import {
 import {
   resolveSearch,
   type SearchWhere,
+  encodeCursor,
+  decodeCursor,
 } from '../../engine/search/index.js';
 import { parseGuidList, toCanonicalGuid, formatGuidEdge, normalizeGuid } from '../../engine/guid.js';
-import { FIELD_IDS } from '../../engine/constants.js';
+import { FIELD_IDS, FINAL_RENDERINGS_FIELD_ID } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
 import { getTemplateSchema } from '../../engine/template-schema.js';
 import { parseAuthoredAttrs } from '../../engine/render-field/html-utils.js';
@@ -596,40 +598,54 @@ export const BASE_SCHEMA = `
     hostname: String
     language: String
     startItem: String
-    redirects: [Redirect!]!
-    errorHandling(language: String!): ErrorHandling!
-    dictionary(language: String!, first: Int, after: String): DictionaryConnection!
+    redirects: [RedirectInfo!]!
+    errorHandling(language: String!): ErrorHandlingInfo
+    routes(language: String!, includedPaths: [String!], excludedPaths: [String!], after: String, first: Int): RoutesResult
+    dictionary(language: String!, first: Int, after: String): DictionaryResult
+    attributes: [KeyValuePair!]
   }
 
-  type Redirect {
+  type RedirectInfo {
     pattern: String!
     target: String!
-    redirectType: String!
+    redirectType: RedirectType!
     isQueryStringPreserved: Boolean!
     isLanguagePreserved: Boolean!
     locale: String!
   }
 
-  type ErrorHandling {
+  type ErrorHandlingInfo {
+    notFoundPagePath: String
     notFoundPage: Item
-    notFoundPagePath: String!
+    serverErrorPagePath: String
     serverErrorPage: Item
-    serverErrorPagePath: String!
   }
 
-  type DictionaryConnection {
+  type Route {
+    route: Item!
+    routePath: String!
+  }
+
+  type RoutesResult {
+    results: [Route!]!
+    total: Int!
     pageInfo: PageInfo!
-    results: [DictionaryItem!]!
+  }
+
+  type DictionaryResult {
+    results: [KeyValuePair!]!
+    total: Int!
+    pageInfo: PageInfo!
+  }
+
+  type KeyValuePair {
+    key: String!
+    value: String!
   }
 
   type PageInfo {
     endCursor: String
     hasNext: Boolean!
-  }
-
-  type DictionaryItem {
-    key: String!
-    value: String!
   }
 `;
 
@@ -1475,21 +1491,108 @@ export async function registerGraphQLRoutes(
           console.log(`[graphql] redirects site=${parent.name} -> ${list.length} entries`);
           return list;
         },
-        // Stubs matching real Experience Edge output for sites with no error
-        // pages configured - Content SDK expects these shapes exactly.
-        errorHandling: () => ({
-          notFoundPage: null,
+        // ErrorHandlingInfo - return empty defaults (site definition does not expose
+        // 404/500 page settings; real Edge returns empty strings when unset).
+        errorHandling: (_parent: SiteDefinition, _args: { language: string }) => ({
           notFoundPagePath: '',
-          serverErrorPage: null,
+          notFoundPage: null,
           serverErrorPagePath: '',
+          serverErrorPage: null,
         }),
-        // Stub - mockingbird has no dictionary support. Edge returns an empty
-        // connection for sites without dictionary entries, and Content SDK
-        // paginates until `hasNext === false` so matching the shape is critical.
-        dictionary: () => ({
-          pageInfo: { endCursor: null, hasNext: false },
+        // routes: walk descendants of the site start item that have presentation.
+        // An item "has layout" when its shared __Renderings field is non-empty OR
+        // any version carries a non-empty __Final Renderings field. This matches
+        // the layout engine's primary has-layout signal without re-running the
+        // full page-design pipeline.
+        routes: (
+          parent: SiteDefinition,
+          args: {
+            language: string;
+            includedPaths?: string[] | null;
+            excludedPaths?: string[] | null;
+            first?: number | null;
+            after?: string | null;
+          },
+        ) => {
+          // Well-known Sitecore shared renderings field id (__Renderings).
+          const RENDERINGS_FIELD_ID = 'f1a1fe9e-a60c-4ddb-a3a0-bb5b29fe732e';
+          const routeBase = routeBaseForSite(parent);
+          const routeBaseLower = routeBase.toLowerCase();
+          const allRoutes: Array<{ route: ScsItem; routePath: string }> = [];
+
+          for (const node of engine.getAllItems()) {
+            const pathLower = node.item.path.toLowerCase();
+            // Must be under or at the route base (include the start item itself).
+            if (pathLower !== routeBaseLower && !pathLower.startsWith(routeBaseLower + '/')) continue;
+
+            // Has layout: check shared __Renderings field OR any versioned __Final Renderings.
+            const hasSharedRenderings = node.item.sharedFields.some(
+              f => (f.id === RENDERINGS_FIELD_ID || f.hint === '__Renderings') && f.value,
+            );
+            const hasFinalRenderings = node.item.languages.some(l =>
+              l.versions.some(v =>
+                v.fields.some(
+                  f => (f.id === FINAL_RENDERINGS_FIELD_ID || f.hint === '__Final Renderings') && f.value,
+                ),
+              ),
+            );
+            if (!hasSharedRenderings && !hasFinalRenderings) continue;
+
+            // Route path: strip the route base prefix; default to '/' for the root item.
+            const routePath = node.item.path.slice(routeBase.length) || '/';
+
+            // Apply includedPaths filter (route path must start with one of them).
+            if (args.includedPaths && args.includedPaths.length > 0) {
+              const rp = routePath.toLowerCase();
+              const included = args.includedPaths.some(p => rp.startsWith(p.toLowerCase()));
+              if (!included) continue;
+            }
+            // Apply excludedPaths filter (skip route path starting with any excluded prefix).
+            if (args.excludedPaths && args.excludedPaths.length > 0) {
+              const rp = routePath.toLowerCase();
+              const excluded = args.excludedPaths.some(p => rp.startsWith(p.toLowerCase()));
+              if (excluded) continue;
+            }
+
+            allRoutes.push({ route: withLanguage(node.item, args.language), routePath });
+          }
+
+          const total = allRoutes.length;
+          const offset = decodeCursor(args.after ?? null);
+          const first = args.first ?? 100;
+          const page = allRoutes.slice(offset, offset + first);
+          const end = offset + page.length;
+          const hasNext = end < total;
+
+          return {
+            results: page,
+            total,
+            pageInfo: { hasNext, endCursor: hasNext ? encodeCursor(end) : null },
+          };
+        },
+        // dictionary: best-effort resolver. SXA dictionary items live under
+        // <siteRoot>/Dictionary. Mockingbird has no dedicated dictionary template
+        // registry; return a valid-empty DictionaryResult when no dictionary data
+        // is present. Shape must match exactly: results, total, pageInfo.
+        dictionary: (
+          _parent: SiteDefinition,
+          _args: { language: string; first?: number | null; after?: string | null },
+        ) => ({
           results: [],
+          total: 0,
+          pageInfo: { endCursor: null, hasNext: false },
         }),
+        // attributes: expose SiteDefinition properties as key/value pairs.
+        // Real Edge surfaces site-grouping settings (name, hostname, language, etc.)
+        // as attributes; return the known SiteDefinition scalars.
+        attributes: (parent: SiteDefinition) => [
+          { key: 'name', value: parent.name },
+          { key: 'hostname', value: parent.hostname },
+          { key: 'language', value: parent.language },
+          { key: 'rootPath', value: parent.rootPath },
+          { key: 'startItem', value: parent.startItem },
+          { key: 'linkable', value: String(parent.linkable) },
+        ],
       },
     },
     context: (request) => buildResolverContext(request),
