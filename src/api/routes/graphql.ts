@@ -22,7 +22,6 @@ import {
 } from '../../engine/schema/generate.js';
 import {
   resolveSearch,
-  searchItemId,
   type SearchWhere,
 } from '../../engine/search/index.js';
 import { parseGuidList, toCanonicalGuid, formatGuidEdge, normalizeGuid } from '../../engine/guid.js';
@@ -66,6 +65,34 @@ function withLanguage(item: ScsItem, language: string): LangTaggedItem {
 function langOf(item: ScsItem): string {
   const tagged = item as LangTaggedItem;
   return tagged[LANG_SYM] ?? 'en';
+}
+
+/**
+ * GraphQL input shape for the `ItemSearchPredicate` input type.
+ * Mirrors the SDL declaration (recursive AND/OR, plus leaf clause fields).
+ */
+interface ItemSearchPredicate {
+  name?: string | null;
+  value?: string | null;
+  operator?: string | null;
+  AND?: ItemSearchPredicate[] | null;
+  OR?: ItemSearchPredicate[] | null;
+}
+
+/**
+ * Extract the language from a top-level `_language` clause in the
+ * `ItemSearchPredicate.AND` array. Falls back to `'en'` when absent.
+ * The language tag is applied to each result item so field reads use the
+ * correct versioned value.
+ */
+function searchLanguageOf(where: ItemSearchPredicate | null | undefined): string {
+  const clauses = where?.AND ?? [];
+  for (const clause of clauses) {
+    if (clause.name === '_language' && clause.value) {
+      return clause.value.trim();
+    }
+  }
+  return 'en';
 }
 
 /**
@@ -210,7 +237,7 @@ export const BASE_SCHEMA = `
     layout(site: String!, routePath: String!, language: String!): LayoutResponse
     site: SiteQuery!
     item(path: String!, language: String!): Item
-    search(where: SearchWhere, first: Int = 50, after: String): SearchResults!
+    search(where: ItemSearchPredicate!, first: Int = 10, after: String, orderBy: ItemSearchOrderByInput): ItemSearchResults
   }
 
   type ItemLanguage {
@@ -231,10 +258,10 @@ export const BASE_SCHEMA = `
     url: ItemUrl
     field(name: String!): ItemField
     fields(ownFields: Boolean = false): [ItemField!]!
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
+    children(includeTemplateIDs: [String!], hasLayout: Boolean, first: Int, after: String): ItemSearchResults!
     parent: Item
     ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!
+    hasChildren(includeTemplateIDs: [String!], hasLayout: Boolean): Boolean!
     rendered: JSON!
     languages: [Item!]!
   }
@@ -250,10 +277,10 @@ export const BASE_SCHEMA = `
     url: ItemUrl
     field(name: String!): ItemField
     fields(ownFields: Boolean = false): [ItemField!]!
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
+    children(includeTemplateIDs: [String!], hasLayout: Boolean, first: Int, after: String): ItemSearchResults!
     parent: Item
     ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!
+    hasChildren(includeTemplateIDs: [String!], hasLayout: Boolean): Boolean!
     rendered: JSON!
     languages: [Item!]!
   }
@@ -496,20 +523,6 @@ export const BASE_SCHEMA = `
     targetItems: [Item!]
   }
 
-  type AnyItemChildrenConnection {
-    results: [Item!]!
-  }
-
-  input SearchWhere {
-    AND: [SearchClause!]
-  }
-
-  input SearchClause {
-    name: String!
-    value: String!
-    operator: SearchOperator
-  }
-
   enum SearchOperator {
     EQ
     CONTAINS
@@ -521,25 +534,23 @@ export const BASE_SCHEMA = `
     GTE
   }
 
-  type SearchResults {
-    pageInfo: PageInfo!
-    results: [SearchItem!]!
+  input ItemSearchOrderByInput {
+    name: String!
+    direction: OrderByDirection
   }
 
-  type SearchItem {
-    id: ID!
-    url: SearchUrl
-    field(name: String!): SearchField
-  }
-
-  type SearchUrl {
-    url: String!
-    path: String!
-    siteName: String!
-  }
-
-  type SearchField {
+  input ItemSearchPredicate {
+    name: String
     value: String
+    operator: SearchOperator
+    AND: [ItemSearchPredicate!]
+    OR: [ItemSearchPredicate!]
+  }
+
+  type ItemSearchResults {
+    results: [Item!]!
+    total: Int!
+    pageInfo: PageInfo!
   }
 
   type LayoutResponse {
@@ -1020,25 +1031,29 @@ export async function registerGraphQLRoutes(
     },
     children: (item: ScsItem, args: unknown) => {
       const node = engine.getItemById(item.id);
-      if (!node) return { results: [] };
+      if (!node) return { results: [], total: 0, pageInfo: { hasNext: false, endCursor: null } };
       const { includeTemplateIDs, first } = (args ?? {}) as {
         includeTemplateIDs?: string[] | null;
+        hasLayout?: boolean | null;
         first?: number | null;
         after?: string | null;
       };
       // Each child inherits the parent's requested language so the
       // child's own field reads stay consistent across a query tree.
       const lang = langOf(item);
-      let results = resolveItemChildren(engine, node, includeTemplateIDs).map(n => withLanguage(n.item, lang));
+      const filtered = resolveItemChildren(engine, node, includeTemplateIDs).map(n => withLanguage(n.item, lang));
+      // total is the count of filtered children BEFORE the first-slice.
+      const total = filtered.length;
       // `first` caps the result count after the template filter - matches the
       // semantics a head app expects from Experience Edge. `after` is accepted
       // for signature compatibility but unused: typical queries only issue
       // `first:`, and mockingbird doesn't surface a pagination cursor on this
       // connection shape.
+      let results = filtered;
       if (typeof first === 'number' && first >= 0) {
         results = results.slice(0, first);
       }
-      return { results };
+      return { results, total, pageInfo: { hasNext: false, endCursor: null } };
     },
     // Sitecore EdgeSchema.ResolveParent: returns null when the parent has no
     // versions in the requested language (item exists but was never authored).
@@ -1279,10 +1294,15 @@ export async function registerGraphQLRoutes(
           console.log(`[graphql] item path=${args.path} lang=${args.language} → ${result ? result.id : 'null'}`);
           return result ? withLanguage(result, args.language) : null;
         },
-        search: (_root: unknown, args: { where?: SearchWhere; first?: number; after?: string }) => {
-          const page = resolveSearch(engine, args.where, { first: args.first, after: args.after });
-          console.log(`[graphql] search clauses=${args.where?.AND?.length ?? 0} → ${page.results.length} results, hasNext=${page.pageInfo.hasNext}`);
-          return page;
+        search: (_root: unknown, args: { where?: ItemSearchPredicate; first?: number; after?: string; orderBy?: unknown }) => {
+          const page = resolveSearch(engine, args.where as unknown as SearchWhere, { first: args.first, after: args.after });
+          const lang = searchLanguageOf(args.where);
+          console.log(`[graphql] search clauses=${args.where?.AND?.length ?? 0} → ${page.results.length} results (total=${page.total}), hasNext=${page.pageInfo.hasNext}`);
+          return {
+            total: page.total,
+            pageInfo: page.pageInfo,
+            results: page.results.map(r => withLanguage(r.item, lang)),
+          };
         },
         layout: async (
           _root: unknown,
@@ -1372,14 +1392,6 @@ export async function registerGraphQLRoutes(
               },
             },
           };
-        },
-      },
-      SearchItem: {
-        id: (parent: { item: ScsItem }) => searchItemId(parent.item),
-        url: (parent: { item: ScsItem }, _args: unknown, ctx: MercuriusContext) => buildItemUrl(parent.item, ctx),
-        field: (parent: { item: ScsItem }, args: { name: string }) => {
-          const value = readItemFieldByHint(parent.item, args.name);
-          return value ? { value: value.value } : null;
         },
       },
       SiteQuery: {

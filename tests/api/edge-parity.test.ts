@@ -559,3 +559,110 @@ describe('GraphQL Edge parity - Phase C3: item.fields plural collection', () => 
     expect(ownOnly.find(f => f.name === 'Heading')).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase D1: search returns ItemSearchResults of full items with total;
+//           children migrated to ItemSearchResults
+// ---------------------------------------------------------------------------
+
+describe('GraphQL Edge parity - Phase D1: ItemSearchResults + total', () => {
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    const server = Fastify({ logger: false });
+    // Add two children under homePage so the children.total test has items.
+    const child1 = makeItem({
+      id: 'dddd1111-dddd-dddd-dddd-dddddddddddd',
+      parent: 'aaaa1111-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      path: HOME + '/Child1',
+      template: pageTemplateId,
+      languages: [{
+        language: 'en',
+        fields: [],
+        versions: [{ version: 1, fields: [{ id: 'bbbb3333-bbbb-bbbb-bbbb-bbbbbbbbbbbb', hint: 'Title', value: 'Child One' }] }],
+      }],
+    });
+    const child2 = makeItem({
+      id: 'dddd2222-dddd-dddd-dddd-dddddddddddd',
+      parent: 'aaaa1111-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      path: HOME + '/Child2',
+      template: pageTemplateId,
+      languages: [{
+        language: 'en',
+        fields: [],
+        versions: [{ version: 1, fields: [{ id: 'bbbb3333-bbbb-bbbb-bbbb-bbbbbbbbbbbb', hint: 'Title', value: 'Child Two' }] }],
+      }],
+    });
+    const engine = buildEngine([pageTemplate, pageSection, titleField, homePage, child1, child2]);
+    const { registerSiteContextHook } = await import('../../src/api/hooks/site-context.js');
+    registerSiteContextHook(server, engine, HOME);
+    await registerGraphQLRoutes(server, engine, { mediaBaseUrl: '' });
+    app = server;
+  });
+
+  afterAll(async () => { await app.close(); });
+
+  it('search returns ItemSearchResults with total and results as full items (not SearchItem stubs)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query {
+          search(where: { AND: [
+            { name: "_templates", value: "${pageTemplateId}", operator: EQ }
+            { name: "_language", value: "en" }
+          ] }, first: 10) {
+            total
+            results {
+              name
+              field(name: "Title") { value }
+            }
+            pageInfo { hasNext endCursor }
+          }
+        }`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const { total, results, pageInfo } = body.data.search;
+    // total is a number >= 1 (homePage + 2 children match the template)
+    expect(typeof total).toBe('number');
+    expect(total).toBeGreaterThanOrEqual(1);
+    // results array length matches total when no pagination
+    expect(Array.isArray(results)).toBe(true);
+    expect(results.length).toBe(total);
+    // results are full items with name and field access (not SearchItem stub)
+    expect(typeof results[0].name).toBe('string');
+    expect(results[0].field).not.toBeNull();
+    expect(typeof results[0].field.value).toBe('string');
+    // pageInfo still present
+    expect(typeof pageInfo.hasNext).toBe('boolean');
+  });
+
+  it('item.children returns ItemSearchResults with total', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            children {
+              total
+              results { name }
+            }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const { total, results } = body.data.item.children;
+    expect(total).toBe(2);
+    expect(results).toHaveLength(2);
+    const names = (results as Array<{ name: string }>).map(r => r.name).sort();
+    expect(names).toEqual(['Child1', 'Child2']);
+  });
+});

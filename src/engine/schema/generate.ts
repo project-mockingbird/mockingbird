@@ -181,10 +181,10 @@ const ANY_ITEM_FIELDS = `    id: ID!
     url: ItemUrl
     field(name: String!): ItemField
     fields(ownFields: Boolean = false): [ItemField!]!
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
+    children(includeTemplateIDs: [String!], hasLayout: Boolean, first: Int, after: String): ItemSearchResults!
     parent: Item
     ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!
+    hasChildren(includeTemplateIDs: [String!], hasLayout: Boolean): Boolean!
     rendered: JSON!
     languages: [Item!]!`;
 
@@ -193,7 +193,7 @@ const ANY_ITEM_FIELDS = `    id: ID!
  * registry. Emits (in order):
  *
  *   1. The `Item` interface + shared helper types (`ItemTemplate`,
- *      `ItemUrl`, `ItemField`, `AnyItemChildrenConnection`).
+ *      `ItemUrl`, `ItemField`, `ItemSearchResults`).
  *   2. A generic `type UnknownItem implements Item` fallback for any runtime
  *      item whose template isn't in the generated set.
  *   3. One `interface <BaseName>` per template whose name starts with `_`,

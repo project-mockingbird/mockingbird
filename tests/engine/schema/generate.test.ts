@@ -249,7 +249,7 @@ describe('generateSchemaFromRegistry', () => {
 
   it('returns an empty SDL when the tree has no templates (BASE_SCHEMA handles the interface)', () => {
     // The interface/helper-type declarations (Item interface, ItemTemplate,
-    // ItemUrl, ItemField, AnyItemChildrenConnection, the UnknownItem fallback)
+    // ItemUrl, ItemField, ItemSearchResults, the UnknownItem fallback)
     // live in BASE_SCHEMA now - the generator is purely additive via
     // mercurius's extendSchema, so an empty tree produces an empty
     // extension document.

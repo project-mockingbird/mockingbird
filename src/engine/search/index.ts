@@ -24,6 +24,7 @@ export interface SearchResultItem {
 
 export interface SearchResultPage {
   results: SearchResultItem[];
+  total: number;
   pageInfo: {
     hasNext: boolean;
     endCursor: string | null;
@@ -159,6 +160,7 @@ export function resolveSearch(
 
   return {
     results: page.map(n => ({ item: n.item })),
+    total: matched.length,
     pageInfo: {
       hasNext,
       endCursor: hasNext ? encodeCursor(end) : null,

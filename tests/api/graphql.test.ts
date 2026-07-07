@@ -510,7 +510,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     expect(body.data.item.id).toBe('home1111-home-home-home-homehomehome');
   });
 
-  it('SearchItem.id emits canonical lowercase-dashed GUIDs', async () => {
+  it('search results (full Item) return canonical lowercase-dashed id GUIDs', async () => {
     const response = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
@@ -557,7 +557,7 @@ describe('GraphQL site queries (Content SDK)', () => {
     });
   });
 
-  it('SearchItem.url exposes url + path (site-relative) + siteName', async () => {
+  it('search results (full Item) expose url + path (site-relative) + siteName', async () => {
     const response = await siteApp.inject({
       method: 'POST',
       url: '/api/graphql',
