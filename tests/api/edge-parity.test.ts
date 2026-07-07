@@ -308,6 +308,97 @@ const derivedContentItem = makeItem({
   languages: [],
 });
 
+// ---------------------------------------------------------------------------
+// Phase B3: ItemUrl hostName/scheme, item.languages/rendered/ancestors(hasLayout)
+// ---------------------------------------------------------------------------
+
+describe('GraphQL Edge parity - Phase B3: ItemUrl hostName/scheme + item.languages/rendered/ancestors(hasLayout)', () => {
+  let app: FastifyInstance;
+  beforeAll(async () => { app = await createTestApp(); });
+  afterAll(async () => { await app.close(); });
+
+  it('url.hostName is a string and url.scheme defaults to https', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            url { path hostName scheme }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const { url } = body.data.item;
+    expect(typeof url.hostName).toBe('string');
+    expect(url.scheme).toBe('https');
+  });
+
+  it('item.languages returns one entry per language the item has versions in', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            languages { language { name } }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    const { languages } = body.data.item;
+    expect(Array.isArray(languages)).toBe(true);
+    const names = (languages as Array<{ language: { name: string } }>).map(l => l.language.name);
+    expect(names).toContain('en');
+    expect(names).toContain('de');
+  });
+
+  it('item.rendered returns an object', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") { rendered }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    expect(typeof body.data.item.rendered).toBe('object');
+    expect(body.data.item.rendered).not.toBeNull();
+  });
+
+  it('ancestors(hasLayout) accepts the hasLayout arg without error and returns an array', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `query($p: String!) {
+          item(path: $p, language: "en") {
+            ancestors(hasLayout: true) { name }
+          }
+        }`,
+        variables: { p: HOME },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toBeUndefined();
+    expect(Array.isArray(body.data.item.ancestors)).toBe(true);
+  });
+});
+
 describe('GraphQL Edge parity - Phase B2: ownFields field-level filter regression', () => {
   let app: FastifyInstance;
   beforeAll(async () => {

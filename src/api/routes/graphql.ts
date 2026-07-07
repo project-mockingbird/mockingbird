@@ -221,8 +221,10 @@ export const BASE_SCHEMA = `
     field(name: String!): ItemField
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
     parent: Item
-    ancestors(includeTemplateIDs: [String!]): [Item!]!
+    ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
     hasChildren(includeTemplateIDs: [String!]): Boolean!
+    rendered: JSON!
+    languages: [Item!]!
   }
 
   type UnknownItem implements Item {
@@ -237,8 +239,10 @@ export const BASE_SCHEMA = `
     field(name: String!): ItemField
     children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
     parent: Item
-    ancestors(includeTemplateIDs: [String!]): [Item!]!
+    ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
     hasChildren(includeTemplateIDs: [String!]): Boolean!
+    rendered: JSON!
+    languages: [Item!]!
   }
 
   type ItemTemplate {
@@ -265,6 +269,8 @@ export const BASE_SCHEMA = `
     url: String!
     path: String!
     siteName: String!
+    hostName: String!
+    scheme: String!
   }
 
   type ItemField {
@@ -398,10 +404,17 @@ export async function registerGraphQLRoutes(
     // SiteDefinition's rootPath + startItem into that absolute base.
     const rootPath = ctx.site ? routeBaseForSite(ctx.site) : '';
     const name = ctx.site?.name ?? '';
+    // hostname may be pipe-delimited (multiple bound hostnames); take the
+    // first entry for the scalar value, falling back to empty string when
+    // ctx.site is null.
+    const rawHostname = ctx.site?.hostname ?? '';
+    const hostName = rawHostname.split('|')[0].trim();
     return {
       url: item.path,
       path: referenceUrl(item.path, rootPath),
       siteName: name,
+      hostName,
+      scheme: 'https',
     };
   };
 
@@ -556,6 +569,19 @@ export async function registerGraphQLRoutes(
       if (!hasVersionsInLanguage(parentNode.item, lang)) return null;
       return withLanguage(parentNode.item, lang);
     },
+    // rendered: placeholder returning an empty object. Task E1 (layout) wires
+    // the actual presentation JSON via a tag. The field is declared here so
+    // the schema is valid and the field is selectable from the item interface.
+    rendered: () => ({}),
+    // languages: one language-tagged item per language that has at least one
+    // version. Each returned item is tagged via withLanguage so its own field
+    // reads resolve under that language. Mirrors Sitecore Edge's
+    // item.languages connection (one entry per language version present).
+    languages: (item: ScsItem) => {
+      return item.languages
+        .filter(l => l.versions.length > 0)
+        .map(l => withLanguage(item, l.language));
+    },
     // Sitecore EdgeSchema.ResolveAncestors: walks Axes.GetAncestors() (root-
     // first) then .Reverse() to produce immediate-parent-first order. Filters
     // ancestors without versions in the requested language. Optional
@@ -564,11 +590,15 @@ export async function registerGraphQLRoutes(
     // DescendsFrom transitive matching, but mockingbird's children resolver
     // doesn't, and consistency across the two ancestor/child predicates beats
     // partial fidelity to one of them.
+    // `hasLayout` is accepted for schema parity with XM Cloud Edge but
+    // intentionally ignored here - full filtering is deferred to Task E1
+    // once layout data is available per item.
     ancestors: (item: ScsItem, args: unknown) => {
       const node = engine.getItemById(item.id);
       if (!node) return [];
       const { includeTemplateIDs } = (args ?? {}) as {
         includeTemplateIDs?: string[] | null;
+        hasLayout?: boolean | null;
       };
       const lang = langOf(item);
       const out: ScsItem[] = [];
