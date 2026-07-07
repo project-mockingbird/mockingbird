@@ -180,7 +180,7 @@ const GRAPHIQL_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const BASE_SCHEMA = `
+export const BASE_SCHEMA = `
   scalar JSON
   scalar Long
 

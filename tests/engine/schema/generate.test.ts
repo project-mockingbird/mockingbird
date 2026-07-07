@@ -14,6 +14,7 @@ import {
   fieldNameToGraphQLFieldName,
   generateSchemaFromRegistry,
 } from '../../../src/engine/schema/generate.js';
+import { BASE_SCHEMA } from '../../../src/api/routes/graphql.js';
 
 function makeItem(overrides: Partial<ScsItem> & { id: string; path: string }): ScsItem {
   return {
@@ -288,49 +289,6 @@ describe('generateSchemaFromRegistry', () => {
   });
 });
 
-/**
- * Minimal stand-in for the runtime BASE_SCHEMA (graphql.ts) - just the base
- * types the generated extension document references, so the generated SDL can
- * be compiled by graphql-js and introspected. The generator emits an
- * *extension* (`extend type Item`, interfaces, concrete types), so we build
- * this base first and apply the generated SDL via `extendSchema` exactly like
- * mercurius does at runtime.
- */
-const MINIMAL_BASE = `
-  type Query { item(path: String!): Item }
-  type ItemTemplate { id: ID! }
-  type ItemUrl { url: String! }
-  type ItemField { value: String }
-  type AnyItemChildrenConnection { results: [Item!]! }
-  interface Item {
-    id: ID!
-    name: String!
-    displayName: String
-    path: String!
-    language: String!
-    template: ItemTemplate!
-    url: ItemUrl
-    field(name: String!): ItemField
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: Item
-    ancestors(includeTemplateIDs: [String!]): [Item!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!
-  }
-  type UnknownItem implements Item {
-    id: ID!
-    name: String!
-    displayName: String
-    path: String!
-    language: String!
-    template: ItemTemplate!
-    url: ItemUrl
-    field(name: String!): ItemField
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: Item
-    ancestors(includeTemplateIDs: [String!]): [Item!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!
-  }
-`;
 
 /**
  * Build the transitive inheritance chain the bug report centers on:
@@ -353,7 +311,7 @@ function buildBaseChain() {
 describe('generated schema is valid GraphQL and introspectable', () => {
   it('compiles via graphql-js extendSchema with no validation errors', () => {
     const result = generateSchemaFromRegistry(buildBaseChain());
-    const schema = extendSchema(buildSchema(MINIMAL_BASE), parse(result.sdl));
+    const schema = extendSchema(buildSchema(BASE_SCHEMA), parse(result.sdl));
     // validateSchema enforces the spec rule we are fixing: an implementing
     // type/interface must declare every transitively-implemented interface.
     // A missing declaration surfaces here as a validation error.
@@ -362,7 +320,7 @@ describe('generated schema is valid GraphQL and introspectable', () => {
 
   it('reports transitive interface registration through introspection (acceptance criteria)', () => {
     const result = generateSchemaFromRegistry(buildBaseChain());
-    const schema = extendSchema(buildSchema(MINIMAL_BASE), parse(result.sdl));
+    const schema = extendSchema(buildSchema(BASE_SCHEMA), parse(result.sdl));
 
     const res = graphqlSync({
       schema,
