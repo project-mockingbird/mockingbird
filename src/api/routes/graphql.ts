@@ -6,7 +6,7 @@ declare module 'fastify' {
     extendMockingbirdSchema?: () => void;
   }
 }
-import { GraphQLJSON } from 'graphql-scalars';
+import { GraphQLJSON, GraphQLLong } from 'graphql-scalars';
 import type { Engine } from '../../engine/index.js';
 import type { ScsItem, ItemNode } from '../../engine/types.js';
 import { resolveLayout } from '../../engine/layout/index.js';
@@ -138,6 +138,18 @@ const GRAPHIQL_HTML = `<!DOCTYPE html>
 
 const BASE_SCHEMA = `
   scalar JSON
+  scalar Long
+
+  enum OrderByDirection {
+    ASC
+    DESC
+  }
+
+  enum RedirectType {
+    REDIRECT_301
+    REDIRECT_302
+    SERVER_TRANSFER
+  }
 
   type Query {
     layout(site: String!, routePath: String!, language: String!): LayoutResponse
@@ -215,6 +227,12 @@ const BASE_SCHEMA = `
   enum SearchOperator {
     EQ
     CONTAINS
+    NEQ
+    NCONTAINS
+    LT
+    LTE
+    GT
+    GTE
   }
 
   type SearchResults {
@@ -554,6 +572,7 @@ export async function registerGraphQLRoutes(
     queryDepth,
     resolvers: {
       JSON: GraphQLJSON,
+      Long: GraphQLLong,
       Item: { resolveType: resolveTypename },
       UnknownItem: sharedItemResolver,
       ItemField: {

@@ -53,6 +53,53 @@ describe('item interface naming (Edge parity)', () => {
   });
 });
 
+describe('base schema scalars and enums (Edge parity A3)', () => {
+  it('Long is SCALAR, OrderByDirection/RedirectType enums present, SearchOperator has 8 operators', async () => {
+    delete process.env.SCS_SITECORE_JSON;
+    delete process.env.SCS_CONTENT_SITECORE_JSON;
+    process.env.MOCKINGBIRD_WORKSPACE = workspaceTmp!;
+
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: {
+        query: `{
+          long: __type(name:"Long") { kind }
+          orderBy: __type(name:"OrderByDirection") { enumValues { name } }
+          redirectType: __type(name:"RedirectType") { enumValues { name } }
+          searchOp: __type(name:"SearchOperator") { enumValues { name } }
+        }`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const d = res.json().data;
+
+    expect(d.long.kind).toBe('SCALAR');
+
+    const orderByNames = d.orderBy.enumValues.map((e: { name: string }) => e.name);
+    expect(orderByNames).toEqual(['ASC', 'DESC']);
+
+    const redirectTypeNames = d.redirectType.enumValues.map((e: { name: string }) => e.name);
+    expect(redirectTypeNames).toContain('REDIRECT_301');
+    expect(redirectTypeNames).toContain('REDIRECT_302');
+    expect(redirectTypeNames).toContain('SERVER_TRANSFER');
+
+    const searchOpNames = d.searchOp.enumValues.map((e: { name: string }) => e.name);
+    expect(searchOpNames).toContain('EQ');
+    expect(searchOpNames).toContain('CONTAINS');
+    expect(searchOpNames).toContain('NEQ');
+    expect(searchOpNames).toContain('NCONTAINS');
+    expect(searchOpNames).toContain('LT');
+    expect(searchOpNames).toContain('LTE');
+    expect(searchOpNames).toContain('GT');
+    expect(searchOpNames).toContain('GTE');
+    expect(searchOpNames).toHaveLength(8);
+  });
+});
+
 describe('GraphQL schema extension across openWorkspace', () => {
   it('extends the schema after a project opens via /api/projects/open', async () => {
     delete process.env.SCS_SITECORE_JSON;
