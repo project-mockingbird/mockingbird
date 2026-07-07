@@ -65,6 +65,49 @@ function langOf(item: ScsItem): string {
 }
 
 /**
+ * Derive a human-readable name for `code` in `displayLocale` using the ECMA-402
+ * `Intl.DisplayNames` API. Falls back to `code` on any error or when the API
+ * returns undefined (e.g. unrecognised codes in older V8 builds).
+ */
+function resolveDisplayName(code: string, displayLocale: string): string {
+  try {
+    const dn = new Intl.DisplayNames([displayLocale], { type: 'language' });
+    return dn.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+/** Build an `ItemLanguage` object for the given language code. */
+function buildItemLanguage(code: string): {
+  name: string;
+  englishName: string;
+  nativeName: string;
+  displayName: string;
+} {
+  return {
+    name: code,
+    // English name: how English speakers name this language
+    englishName: resolveDisplayName(code, 'en'),
+    // Native name: how native speakers name this language
+    nativeName: resolveDisplayName(code, code),
+    // displayName mirrors englishName - matches Edge's `displayName` field
+    displayName: resolveDisplayName(code, 'en'),
+  };
+}
+
+/**
+ * Return the highest version number the item has in the requested language,
+ * or 1 if the language is absent or has no versions. Mirrors Sitecore's
+ * `Item.Version.Number` behaviour where version 1 is the minimum.
+ */
+function resolveItemVersion(item: ScsItem): number {
+  const lang = item.languages.find(l => l.language === langOf(item));
+  if (!lang || lang.versions.length === 0) return 1;
+  return Math.max(...lang.versions.map(v => v.version));
+}
+
+/**
  * Parse a raw Sitecore field value as a float for `ItemField.numberValue`.
  * Integer and Number fields round-trip through this with no loss;
  * anything else (empty, non-numeric text, whitespace) returns `null` so
@@ -158,12 +201,20 @@ const BASE_SCHEMA = `
     search(where: SearchWhere, first: Int = 50, after: String): SearchResults!
   }
 
+  type ItemLanguage {
+    name: String!
+    englishName: String!
+    nativeName: String!
+    displayName: String!
+  }
+
   interface Item {
     id: ID!
     name: String!
     displayName: String
     path: String!
-    language: String!
+    language: ItemLanguage!
+    version: Int!
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
@@ -178,7 +229,8 @@ const BASE_SCHEMA = `
     name: String!
     displayName: String
     path: String!
-    language: String!
+    language: ItemLanguage!
+    version: Int!
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
@@ -444,7 +496,8 @@ export async function registerGraphQLRoutes(
     name: (item: ScsItem) => item.path.split('/').pop() ?? '',
     displayName: (item: ScsItem) => item.path.split('/').pop() ?? '',
     path: (item: ScsItem) => item.path,
-    language: (item: ScsItem) => langOf(item),
+    language: (item: ScsItem) => buildItemLanguage(langOf(item)),
+    version: (item: ScsItem) => resolveItemVersion(item),
     template: (item: ScsItem) => {
       const tmplNode = engine.getItemById(item.template);
       return {
