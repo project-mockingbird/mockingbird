@@ -29,7 +29,7 @@ import {
 import { parseGuidList, toCanonicalGuid, formatGuidEdge, normalizeGuid } from '../../engine/guid.js';
 import { FIELD_IDS, FINAL_RENDERINGS_FIELD_ID, RENDERINGS_FIELD_ID } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
-import { getTemplateSchema } from '../../engine/template-schema.js';
+import { getTemplateSchema, type TemplateFieldSchema } from '../../engine/template-schema.js';
 import { parseAuthoredAttrs } from '../../engine/render-field/html-utils.js';
 import { buildMediaSrc, buildMediaUrlPath, readSharedString } from '../../engine/render-field/media.js';
 import { EXTENSION_FIELD_ID, MIME_TYPE_FIELD_ID } from '../../engine/constants.js';
@@ -240,6 +240,39 @@ const GRAPHIQL_HTML = `<!DOCTYPE html>
  */
 function safeDecodeURI(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
+}
+
+/**
+ * Map a `TemplateFieldSchema` entry and its parent section metadata to the
+ * `ItemTemplateField` wire shape. Called from three resolver sites:
+ * - `readHint`'s `definition` builder (inline field-definition lookup)
+ * - `ItemTemplate.ownFields` resolver
+ * - `ItemTemplate.fields` resolver
+ *
+ * A single definition here prevents the three sites from drifting when the
+ * field mapping changes. Preserves exact current output: `title` maps from
+ * `f.displayName`, not `f.name`.
+ */
+function toItemTemplateField(
+  f: TemplateFieldSchema,
+  sectionName: string,
+  sectionSortOrder: number,
+): {
+  name: string; title: string; type: string; source: string;
+  shared: boolean; unversioned: boolean; sortOrder: number;
+  section: string; sectionSortOrder: number;
+} {
+  return {
+    name: f.name,
+    title: f.displayName,
+    type: f.type,
+    source: f.source,
+    shared: f.shared,
+    unversioned: f.unversioned,
+    sortOrder: f.sortOrder,
+    section: sectionName,
+    sectionSortOrder,
+  };
 }
 
 /**
@@ -773,11 +806,7 @@ export async function registerGraphQLRoutes(
     // ItemField.definition). Falls back to ZERO_GUID / null when the item
     // has no typed template or the field isn't declared there.
     let fieldDefId = ZERO_GUID;
-    let definition: {
-      name: string; title: string; type: string; source: string;
-      shared: boolean; unversioned: boolean; sortOrder: number;
-      section: string; sectionSortOrder: number;
-    } | null = null;
+    let definition: ReturnType<typeof toItemTemplateField> | null = null;
     try {
       const tmplSchema = getTemplateSchema(item.template, ctx.engine);
       const target = hint.toLowerCase();
@@ -787,17 +816,7 @@ export async function registerGraphQLRoutes(
         for (const f of section.fields) {
           if (f.name && f.name.toLowerCase() === target) {
             fieldDefId = f.id || ZERO_GUID;
-            definition = {
-              name: f.name,
-              title: f.displayName,
-              type: f.type,
-              source: f.source,
-              shared: f.shared,
-              unversioned: f.unversioned,
-              sortOrder: f.sortOrder,
-              section: section.name,
-              sectionSortOrder: section.sortOrder,
-            };
+            definition = toItemTemplateField(f, section.name, section.sortOrder);
             found = true;
             break;
           }
@@ -1290,25 +1309,11 @@ export async function registerGraphQLRoutes(
           const canonical = toCanonicalGuid(parent.id) ?? parent.id;
           const normalizedId = canonical.toLowerCase();
           const schema = getTemplateSchema(canonical, engine);
-          const out: Array<{
-            name: string; title: string; type: string; source: string;
-            shared: boolean; unversioned: boolean; sortOrder: number;
-            section: string; sectionSortOrder: number;
-          }> = [];
+          const out: Array<ReturnType<typeof toItemTemplateField>> = [];
           for (const section of schema.sections) {
             for (const f of section.fields) {
               if (f.sourceTemplateId.toLowerCase() !== normalizedId) continue;
-              out.push({
-                name: f.name,
-                title: f.displayName,
-                type: f.type,
-                source: f.source,
-                shared: f.shared,
-                unversioned: f.unversioned,
-                sortOrder: f.sortOrder,
-                section: section.name,
-                sectionSortOrder: section.sortOrder,
-              });
+              out.push(toItemTemplateField(f, section.name, section.sortOrder));
             }
           }
           return out;
@@ -1319,24 +1324,10 @@ export async function registerGraphQLRoutes(
         fields: (parent: { id: string }) => {
           const canonical = toCanonicalGuid(parent.id) ?? parent.id;
           const schema = getTemplateSchema(canonical, engine);
-          const out: Array<{
-            name: string; title: string; type: string; source: string;
-            shared: boolean; unversioned: boolean; sortOrder: number;
-            section: string; sectionSortOrder: number;
-          }> = [];
+          const out: Array<ReturnType<typeof toItemTemplateField>> = [];
           for (const section of schema.sections) {
             for (const f of section.fields) {
-              out.push({
-                name: f.name,
-                title: f.displayName,
-                type: f.type,
-                source: f.source,
-                shared: f.shared,
-                unversioned: f.unversioned,
-                sortOrder: f.sortOrder,
-                section: section.name,
-                sectionSortOrder: section.sortOrder,
-              });
+              out.push(toItemTemplateField(f, section.name, section.sortOrder));
             }
           }
           return out;

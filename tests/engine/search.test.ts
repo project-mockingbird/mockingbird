@@ -465,3 +465,30 @@ describe('resolveSearch - nested OR and AND', () => {
     expect(result.results).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Null/undefined guard: _name clause with no value must not throw
+// ---------------------------------------------------------------------------
+
+describe('resolveSearch - _name null guard', () => {
+  it('does not throw when _name clause has no value', () => {
+    const engine = buildEngine([
+      makeItem({ id: 'c1111111-cccc-cccc-cccc-cccccccccccc', path: '/a/Alpha', template: TMPL_ALPHA }),
+    ]);
+    // GraphQL inputs may omit `value` entirely; the resulting undefined must
+    // not reach `applyStringOp` raw (which calls .toLowerCase() on it).
+    expect(() =>
+      resolveSearch(engine, { AND: [{ name: '_name', operator: 'EQ' }] }),
+    ).not.toThrow();
+  });
+
+  it('returns zero results when _name clause has no value and operator is EQ', () => {
+    const engine = buildEngine([
+      makeItem({ id: 'c1111111-cccc-cccc-cccc-cccccccccccc', path: '/a/Alpha', template: TMPL_ALPHA }),
+    ]);
+    // value coerces to '' - EQ '' matches items whose name is literally empty.
+    // 'Alpha' !== '' so zero results.
+    const result = resolveSearch(engine, { AND: [{ name: '_name', operator: 'EQ' }] });
+    expect(result.results).toHaveLength(0);
+  });
+});

@@ -276,7 +276,13 @@ function buildLeafCheck(
       const { value, operator } = clause;
       return (node: ItemNode) => {
         const name = node.item.path.split('/').pop() ?? '';
-        return applyStringOp(name, value, operator);
+        // Guard: `value` is declared `string | null` on SearchClause but
+        // callers can pass undefined from a GraphQL input with no `value`
+        // field. `applyStringOp` calls `.toLowerCase()` and would throw on
+        // null/undefined. Coerce to empty string so the clause is safe to
+        // evaluate (EQ '' matches items whose name is literally empty, all
+        // other operators compare against '').
+        return applyStringOp(name, value ?? '', operator);
       };
     }
 
