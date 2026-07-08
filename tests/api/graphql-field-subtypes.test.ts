@@ -521,7 +521,7 @@ describe('MediaItemField', () => {
 // ---------------------------------------------------------------------------
 
 describe('DateField', () => {
-  it('resolves __typename as DateField and exposes dateValue via interface field', async () => {
+  it('resolves __typename as DateField and exposes dateValue as epoch ms (Long)', async () => {
     const { tmplId, items: tmplItems } = buildTemplate('f_date', 'Date');
     const item = buildItem(tmplId, 'f_date', '20260115T123456Z');
     const app = await mkApp([...tmplItems, item]);
@@ -534,8 +534,7 @@ describe('DateField', () => {
             item(path: "${item.path}", language: "en") {
               field(name: "f_date") {
                 __typename
-                dateValue
-                ... on DateField { formattedDateValue }
+                ... on DateField { dateValue formattedDateValue }
               }
             }
           }`,
@@ -544,7 +543,8 @@ describe('DateField', () => {
       const body = res.json();
       expect(body.errors).toBeUndefined();
       expect(body.data.item.field.__typename).toBe('DateField');
-      expect(body.data.item.field.dateValue).toBe('2026-01-15T12:34:56Z');
+      // dateValue is epoch milliseconds (Long): 2026-01-15T12:34:56Z = 1768480496000
+      expect(body.data.item.field.dateValue).toBe(1768480496000);
       // formattedDateValue should be non-null for a parseable date
       expect(body.data.item.field.formattedDateValue).toBeTruthy();
     } finally {

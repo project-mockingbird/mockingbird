@@ -368,7 +368,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
   }
@@ -381,7 +380,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
   }
@@ -399,7 +397,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
     anchor: String
@@ -419,7 +416,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
     src(maxWidth: Int, maxHeight: Int): String
@@ -436,7 +432,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
     url: String
@@ -450,7 +445,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
     title: String
@@ -469,9 +463,9 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
+    dateValue: Long
     formattedDateValue(format: String, offset: String): String
   }
 
@@ -483,7 +477,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
   }
@@ -496,7 +489,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
   }
@@ -509,7 +501,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
     intValue: Int
@@ -523,7 +514,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
   }
@@ -536,7 +526,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
     targetIds: [String!]
@@ -551,7 +540,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
     values: [NameValueListValue!]
@@ -565,7 +553,6 @@ export const BASE_SCHEMA = `
     definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
     targetItem: Item
     targetItems: [Item!]
   }
@@ -869,7 +856,6 @@ export async function registerGraphQLRoutes(
     jsonValue: (parent: { jsonValue?: unknown }) => parent.jsonValue ?? { value: '' },
     boolValue: (parent: { boolValue?: boolean | null }) => parent.boolValue ?? null,
     numberValue: (parent: { numberValue?: number | null }) => parent.numberValue ?? null,
-    dateValue: (parent: { dateValue?: string | null }) => parent.dateValue ?? null,
     definition: (parent: { definition?: unknown }) => parent.definition ?? null,
     // targetItem / targetItems: parse GUIDs from the raw field value and
     // resolve each against the engine tree - identical to the old ItemField
@@ -991,6 +977,14 @@ export async function registerGraphQLRoutes(
   };
 
   const dateFieldResolvers = {
+    // dateValue: faithful Edge type - epoch milliseconds as Long (not ISO string).
+    // Parses the raw Sitecore field value via the shared ISO normalizer, then
+    // converts to ms since epoch. Returns null for unset or unparseable values.
+    dateValue: (parent: { dateValue?: string | null }) => {
+      if (!parent.dateValue) return null;
+      const ms = Date.parse(parent.dateValue);
+      return Number.isNaN(ms) ? null : ms;
+    },
     // Best-effort formatted date string; format/offset args accepted for
     // schema parity with real Edge but not yet applied (returns ISO string).
     formattedDateValue: (parent: { value?: string }, _args: { format?: string; offset?: string } | null) => {

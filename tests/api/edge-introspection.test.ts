@@ -5,16 +5,6 @@
  * Edge schema (EdgeSchema 1.6.800, decompiled). Mockingbird MAY expose additional
  * fields beyond the Edge contract; it MUST NOT be missing any required type,
  * field, argument, enum value, or input field.
- *
- * KNOWN DEVIATION - DateField.dateValue: Long
- *   Edge exposes dateValue: Long only on DateField (epoch ms).
- *   Mockingbird carries dateValue: String on the ItemField INTERFACE as a
- *   superset accessor (ISO-8601 string). GraphQL forbids a concrete type from
- *   redeclaring an interface field with a different type, so DateField cannot
- *   redeclare it as Long without breaking the interface contract. This is a
- *   deliberate Option-B deviation, pending sign-off for a future breaking change.
- *   The assertion below does NOT require DateField.dateValue; only
- *   formattedDateValue (which is the non-controversial Edge-spec field) is checked.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -238,14 +228,7 @@ const EXPECTED: Record<string, TypeExpectation> = {
 
   DateField: {
     kind: 'OBJECT',
-    // KNOWN DEVIATION: Edge has dateValue: Long on DateField (epoch ms).
-    // Mockingbird omits DateField.dateValue: Long because the ItemField interface
-    // already carries dateValue: String (a Mockingbird-superset ISO-8601 accessor),
-    // and GraphQL forbids a concrete type from redeclaring an interface field with
-    // an incompatible type. The interface-level dateValue: String is therefore
-    // accessible on DateField via the inherited interface field.
-    // Required Edge-spec added field on DateField: formattedDateValue only.
-    fields: ['id', 'name', 'jsonValue', 'value', 'definition', 'formattedDateValue'],
+    fields: ['id', 'name', 'jsonValue', 'value', 'definition', 'formattedDateValue', 'dateValue'],
     fieldArgs: {
       formattedDateValue: ['format', 'offset'],
     },

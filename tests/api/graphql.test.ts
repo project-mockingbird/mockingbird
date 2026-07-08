@@ -1360,10 +1360,11 @@ describe('GraphQL site queries (Content SDK)', () => {
       }
     });
 
-    it('dateValue returns ISO-8601 string for a Sitecore compact date', async () => {
+    it('compact Sitecore date value round-trips through the field value accessor', async () => {
       // Sitecore Datetime fields are stored in the compact form
-      // yyyyMMddTHHmmssZ - e.g. 20260115T123456Z. Mockingbird parses this
-      // and emits the expanded ISO-8601 form real Edge returns.
+      // yyyyMMddTHHmmssZ - e.g. 20260115T123456Z. The raw stored value
+      // is preserved on the interface-level `value` field. dateValue (Long)
+      // is only available via ... on DateField on a typed DateField instance.
       const holder = makeItem({
         id: 'dv000000-0000-0000-0000-000000000001',
         path: '/sitecore/content/dv-set',
@@ -1377,19 +1378,18 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/dv-set",language:"en"){field(name:"__Updated"){dateValue value}}}`,
+            query: `{item(path:"/sitecore/content/dv-set",language:"en"){field(name:"__Updated"){value}}}`,
           },
         });
         const body = response.json();
         expect(body.errors).toBeUndefined();
-        expect(body.data.item.field.dateValue).toBe('2026-01-15T12:34:56Z');
         expect(body.data.item.field.value).toBe('20260115T123456Z');
       } finally {
         await app.close();
       }
     });
 
-    it('dateValue passes through a field already in expanded ISO-8601', async () => {
+    it('expanded ISO-8601 date string is preserved on the value field', async () => {
       const holder = makeItem({
         id: 'dv000000-0000-0000-0000-000000000002',
         path: '/sitecore/content/dv-iso',
@@ -1403,18 +1403,18 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/dv-iso",language:"en"){field(name:"PublishDate"){dateValue}}}`,
+            query: `{item(path:"/sitecore/content/dv-iso",language:"en"){field(name:"PublishDate"){value}}}`,
           },
         });
         const body = response.json();
         expect(body.errors).toBeUndefined();
-        expect(body.data.item.field.dateValue).toBe('2026-02-20T08:00:00Z');
+        expect(body.data.item.field.value).toBe('2026-02-20T08:00:00Z');
       } finally {
         await app.close();
       }
     });
 
-    it('dateValue on an unset field returns null with the wrapper still present', async () => {
+    it('unset field wrapper is still present (non-null) with null value', async () => {
       const holder = makeItem({
         id: 'dv000000-0000-0000-0000-000000000003',
         path: '/sitecore/content/dv-unset',
@@ -1425,19 +1425,19 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/dv-unset",language:"en"){field(name:"__Updated"){dateValue}}}`,
+            query: `{item(path:"/sitecore/content/dv-unset",language:"en"){field(name:"__Updated"){value}}}`,
           },
         });
         const body = response.json();
         expect(body.errors).toBeUndefined();
         expect(body.data.item.field).not.toBeNull();
-        expect(body.data.item.field.dateValue).toBeNull();
+        expect(body.data.item.field.value).toBe('');
       } finally {
         await app.close();
       }
     });
 
-    it('dateValue on unparseable text returns null', async () => {
+    it('non-date text field value passes through unmodified', async () => {
       const holder = makeItem({
         id: 'dv000000-0000-0000-0000-000000000004',
         path: '/sitecore/content/dv-bogus',
@@ -1451,12 +1451,11 @@ describe('GraphQL site queries (Content SDK)', () => {
           method: 'POST',
           url: '/api/graphql',
           payload: {
-            query: `{item(path:"/sitecore/content/dv-bogus",language:"en"){field(name:"SomeText"){dateValue value}}}`,
+            query: `{item(path:"/sitecore/content/dv-bogus",language:"en"){field(name:"SomeText"){value}}}`,
           },
         });
         const body = response.json();
         expect(body.errors).toBeUndefined();
-        expect(body.data.item.field.dateValue).toBeNull();
         expect(body.data.item.field.value).toBe('not a date');
       } finally {
         await app.close();
