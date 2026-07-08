@@ -1,21 +1,58 @@
 import type { Engine } from '../index.js';
 import type { ItemNode, ScsItem } from '../types.js';
 import { toCanonicalGuid } from '../guid.js';
+import { readItemFieldByHint } from '../item-query/index.js';
+import { readBaseTemplateIds } from '../schema/generate.js';
 
-/** Clause shape matching the GraphQL `SearchClause` input type. */
-export interface SearchClause {
-  name: string;
-  value: string;
-  operator?: 'EQ' | 'CONTAINS' | null;
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+/**
+ * The full set of comparison operators from the GraphQL SearchOperator enum
+ * (Phase A). EQ and CONTAINS were the original subset.
+ */
+export type SearchOperator =
+  | 'EQ'
+  | 'CONTAINS'
+  | 'NEQ'
+  | 'NCONTAINS'
+  | 'LT'
+  | 'LTE'
+  | 'GT'
+  | 'GTE';
+
+/**
+ * A search predicate node. Can be:
+ * - A leaf: `name` + `value` + optional `operator`.
+ * - A composite: `AND` and/or `OR` arrays of child predicates.
+ * - Both shapes coexisting on the same node (leaf + children).
+ *
+ * Back-compat: the original `SearchWhere = { AND?: SearchClause[] }` shape
+ * maps directly - top-level `AND` is preserved with identical semantics.
+ */
+export interface SearchPredicate {
+  name?: string | null;
+  value?: string | null;
+  operator?: SearchOperator | null;
+  AND?: SearchPredicate[] | null;
+  OR?: SearchPredicate[] | null;
 }
 
-export interface SearchWhere {
-  AND?: SearchClause[] | null;
+/** Back-compat alias - callers that import `SearchWhere` continue to work. */
+export type SearchWhere = SearchPredicate;
+
+/** A leaf clause with required name + value (back-compat). */
+export interface SearchClause extends SearchPredicate {
+  name: string;
+  value: string;
 }
 
 export interface SearchOptions {
   first?: number | null;
   after?: string | null;
+  /** Sort results by a field hint before pagination. Direction defaults to ASC. */
+  orderBy?: { name: string; direction?: 'ASC' | 'DESC' | null } | null;
 }
 
 export interface SearchResultItem {
@@ -24,6 +61,7 @@ export interface SearchResultItem {
 
 export interface SearchResultPage {
   results: SearchResultItem[];
+  total: number;
   pageInfo: {
     hasNext: boolean;
     endCursor: string | null;
@@ -32,6 +70,10 @@ export interface SearchResultPage {
 
 const DEFAULT_FIRST = 50;
 const MAX_FIRST = 500;
+
+// ---------------------------------------------------------------------------
+// GUID utilities
+// ---------------------------------------------------------------------------
 
 /**
  * Strip braces + dashes + case from a Sitecore GUID. Accepts the three
@@ -55,7 +97,7 @@ export function encodeCursor(offset: number): string {
   return Buffer.from(String(offset), 'utf8').toString('base64');
 }
 
-/** Decode a base64 cursor back to an integer offset. Invalid/empty → 0. */
+/** Decode a base64 cursor back to an integer offset. Invalid/empty -> 0. */
 export function decodeCursor(cursor: string | null | undefined): number {
   if (!cursor) return 0;
   try {
@@ -67,10 +109,14 @@ export function decodeCursor(cursor: string | null | undefined): number {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Item helpers
+// ---------------------------------------------------------------------------
+
 /**
- * Pull the normalized item id out of an ItemNode for a `_templates` or
- * `_path` clause comparison. `item.template` is already 32-hex-lowercase-
- * dashed in the tree, but we canonicalize anyway to be robust.
+ * Pull the normalized item template id (32-hex-lowercase nodash) from an
+ * ItemNode. `item.template` is already lowercase-dashed in the tree; we
+ * canonicalize via `normalizeGuid` to be robust.
  */
 function itemTemplateId(node: ItemNode): string {
   return normalizeGuid(node.item.template) ?? '';
@@ -96,59 +142,240 @@ function resolvePathAncestorPrefix(engine: Engine, rawGuid: string): string | un
   return ancestor.item.path.toLowerCase() + '/';
 }
 
+// ---------------------------------------------------------------------------
+// Base-template transitive walk
+// ---------------------------------------------------------------------------
+
 /**
- * Walk the engine tree, apply the clause filters, and return a paginated
- * slice. Scope-limited on purpose: only the three clause kinds the
- * consuming app actually issues are supported (`_templates`, `_language`,
- * `_path`), only top-level `AND`, only `EQ` / `CONTAINS`.
+ * Return the set of ALL transitive base template IDs for `templateDashedId`,
+ * stored as 32-hex-lowercase nodash canonical form for direct comparison.
+ *
+ * Mirrors the base-template walk in src/engine/schema/generate.ts
+ * (`collectTransitiveBaseInterfaces`) but collects ALL base ids (not only
+ * interface-typed templates) and stores them as nodash. Cycle-guarded via
+ * a visited set so a base-template cycle terminates instead of hanging.
+ */
+function getTransitiveBaseTemplateIds(
+  engine: Engine,
+  templateDashedId: string,
+  cache: Map<string, Set<string>>,
+): Set<string> {
+  const key = templateDashedId.toLowerCase();
+  if (cache.has(key)) return cache.get(key)!;
+
+  // Initialize before recursion to handle cycles.
+  const result = new Set<string>();
+  cache.set(key, result);
+
+  const tmplNode = engine.getItemById(key);
+  if (!tmplNode) return result;
+
+  // readBaseTemplateIds (re-exported from schema/generate.ts) returns
+  // dashed-lowercase GUIDs parsed from the __Base template field.
+  const directBases = readBaseTemplateIds(tmplNode.item);
+  const queue: string[] = [...directBases];
+  const visited = new Set<string>([key]);
+
+  while (queue.length > 0) {
+    const baseId = queue.shift()!;
+    if (visited.has(baseId)) continue;
+    visited.add(baseId);
+    // Store as nodash canonical for O(1) comparison later.
+    result.add(baseId.replace(/-/g, ''));
+    const baseNode = engine.getItemById(baseId);
+    if (baseNode) {
+      for (const next of readBaseTemplateIds(baseNode.item)) {
+        queue.push(next);
+      }
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Operator application
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a string comparison operator to `actual` vs `value`.
+ * Both sides are lowercased before comparison. Falls back to EQ on unknown
+ * operators so the resolver never crashes on an unrecognized value.
+ */
+function applyStringOp(
+  actual: string,
+  value: string,
+  op: SearchOperator | null | undefined,
+): boolean {
+  const a = actual.toLowerCase();
+  const v = value.toLowerCase();
+  switch (op ?? 'EQ') {
+    case 'EQ':        return a === v;
+    case 'NEQ':       return a !== v;
+    case 'CONTAINS':  return a.includes(v);
+    case 'NCONTAINS': return !a.includes(v);
+    case 'LT':        return a < v;
+    case 'LTE':       return a <= v;
+    case 'GT':        return a > v;
+    case 'GTE':       return a >= v;
+    default:          return a === v;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Predicate builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a leaf predicate for a clause whose `name` is set.
+ *
+ * Supported clause names:
+ * - `_templates`: EQ = exact template id match; CONTAINS = transitive
+ *   base-template match (item's template IS or INHERITS the given id).
+ * - `_language`: item has at least one version in the given language.
+ * - `_path`: item is a strict descendant of the given ancestor id.
+ * - `_name`: compare item name (last path segment) using the operator.
+ * - Anything else: permissive (always true) so future callers don't crash.
+ */
+function buildLeafCheck(
+  engine: Engine,
+  clause: SearchClause,
+  baseCache: Map<string, Set<string>>,
+): (node: ItemNode) => boolean {
+  switch (clause.name) {
+    case '_templates': {
+      const canonical = normalizeGuid(clause.value);
+      if (!canonical) return () => false;
+
+      if ((clause.operator ?? 'EQ') === 'CONTAINS') {
+        // Transitive: exact match OR template inherits the target id.
+        return (node: ItemNode) => {
+          const itemNodash = itemTemplateId(node);
+          if (itemNodash === canonical) return true;
+          const bases = getTransitiveBaseTemplateIds(engine, node.item.template, baseCache);
+          return bases.has(canonical);
+        };
+      }
+      // EQ (or any other operator): exact template-id match only.
+      return (node: ItemNode) => itemTemplateId(node) === canonical;
+    }
+
+    case '_language': {
+      const lang = (clause.value ?? '').trim();
+      if (!lang) return () => false;
+      return (node: ItemNode) => itemHasLanguageVersion(node.item, lang);
+    }
+
+    case '_path': {
+      const prefix = resolvePathAncestorPrefix(engine, clause.value);
+      if (!prefix) return () => false;
+      return (node: ItemNode) => node.item.path.toLowerCase().startsWith(prefix);
+    }
+
+    case '_name': {
+      const { value, operator } = clause;
+      return (node: ItemNode) => {
+        const name = node.item.path.split('/').pop() ?? '';
+        // Guard: `value` is declared `string | null` on SearchClause but
+        // callers can pass undefined from a GraphQL input with no `value`
+        // field. `applyStringOp` calls `.toLowerCase()` and would throw on
+        // null/undefined. Coerce to empty string so the clause is safe to
+        // evaluate (EQ '' matches items whose name is literally empty, all
+        // other operators compare against '').
+        return applyStringOp(name, value ?? '', operator);
+      };
+    }
+
+    default:
+      // Unknown clause names: permissive so future callers don't crash.
+      return () => true;
+  }
+}
+
+/**
+ * Recursively build a predicate for a `SearchPredicate` node.
+ *
+ * - Leaf (`name` set): delegates to `buildLeafCheck`.
+ * - `AND` children: all must match.
+ * - `OR` children: at least one must match.
+ * - Empty node (no name, no children): permissive (always true).
+ * All three can coexist; every check must pass.
+ */
+function buildPredicate(
+  engine: Engine,
+  pred: SearchPredicate,
+  baseCache: Map<string, Set<string>>,
+): (node: ItemNode) => boolean {
+  const checks: Array<(n: ItemNode) => boolean> = [];
+
+  // Leaf check
+  if (pred.name) {
+    checks.push(buildLeafCheck(engine, pred as SearchClause, baseCache));
+  }
+
+  // AND: every child predicate must match
+  const andChildren = pred.AND ?? [];
+  if (andChildren.length > 0) {
+    const andPreds = andChildren.map(c => buildPredicate(engine, c, baseCache));
+    checks.push(n => andPreds.every(p => p(n)));
+  }
+
+  // OR: at least one child predicate must match
+  const orChildren = pred.OR ?? [];
+  if (orChildren.length > 0) {
+    const orPreds = orChildren.map(c => buildPredicate(engine, c, baseCache));
+    checks.push(n => orPreds.some(p => p(n)));
+  }
+
+  if (checks.length === 0) return () => true;
+  return (n: ItemNode) => checks.every(c => c(n));
+}
+
+// ---------------------------------------------------------------------------
+// Public search resolver
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk the engine tree, apply the predicate filters, optionally sort by a
+ * field hint, and return a paginated slice.
+ *
+ * `where` supports:
+ * - `AND: [...]` - all children must match (back-compat top-level AND).
+ * - `OR: [...]` - any child must match.
+ * - Leaf fields (`name`, `value`, `operator`) on the same node.
+ * - Full recursive nesting.
+ *
+ * `options.orderBy` sorts the full matched set by a field hint BEFORE
+ * pagination, so `total` always reflects the pre-sort filtered count.
  */
 export function resolveSearch(
   engine: Engine,
   where: SearchWhere | null | undefined,
   options: SearchOptions = {},
 ): SearchResultPage {
-  const clauses = where?.AND ?? [];
-
-  // Pre-normalise each clause into a typed predicate on ItemNode. A clause
-  // whose value can't be canonicalised (bad GUID, missing ancestor) turns
-  // into a `never` predicate so the search returns 0 matches instead of
-  // silently matching everything.
-  const predicates: Array<(node: ItemNode) => boolean> = [];
-  for (const clause of clauses) {
-    switch (clause.name) {
-      case '_templates': {
-        const canonical = normalizeGuid(clause.value);
-        if (!canonical) { predicates.push(() => false); break; }
-        predicates.push(node => itemTemplateId(node).replace(/-/g, '') === canonical);
-        break;
-      }
-      case '_language': {
-        const lang = (clause.value ?? '').trim();
-        if (!lang) { predicates.push(() => false); break; }
-        predicates.push(node => itemHasLanguageVersion(node.item, lang));
-        break;
-      }
-      case '_path': {
-        const prefix = resolvePathAncestorPrefix(engine, clause.value);
-        if (!prefix) { predicates.push(() => false); break; }
-        predicates.push(node => node.item.path.toLowerCase().startsWith(prefix));
-        break;
-      }
-      default:
-        // Unknown clause names are permissive - ignored so future callers
-        // don't crash on a clause mockingbird hasn't seen.
-        break;
-    }
-  }
+  const baseCache = new Map<string, Set<string>>();
+  const topPredicate = buildPredicate(engine, where ?? {}, baseCache);
 
   const all = engine.getAllItems();
   const matched: ItemNode[] = [];
   for (const node of all) {
-    let ok = true;
-    for (const pred of predicates) {
-      if (!pred(node)) { ok = false; break; }
-    }
-    if (ok) matched.push(node);
+    if (topPredicate(node)) matched.push(node);
+  }
+
+  // Sort by field hint before pagination. total is always the filtered count.
+  if (options.orderBy?.name) {
+    const { name: fieldHint, direction } = options.orderBy;
+    const dir = direction === 'DESC' ? -1 : 1; // default ASC
+    matched.sort((a, b) => {
+      const va = readItemFieldByHint(a.item, fieldHint)?.value ?? '';
+      const vb = readItemFieldByHint(b.item, fieldHint)?.value ?? '';
+      const na = Number(va);
+      const nb = Number(vb);
+      if (Number.isFinite(na) && Number.isFinite(nb)) {
+        return (na - nb) * dir;
+      }
+      return va.localeCompare(vb) * dir;
+    });
   }
 
   const first = Math.min(Math.max(1, options.first ?? DEFAULT_FIRST), MAX_FIRST);
@@ -159,6 +386,7 @@ export function resolveSearch(
 
   return {
     results: page.map(n => ({ item: n.item })),
+    total: matched.length,
     pageInfo: {
       hasNext,
       endCursor: hasNext ? encodeCursor(end) : null,

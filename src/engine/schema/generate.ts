@@ -3,28 +3,17 @@ import type { Engine } from '../index.js';
 import type { ScsItem, ItemNode } from '../types.js';
 import { TEMPLATE_TEMPLATE_ID, FIELD_IDS } from '../constants.js';
 import { getTemplateSchema, type TemplateFieldSchema } from '../template-schema.js';
+import { graphqlTypeize, graphqlFieldize } from './name-normalizer.js';
 
 /**
  * Convert a Sitecore template **name** into a GraphQL type identifier.
- * Splits on any run of non-alphanumeric characters (spaces, dashes,
- * punctuation) and PascalCases each word. Preserves a leading run of
- * underscores so Sitecore base templates (`_BaseAlpha`, `__StandardValues`)
- * remain distinguishable. Empty input returns the generic fallback `Item`.
+ * Uses the Sitecore-faithful NameNormalizer (splits on spaces only,
+ * preserves underscores). Empty or whitespace-only input returns `'Item'`.
  */
 export function templateNameToTypeName(name: string): string {
-  if (!name || !name.trim()) return 'Item';
-  // Preserve the leading underscore run (Sitecore base-template convention).
-  const leadingUnderscores = /^(_+)/.exec(name)?.[1] ?? '';
-  const body = name.slice(leadingUnderscores.length);
-  const words = splitIdentifierWords(body);
-  if (words.length === 0) return leadingUnderscores || 'Item';
-  const pascal = words
-    .map(w => {
-      const lower = w.toLowerCase();
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join('');
-  return `${leadingUnderscores}${pascal}`;
+  if (!name || !name.trim()) return 'UnknownItem';
+  const result = graphqlTypeize(name);
+  return result || 'UnknownItem';
 }
 
 /**
@@ -34,54 +23,16 @@ export function templateNameToTypeName(name: string): string {
 const GRAPHQL_RESERVED_FIELDS = new Set(['__typename', '__schema', '__type']);
 
 /**
- * Split a mixed-format identifier into word tokens. Handles both
- * space/dash/underscore-separated ("Demo Node Text") AND camelCase /
- * PascalCase ("DemoNodeText") inputs - Sitecore project templates
- * mostly use the latter, OOTB templates the former.
- *
- * Splits:
- *  - on runs of non-alphanumerics ("Demo Node" → Demo, Node)
- *  - on lower→upper transitions ("demoNode" → demo, Node)
- *  - on consecutive upper followed by lower ("CSSClass" → CSS, Class)
- */
-function splitIdentifierWords(name: string): string[] {
-  const cleaned = name.replace(/[^A-Za-z0-9]+/g, ' ').trim();
-  if (!cleaned) return [];
-  const tokens: string[] = [];
-  for (const chunk of cleaned.split(/\s+/)) {
-    if (!chunk) continue;
-    // Split on aA and AAa boundaries.
-    const subTokens = chunk
-      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-      .split(/\s+/);
-    for (const t of subTokens) if (t) tokens.push(t);
-  }
-  return tokens;
-}
-
-/**
  * Convert a Sitecore field **name** into a GraphQL field identifier.
- * camelCases whatever word tokens `splitIdentifierWords` produces.
- * Prefixes the result with `_` when it would otherwise start with a
- * digit, and when it collides with a GraphQL reserved name.
+ * Uses the Sitecore-faithful NameNormalizer (splits on spaces only,
+ * preserves underscores). Prefixes with `_` when the result starts with
+ * a digit or collides with a GraphQL reserved name.
  */
 export function fieldNameToGraphQLFieldName(name: string): string {
   if (!name) return '';
-  const words = splitIdentifierWords(name);
-  if (words.length === 0) return '';
-  const camel = words
-    .map((w, i) => {
-      // Normalize each word to lower-then-uppercase-first so all-caps
-      // chunks like "CSS" collapse to "Css" for readability.
-      const lower = w.toLowerCase();
-      if (i === 0) return lower;
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
-    .join('');
-  let result = camel;
-  if (/^[0-9]/.test(result)) result = `_${result}`;
-  if (GRAPHQL_RESERVED_FIELDS.has(result)) result = `_${result}`;
+  const result = graphqlFieldize(name);
+  if (!result) return '';
+  if (GRAPHQL_RESERVED_FIELDS.has(result)) return `_${result}`;
   return result;
 }
 
@@ -145,8 +96,10 @@ function collectTemplateNodes(engine: Engine): ItemNode[] {
  * Read the `__Base template` shared field and parse out the referenced
  * template ids (brace-wrapped GUIDs). Returns an empty array when the
  * field is absent or empty.
+ *
+ * Exported for reuse in the search engine's transitive base-template walk.
  */
-function readBaseTemplateIds(item: ScsItem): string[] {
+export function readBaseTemplateIds(item: ScsItem): string[] {
   const raw = item.sharedFields.find(f => f.id.toLowerCase() === FIELD_IDS.baseTemplate)?.value;
   if (!raw) return [];
   const matches = raw.match(/\{[^}]+\}/g);
@@ -215,37 +168,41 @@ function templateItemName(node: ItemNode): string {
 }
 
 /**
- * Emit a single shared `AnyItem` fields block - every type (generated
- * type, generic `Item`, plus any base-template interface) re-declares
+ * Emit a single shared `Item` interface fields block - every type (generated
+ * type, generic `UnknownItem`, plus any base-template interface) re-declares
  * this exact text. Keeping it inline instead of factoring to a fragment
  * variable avoids any ambiguity about SDL interpolation order.
  */
-const ANY_ITEM_FIELDS = `    id: ID!
+const ANY_ITEM_FIELDS = `    id(format: String = "N"): ID!
     name: String!
     displayName: String
     path: String!
-    language: String!
+    language: ItemLanguage!
+    version: Int!
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!`;
+    fields(ownFields: Boolean = false): [ItemField!]!
+    children(includeTemplateIDs: [String!], hasLayout: Boolean, first: Int, after: String): ItemSearchResults!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
+    hasChildren(includeTemplateIDs: [String!], hasLayout: Boolean): Boolean!
+    rendered: JSON!
+    languages: [Item!]!`;
 
 /**
  * Build the full generated schema text from the engine's template
  * registry. Emits (in order):
  *
- *   1. The `AnyItem` interface + shared helper types (`ItemTemplate`,
- *      `ItemUrl`, `ItemField`, `AnyItemChildrenConnection`).
- *   2. A generic `type Item implements AnyItem` fallback for any runtime
+ *   1. The `Item` interface + shared helper types (`ItemTemplate`,
+ *      `ItemUrl`, `ItemField`, `ItemSearchResults`).
+ *   2. A generic `type UnknownItem implements Item` fallback for any runtime
  *      item whose template isn't in the generated set.
  *   3. One `interface <BaseName>` per template whose name starts with `_`,
  *      carrying the flattened field set and declaring `implements` for every
  *      base interface it transitively inherits (e.g.
  *      `_BaseBeta implements _BaseAlpha`).
- *   4. One `type <Name> implements AnyItem & <interfaces>` per template, with
+ *   4. One `type <Name> implements Item & <interfaces>` per template, with
  *      the full flattened field set (own + base + transitive base fields).
  *      `<interfaces>` is the TRANSITIVE set of base interfaces, not just the
  *      direct bases - the GraphQL spec requires declaring every
@@ -257,9 +214,9 @@ const ANY_ITEM_FIELDS = `    id: ID!
  */
 export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResult {
   const templatesById = new Map<string, GeneratedTemplate>();
-  const concreteTypeNames: string[] = ['Item'];
+  const concreteTypeNames: string[] = ['UnknownItem'];
   const fieldResolverMap = new Map<string, string>();
-  const usedTypeNames = new Set<string>(['Item']);
+  const usedTypeNames = new Set<string>(['UnknownItem']);
 
   const templateNodes = collectTemplateNodes(engine);
 
@@ -329,14 +286,14 @@ export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResul
     .map(name => `    ${name}: ItemField`)
     .join('\n');
 
-  // Build the SDL text. The base interface (`AnyItem`), base concrete type
-  // (`Item`) and helper types live in BASE_SCHEMA and are already
+  // Build the SDL text. The base interface (`Item`), fallback concrete type
+  // (`UnknownItem`) and helper types live in BASE_SCHEMA and are already
   // registered by the time this runs - the generator only emits the
   // dynamic *additions*, delivered via mercurius's `extendSchema` API.
   const parts: string[] = [];
   if (allFieldsBlock) {
     parts.push(`
-  extend type Item {
+  extend type UnknownItem {
 ${allFieldsBlock}
   }`);
   }
@@ -373,7 +330,7 @@ ${fieldLines || '    _placeholder: ItemField'}
   // __typename will ever select them.
   for (const desc of templatesById.values()) {
     if (desc.isBase) continue;
-    const implementsList = ['AnyItem', ...desc.baseTypeNames];
+    const implementsList = ['Item', ...desc.baseTypeNames];
     const implementsClause = implementsList.join(' & ');
     const block = `
   type ${desc.typeName} implements ${implementsClause} {
@@ -400,10 +357,10 @@ function addField(
   if (!field.name) return;
   const gqlName = fieldNameToGraphQLFieldName(field.name);
   if (!gqlName) return;
-  // Skip anything that collides with a base `AnyItem` field - the concrete
-  // type already declares those with specific types the field-bag would
-  // shadow.
-  const RESERVED = new Set(['id', 'name', 'displayName', 'path', 'template', 'language', 'url', 'field', 'children', 'parent', 'ancestors', 'hasChildren']);
+  // Skip anything that collides with a base `Item` interface field - the
+  // concrete type already declares those with specific types the field-bag
+  // would shadow.
+  const RESERVED = new Set(['id', 'name', 'displayName', 'path', 'template', 'language', 'version', 'url', 'field', 'fields', 'children', 'parent', 'ancestors', 'hasChildren', 'rendered', 'languages']);
   if (RESERVED.has(gqlName)) return;
   desc.fields.set(gqlName, field.name);
   // Last-writer-wins on the global map - fields with the same camelCase

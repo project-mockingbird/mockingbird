@@ -71,8 +71,8 @@ describe('GraphQL queryDepth guard', () => {
   afterAll(async () => { await app.close(); });
 
   it('rejects an excessively deeply-nested children query', async () => {
-    // The schema exposes children as `AnyItem.children: AnyItemChildrenConnection`
-    // with `results: [AnyItem!]`, so each "real" level of recursion adds 2
+    // The schema exposes children as `Item.children: ItemSearchResults`
+    // with `results: [Item!]`, so each "real" level of recursion adds 2
     // selection-set depth steps. 20 nested children/results pairs comfortably
     // exceed the queryDepth=15 default.
     let inner = 'id';

@@ -86,7 +86,7 @@ export function buildJsonValue(
   if (!trimmed) {
     if (IMAGE_FIELD_TYPES.has(type)) return emptyImageJsonValue();
     if (LINK_FIELD_TYPES.has(type)) return emptyLinkJsonValue();
-    return null;
+    return { value: raw ?? '' };
   }
 
   if (/^<image\b/i.test(trimmed)) {

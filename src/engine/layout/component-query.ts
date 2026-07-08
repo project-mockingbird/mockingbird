@@ -1,6 +1,6 @@
 import type { Engine } from '../index.js';
 import type { PlaceholderNode } from './types.js';
-import { toCanonicalGuid, formatGuidEdge } from '../guid.js';
+import { toCanonicalGuid } from '../guid.js';
 import { readSharedField } from './item-fields.js';
 
 /**
@@ -149,15 +149,18 @@ export function collectComponentQueryRequests(
 /**
  * Post-execution walker that rewrites `id` scalars on any object that is an
  * element of a `results` array to bare-upper-hex (Edge `formatGuidEdge`
- * shape). Prod Edge emits `id` in TWO formats depending on resolver context:
- * canonical lowercase-dashed for AnyItem / multilist / route-tag sites, and
- * bare 32-hex uppercase for ComponentQuery-executed IGQL result rows
- * (Spotlight `data.datasource.links.results[*].id` and any other
- * `children(...) { results { id ... } }` projection). Mercurius resolves
- * `AnyItem.id` to canonical lowercase-dashed everywhere (0.3.4 scope-back),
- * so this walker re-shapes those ids back to the Edge format inside any
- * `results` array the query selected. Ids outside `results` arrays
- * (`datasource.id`, `template.id`) are untouched.
+ * shape).
+ *
+ * IDEMPOTENT-REDUNDANT: The `Item.id` resolver now returns N-format (bare
+ * 32-hex uppercase) by default everywhere via `applyGuidFormat`. When the
+ * in-process GraphQL executor is used, `results[*].id` values are already in
+ * N-format on arrival here and this walker merely re-formats N->N. The walker
+ * is kept because existing tests use mock executors that return
+ * lowercase-dashed ids (simulating the pre-N-default resolver behaviour) and
+ * would fail if it were removed. It is safe to delete if those tests are
+ * updated to reflect the current N-default resolver contract.
+ *
+ * Ids outside `results` arrays (`datasource.id`, `template.id`) are untouched.
  */
 export function rewriteResultRowIds(value: unknown): unknown {
   if (value == null || typeof value !== 'object') return value;
@@ -172,7 +175,11 @@ export function rewriteResultRowIds(value: unknown): unknown {
           const w = walked as Record<string, unknown>;
           if (typeof w.id === 'string') {
             const canonical = toCanonicalGuid(w.id);
-            if (canonical) return { ...w, id: formatGuidEdge(canonical) };
+            if (canonical) {
+              // formatGuidEdge is replaced by inline transform to avoid
+              // importing formatGuidEdge after the import was narrowed.
+              return { ...w, id: canonical.replace(/-/g, '').toUpperCase() };
+            }
           }
         }
         return walked;

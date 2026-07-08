@@ -129,6 +129,7 @@ describe('getTemplateSchema', () => {
       shared: false,
       unversioned: false,
       sortOrder: 100,
+      sourceTemplateId: templateId,
     });
     expect(schema.sections[0].sourceTemplateId).toBe(templateId);
   });

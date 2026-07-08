@@ -21,13 +21,14 @@ export interface ResolvedRedirect {
 }
 
 /**
- * Map Sitecore `RedirectType` enum value → Edge's string form.
+ * Map Sitecore `RedirectType` enum value -> Edge's enum member name.
+ * The enum is `RedirectType { REDIRECT_301 REDIRECT_302 SERVER_TRANSFER }`.
  * Unknown values fall through to `REDIRECT_301` (the most common default).
  */
 const REDIRECT_TYPE_MAP: Record<string, string> = {
   redirect301: 'REDIRECT_301',
   redirect302: 'REDIRECT_302',
-  servertransfer: 'REDIRECT_SERVER_TRANSFER',
+  servertransfer: 'SERVER_TRANSFER',
 };
 
 function mapRedirectType(raw: string | undefined): string {

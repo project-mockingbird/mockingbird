@@ -107,6 +107,9 @@ export const LINK_SETTINGS_FIELD_ID = 'e41d2d4b-4c5d-4467-a8d6-0cfa23577501';
 // LayoutService rendering-entry emission contract (0.4.0.14).
 // Read at emission time to port Sitecore's `PlaceholderTransformer` + `RenderingContentsResolver` contracts.
 
+/** Field ID of `__Renderings` - the shared SXA layout field that holds the authored presentation XML. */
+export const RENDERINGS_FIELD_ID = 'f1a1fe9e-a60c-4ddb-a3a0-bb5b29fe732e';
+
 /** Field ID of `__Final Renderings` - the versioned SXA layout field used across pages, partials, and page designs. */
 export const FINAL_RENDERINGS_FIELD_ID = '04bf00db-f5fb-41f7-8ab7-22408372a981';
 

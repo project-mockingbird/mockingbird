@@ -56,6 +56,15 @@ export interface TemplateFieldSchema {
   shared: boolean;
   unversioned: boolean;
   sortOrder: number;
+  /**
+   * The lowercase id of the template that directly declares this field.
+   * Populated by `collectOwnSections` and survives the section-name merge in
+   * `getTemplateSchema`, so filtering `ownFields` at the field level (rather
+   * than the section level) correctly excludes base-template fields appended
+   * into a same-named merged section.
+   * Empty string for off-chain fields added by `enrichSchemaWithStoredFields`.
+   */
+  sourceTemplateId: string;
 }
 
 export interface TemplateSectionSchema {
@@ -158,6 +167,7 @@ function collectOwnSections(templateItem: UnifiedItem, engine: Engine, isStandar
         shared: getSharedField(fieldChild, FIELD_IDS.shared) === '1',
         unversioned: getSharedField(fieldChild, FIELD_IDS.unversioned) === '1',
         sortOrder: parseSortOrder(getSharedField(fieldChild, FIELD_IDS.sortorder)),
+        sourceTemplateId: templateId,
       });
     }
 
@@ -401,6 +411,7 @@ export function enrichSchemaWithStoredFields(
         shared: getSharedField(fieldDef, FIELD_IDS.shared) === '1',
         unversioned: getSharedField(fieldDef, FIELD_IDS.unversioned) === '1',
         sortOrder: parseSortOrder(getSharedField(fieldDef, FIELD_IDS.sortorder)),
+        sourceTemplateId: '',
       },
     });
   }

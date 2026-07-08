@@ -6,7 +6,7 @@ declare module 'fastify' {
     extendMockingbirdSchema?: () => void;
   }
 }
-import { GraphQLJSON } from 'graphql-scalars';
+import { GraphQLJSON, GraphQLLong } from 'graphql-scalars';
 import type { Engine } from '../../engine/index.js';
 import type { ScsItem, ItemNode } from '../../engine/types.js';
 import { resolveLayout } from '../../engine/layout/index.js';
@@ -22,12 +22,17 @@ import {
 } from '../../engine/schema/generate.js';
 import {
   resolveSearch,
-  searchItemId,
   type SearchWhere,
+  encodeCursor,
+  decodeCursor,
 } from '../../engine/search/index.js';
-import { parseGuidList, toCanonicalGuid } from '../../engine/guid.js';
-import { FIELD_IDS } from '../../engine/constants.js';
+import { parseGuidList, toCanonicalGuid, formatGuidEdge, normalizeGuid } from '../../engine/guid.js';
+import { FIELD_IDS, FINAL_RENDERINGS_FIELD_ID, RENDERINGS_FIELD_ID } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
+import { getTemplateSchema, type TemplateFieldSchema } from '../../engine/template-schema.js';
+import { parseAuthoredAttrs } from '../../engine/render-field/html-utils.js';
+import { buildMediaSrc, buildMediaUrlPath, readSharedString } from '../../engine/render-field/media.js';
+import { EXTENSION_FIELD_ID, MIME_TYPE_FIELD_ID } from '../../engine/constants.js';
 import { referenceUrl } from '../../engine/layout/url-utils.js';
 import { rewriteRichText, expandXaVariableSpans, containsXaVariableSpan } from '../../engine/render-field/rich-text.js';
 import {
@@ -62,6 +67,99 @@ function withLanguage(item: ScsItem, language: string): LangTaggedItem {
 function langOf(item: ScsItem): string {
   const tagged = item as LangTaggedItem;
   return tagged[LANG_SYM] ?? 'en';
+}
+
+/**
+ * Symbol tag carrying the pre-built presentation envelope for a route item
+ * returned by the `layout` resolver. Mirrors the `LANG_SYM` pattern: the tag
+ * is scoped to this file, never collides with a real ScsItem property, and is
+ * read only by the `Item.rendered` field resolver.
+ *
+ * Items fetched via `Query.item` (no render context) leave this tag absent,
+ * so `rendered` correctly returns `{}` for those paths.
+ */
+const RENDERED_SYM: unique symbol = Symbol('mockingbird.rendered');
+type RenderedTaggedItem = LangTaggedItem & { [RENDERED_SYM]?: unknown };
+
+/**
+ * Return a language- and rendered-tagged copy of `item`. The returned object
+ * carries both `LANG_SYM` (so `langOf` reads the right language) and
+ * `RENDERED_SYM` (so `Item.rendered` returns the pre-built envelope). Both
+ * tags are stamped in one `Object.assign` call to avoid a second shallow-copy.
+ */
+function withRendered(item: ScsItem, language: string, rendered: unknown): RenderedTaggedItem {
+  return Object.assign({}, item, { [LANG_SYM]: language, [RENDERED_SYM]: rendered }) as RenderedTaggedItem;
+}
+
+/**
+ * GraphQL input shape for the `ItemSearchPredicate` input type.
+ * Mirrors the SDL declaration (recursive AND/OR, plus leaf clause fields).
+ */
+interface ItemSearchPredicate {
+  name?: string | null;
+  value?: string | null;
+  operator?: string | null;
+  AND?: ItemSearchPredicate[] | null;
+  OR?: ItemSearchPredicate[] | null;
+}
+
+/**
+ * Extract the language from a top-level `_language` clause in the
+ * `ItemSearchPredicate.AND` array. Falls back to `'en'` when absent.
+ * The language tag is applied to each result item so field reads use the
+ * correct versioned value.
+ */
+function searchLanguageOf(where: ItemSearchPredicate | null | undefined): string {
+  const clauses = where?.AND ?? [];
+  for (const clause of clauses) {
+    if (clause.name === '_language' && clause.value) {
+      return clause.value.trim();
+    }
+  }
+  return 'en';
+}
+
+/**
+ * Derive a human-readable name for `code` in `displayLocale` using the ECMA-402
+ * `Intl.DisplayNames` API. Falls back to `code` on any error or when the API
+ * returns undefined (e.g. unrecognised codes in older V8 builds).
+ */
+function resolveDisplayName(code: string, displayLocale: string): string {
+  try {
+    const dn = new Intl.DisplayNames([displayLocale], { type: 'language' });
+    return dn.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+/** Build an `ItemLanguage` object for the given language code. */
+function buildItemLanguage(code: string): {
+  name: string;
+  englishName: string;
+  nativeName: string;
+  displayName: string;
+} {
+  return {
+    name: code,
+    // English name: how English speakers name this language
+    englishName: resolveDisplayName(code, 'en'),
+    // Native name: how native speakers name this language
+    nativeName: resolveDisplayName(code, code),
+    // displayName mirrors englishName - matches Edge's `displayName` field
+    displayName: resolveDisplayName(code, 'en'),
+  };
+}
+
+/**
+ * Return the highest version number the item has in the requested language,
+ * or 1 if the language is absent or has no versions. Mirrors Sitecore's
+ * `Item.Version.Number` behaviour where version 1 is the minimum.
+ */
+function resolveItemVersion(item: ScsItem): number {
+  const lang = item.languages.find(l => l.language === langOf(item));
+  if (!lang || lang.versions.length === 0) return 1;
+  return Math.max(...lang.versions.map(v => v.version));
 }
 
 /**
@@ -136,164 +234,463 @@ const GRAPHIQL_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const BASE_SCHEMA = `
+/**
+ * URI-decode a string, suppressing any `URIError` on malformed sequences.
+ * Used by the Name Value List resolver to decode `key=value` pairs.
+ */
+function safeDecodeURI(s: string): string {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+/**
+ * Map a `TemplateFieldSchema` entry and its parent section metadata to the
+ * `ItemTemplateField` wire shape. Called from three resolver sites:
+ * - `readHint`'s `definition` builder (inline field-definition lookup)
+ * - `ItemTemplate.ownFields` resolver
+ * - `ItemTemplate.fields` resolver
+ *
+ * A single definition here prevents the three sites from drifting when the
+ * field mapping changes. Preserves exact current output: `title` maps from
+ * `f.displayName`, not `f.name`.
+ */
+function toItemTemplateField(
+  f: TemplateFieldSchema,
+  sectionName: string,
+  sectionSortOrder: number,
+): {
+  name: string; title: string; type: string; source: string;
+  shared: boolean; unversioned: boolean; sortOrder: number;
+  section: string; sectionSortOrder: number;
+} {
+  return {
+    name: f.name,
+    title: f.displayName,
+    type: f.type,
+    source: f.source,
+    shared: f.shared,
+    unversioned: f.unversioned,
+    sortOrder: f.sortOrder,
+    section: sectionName,
+    sectionSortOrder,
+  };
+}
+
+/**
+ * Format a raw GUID string in .NET Guid.ToString(format) style for Edge parity.
+ * Shared by both ItemField.id and Item.id resolvers (DRY).
+ *
+ * Formats:
+ *   N (default): 32-hex uppercase, no dashes  (88DA64DE28B64620B1085D8C61564F6F)
+ *   D: lowercase hex with dashes              (88da64de-28b6-4620-b108-5d8c61564f6f)
+ *   B: {uppercase-dashed}                     ({88DA64DE-28B6-4620-B108-5D8C61564F6F})
+ *   P: (uppercase-dashed)                     ((88DA64DE-28B6-4620-B108-5D8C61564F6F))
+ *
+ * Non-GUID strings (test fixtures, partial ids) pass through: dashes removed and
+ * uppercased for N/B/P, left as-is for D.
+ */
+function applyGuidFormat(raw: string, format?: string): string {
+  const fmt = (format ?? 'N').toUpperCase();
+  const canonical = toCanonicalGuid(raw) ?? raw;
+  if (fmt === 'D') return canonical;
+  if (fmt === 'B') return `{${canonical.toUpperCase()}}`;
+  if (fmt === 'P') return `(${canonical.toUpperCase()})`;
+  // Default "N": 32-hex uppercase, no dashes
+  return formatGuidEdge(canonical);
+}
+
+export const BASE_SCHEMA = `
   scalar JSON
+  scalar Long
+
+  enum OrderByDirection {
+    ASC
+    DESC
+  }
+
+  enum RedirectType {
+    REDIRECT_301
+    REDIRECT_302
+    SERVER_TRANSFER
+  }
 
   type Query {
-    layout(site: String!, routePath: String!, language: String!): LayoutResponse
-    site: SiteQuery!
-    item(path: String!, language: String!): AnyItem
-    search(where: SearchWhere, first: Int = 50, after: String): SearchResults!
+    layout(site: String!, routePath: String!, language: String!): LayoutData
+    site: SiteData!
+    item(path: String!, language: String!): Item
+    search(where: ItemSearchPredicate!, first: Int = 10, after: String, orderBy: ItemSearchOrderByInput): ItemSearchResults
   }
 
-  interface AnyItem {
-    id: ID!
+  type ItemLanguage {
+    name: String!
+    englishName: String!
+    nativeName: String!
+    displayName: String!
+  }
+
+  interface Item {
+    id(format: String = "N"): ID!
     name: String!
     displayName: String
     path: String!
-    language: String!
+    language: ItemLanguage!
+    version: Int!
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!
+    fields(ownFields: Boolean = false): [ItemField!]!
+    children(includeTemplateIDs: [String!], hasLayout: Boolean, first: Int, after: String): ItemSearchResults!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
+    hasChildren(includeTemplateIDs: [String!], hasLayout: Boolean): Boolean!
+    rendered: JSON!
+    languages: [Item!]!
   }
 
-  type Item implements AnyItem {
-    id: ID!
+  type UnknownItem implements Item {
+    id(format: String = "N"): ID!
     name: String!
     displayName: String
     path: String!
-    language: String!
+    language: ItemLanguage!
+    version: Int!
     template: ItemTemplate!
     url: ItemUrl
     field(name: String!): ItemField
-    children(includeTemplateIDs: [String!], first: Int, after: String): AnyItemChildrenConnection!
-    parent: AnyItem
-    ancestors(includeTemplateIDs: [String!]): [AnyItem!]!
-    hasChildren(includeTemplateIDs: [String!]): Boolean!
+    fields(ownFields: Boolean = false): [ItemField!]!
+    children(includeTemplateIDs: [String!], hasLayout: Boolean, first: Int, after: String): ItemSearchResults!
+    parent: Item
+    ancestors(includeTemplateIDs: [String!], hasLayout: Boolean): [Item!]!
+    hasChildren(includeTemplateIDs: [String!], hasLayout: Boolean): Boolean!
+    rendered: JSON!
+    languages: [Item!]!
   }
 
   type ItemTemplate {
     id: ID!
     name: String!
     baseTemplates: [ItemTemplate!]
+    ownFields: [ItemTemplateField!]
+    fields: [ItemTemplateField!]
+  }
+
+  type ItemTemplateField {
+    name: String!
+    title: String!
+    type: String!
+    source: String!
+    shared: Boolean!
+    unversioned: Boolean!
+    sortOrder: Int!
+    section: String!
+    sectionSortOrder: Int!
   }
 
   type ItemUrl {
     url: String!
     path: String!
     siteName: String!
+    hostName: String!
+    scheme: String!
   }
 
-  type ItemField {
+  interface ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
     value: String
-    jsonValue: JSON
+    definition: ItemTemplateField
     boolValue: Boolean
     numberValue: Float
-    dateValue: String
-    targetItem: AnyItem
-    targetItems: [AnyItem!]
+    targetItem: Item
+    targetItems: [Item!]
   }
 
-  type AnyItemChildrenConnection {
-    results: [AnyItem!]!
+  type TextField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
   }
 
-  input SearchWhere {
-    AND: [SearchClause!]
-  }
-
-  input SearchClause {
+  type NameValueListValue {
     name: String!
     value: String!
-    operator: SearchOperator
+  }
+
+  type LinkField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    anchor: String
+    queryString: String
+    className: String
+    text: String
+    target: String
+    linkType: String
+    url: String
+  }
+
+  type ImageField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    src(maxWidth: Int, maxHeight: Int): String
+    alt: String
+    width: String
+    height: String
+  }
+
+  type FileField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    url: String
+  }
+
+  type MediaItemField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    title: String
+    keywords: String
+    description: String
+    extension: String
+    mimeType: String
+    size: Int
+  }
+
+  type DateField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    dateValue: Long
+    formattedDateValue(format: String, offset: String): String
+  }
+
+  type CheckboxField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type NumberField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type IntegerField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    intValue: Int
+  }
+
+  type LookupField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+  }
+
+  type MultilistField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    targetIds: [String!]
+    count: Int
+  }
+
+  type NameValueListField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
+    values: [NameValueListValue!]
+  }
+
+  type RichTextField implements ItemField {
+    id(format: String = "N"): ID!
+    name: String!
+    jsonValue: JSON!
+    value: String
+    definition: ItemTemplateField
+    boolValue: Boolean
+    numberValue: Float
+    targetItem: Item
+    targetItems: [Item!]
   }
 
   enum SearchOperator {
     EQ
     CONTAINS
+    NEQ
+    NCONTAINS
+    LT
+    LTE
+    GT
+    GTE
   }
 
-  type SearchResults {
-    pageInfo: PageInfo!
-    results: [SearchItem!]!
-  }
-
-  type SearchItem {
-    id: ID!
-    url: SearchUrl
-    field(name: String!): SearchField
-  }
-
-  type SearchUrl {
-    url: String!
-    path: String!
-    siteName: String!
-  }
-
-  type SearchField {
-    value: String
-  }
-
-  type LayoutResponse {
-    item: LayoutItem
-  }
-
-  type LayoutItem {
-    rendered: JSON
-  }
-
-  type SiteQuery {
-    siteInfo(site: String!): SiteInfo
-    siteInfoCollection: [SiteInfoSummary!]!
-  }
-
-  type SiteInfoSummary {
+  input ItemSearchOrderByInput {
     name: String!
-    hostname: String!
-    language: String!
-    rootPath: String!
-    startItem: String!
+    direction: OrderByDirection
+  }
+
+  input ItemSearchPredicate {
+    name: String
+    value: String
+    operator: SearchOperator
+    AND: [ItemSearchPredicate!]
+    OR: [ItemSearchPredicate!]
+  }
+
+  type ItemSearchResults {
+    results: [Item!]!
+    total: Int!
+    pageInfo: PageInfo!
+  }
+
+  type LayoutData {
+    item: Item
+  }
+
+  type SiteData {
+    siteInfo(site: String!): SiteInfo
+    siteInfoCollection: [SiteInfo!]!
+    allSiteInfo(pageSize: Int, pageNumber: Int): SiteInfoResult
+  }
+
+  type SiteInfoResult {
+    results: [SiteInfo!]!
+    total: Int!
   }
 
   type SiteInfo {
-    redirects: [Redirect!]!
-    errorHandling(language: String!): ErrorHandling!
-    dictionary(language: String!, first: Int, after: String): DictionaryConnection!
+    name: String!
+    rootPath: String!
+    hostname: String
+    language: String
+    startItem: String
+    robots: String
+    sitemap: [String!]
+    redirects: [RedirectInfo!]!
+    errorHandling(language: String!): ErrorHandlingInfo
+    routes(language: String!, includedPaths: [String!], excludedPaths: [String!], after: String, first: Int): RoutesResult
+    dictionary(language: String!, first: Int, after: String): DictionaryResult
+    attributes: [KeyValuePair!]
   }
 
-  type Redirect {
+  type RedirectInfo {
     pattern: String!
     target: String!
-    redirectType: String!
+    redirectType: RedirectType!
     isQueryStringPreserved: Boolean!
     isLanguagePreserved: Boolean!
     locale: String!
   }
 
-  type ErrorHandling {
-    notFoundPage: LayoutItem
-    notFoundPagePath: String!
-    serverErrorPage: LayoutItem
-    serverErrorPagePath: String!
+  type ErrorHandlingInfo {
+    notFoundPagePath: String
+    notFoundPage: Item
+    serverErrorPagePath: String
+    serverErrorPage: Item
   }
 
-  type DictionaryConnection {
+  type Route {
+    route: Item!
+    routePath: String!
+  }
+
+  type RoutesResult {
+    results: [Route!]!
+    total: Int!
     pageInfo: PageInfo!
-    results: [DictionaryItem!]!
+  }
+
+  type DictionaryResult {
+    results: [KeyValuePair!]!
+    total: Int!
+    pageInfo: PageInfo!
+  }
+
+  type KeyValuePair {
+    key: String!
+    value: String!
   }
 
   type PageInfo {
     endCursor: String
     hasNext: Boolean!
-  }
-
-  type DictionaryItem {
-    key: String!
-    value: String!
   }
 `;
 
@@ -313,10 +710,17 @@ export async function registerGraphQLRoutes(
     // SiteDefinition's rootPath + startItem into that absolute base.
     const rootPath = ctx.site ? routeBaseForSite(ctx.site) : '';
     const name = ctx.site?.name ?? '';
+    // hostname may be pipe-delimited (multiple bound hostnames); take the
+    // first entry for the scalar value, falling back to empty string when
+    // ctx.site is null.
+    const rawHostname = ctx.site?.hostname ?? '';
+    const hostName = rawHostname.split('|')[0].trim();
     return {
       url: item.path,
       path: referenceUrl(item.path, rootPath),
       siteName: name,
+      hostName,
+      scheme: 'https',
     };
   };
 
@@ -330,19 +734,21 @@ export async function registerGraphQLRoutes(
   // once `engine.readiness.ready()` resolves.
   //
   // `templatesById` and `generatedTypeNames` are shared mutable state
-  // between the initial resolver (which just returns 'Item') and the
+  // between the initial resolver (which just returns 'UnknownItem') and the
   // post-readiness augmentation. Before indexing completes, no query
   // reaches mercurius anyway - the readiness gate 503s `/api/*`.
   let generatedTemplatesById = new Map<string, { typeName: string }>();
-  let generatedTypeNames = new Set<string>(['Item']);
+  let generatedTypeNames = new Set<string>(['UnknownItem']);
 
   const resolveTypename = (item: ScsItem): string => {
     const tmplDesc = generatedTemplatesById.get(item.template.toLowerCase());
     if (tmplDesc && generatedTypeNames.has(tmplDesc.typeName)) {
       return tmplDesc.typeName;
     }
-    return 'Item';
+    return 'UnknownItem';
   };
+
+  const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
 
   // Field wrappers must never be null for an explicitly-queried field -
   // real Experience Edge always returns the object and sets the inner
@@ -350,21 +756,20 @@ export async function registerGraphQLRoutes(
   // into `wrapper.jsonValue.value.src` and similar without guarding on the
   // wrapper itself, so returning null here crashes the component tree.
   //
-  // For an unset field: `value = ""`, `boolValue = false`, `jsonValue = null`.
+  // For an unset field: `value = ""`, `boolValue = false`, `jsonValue = { value: "" }`.
   // For a set field: the raw string is exposed via `value`; `boolValue`
   // maps Sitecore checkbox `"1"`/`"0"` to true/false (any other value is
   // false - consuming apps only read `boolValue` on actual checkbox
   // fields); `jsonValue` is routed through `buildJsonValue`, which emits
   // the Edge-shape parsed object for image / link XML and falls through
-  // to `{ value: raw }` for anything else.
+  // to `{ value: raw }` for anything else. `jsonValue` is always non-null
+  // (JSON!) matching the real Edge contract.
   const readHint = (item: ScsItem, hint: string, ctx: MercuriusContext) => {
     const v = readItemFieldByHint(item, hint, langOf(item));
     const raw = v?.value ?? '';
     // `lookupFieldType` walks the item's template (cached) so buildJsonValue
-    // can emit the empty-string image/link shape for unset image/link
-    // fields instead of `null`. Unknown types fall back to `null` so we
-    // don't synthesize `{ value: "" }` on text/integer fields consuming
-    // apps never query `jsonValue` on.
+    // can emit the typed empty shape for unset image/link fields, and
+    // `{ value: "" }` for unknown/generic types. Never returns null.
     const fieldType = lookupFieldType(item, hint, ctx.engine);
     // 0.4.0.31: `.value` on Rich Text fields is the rewritten (rendered)
     // output - dynamic-link tokens, media tokens, and xa-variable spans
@@ -395,14 +800,43 @@ export async function registerGraphQLRoutes(
     } else {
       value = raw;
     }
-    const result = {
+
+    // Look up the field-definition item in the template schema so we can
+    // expose its GUID (for ItemField.id) and its full metadata (for
+    // ItemField.definition). Falls back to ZERO_GUID / null when the item
+    // has no typed template or the field isn't declared there.
+    let fieldDefId = ZERO_GUID;
+    let definition: ReturnType<typeof toItemTemplateField> | null = null;
+    try {
+      const tmplSchema = getTemplateSchema(item.template, ctx.engine);
+      const target = hint.toLowerCase();
+      let found = false;
+      for (const section of tmplSchema.sections) {
+        if (found) break;
+        for (const f of section.fields) {
+          if (f.name && f.name.toLowerCase() === target) {
+            fieldDefId = f.id || ZERO_GUID;
+            definition = toItemTemplateField(f, section.name, section.sortOrder);
+            found = true;
+            break;
+          }
+        }
+      }
+    } catch {
+      // template schema unavailable - fieldDefId stays ZERO_GUID
+    }
+
+    return {
+      __fieldType: fieldType,
+      __id: fieldDefId,
+      name: hint,
       value,
       boolValue: raw === '1' ? true : false,
       numberValue: parseFieldNumber(raw),
       dateValue: parseFieldDate(raw),
       jsonValue: buildJsonValue(raw, ctx.engine, rootPath, fieldType),
+      definition,
     };
-    return result;
   };
 
   // True iff `item` has at least one version in `language`. Mockingbird
@@ -415,18 +849,227 @@ export async function registerGraphQLRoutes(
     return !!lang && lang.versions.length > 0;
   };
 
-  const ZERO_GUID = '00000000-0000-0000-0000-000000000000';
+  // Sitecore field-type string -> GraphQL concrete type name. Any type not
+  // listed here (or any type whose concrete type isn't yet registered) falls
+  // back to TextField. Phase C2 adds the remaining concrete types.
+  const FIELD_TYPE_TO_GQL: Record<string, string> = {
+    'general link': 'LinkField', 'link': 'LinkField',
+    'image': 'ImageField', 'file': 'FileField', 'media item': 'MediaItemField',
+    'date': 'DateField', 'datetime': 'DateField',
+    'checkbox': 'CheckboxField',
+    'number': 'NumberField', 'integer': 'IntegerField',
+    'droplink': 'LookupField', 'droptree': 'LookupField', 'reference': 'LookupField',
+    'multilist': 'MultilistField', 'treelist': 'MultilistField', 'checklist': 'MultilistField',
+    'name value list': 'NameValueListField', 'name lookup value list': 'NameValueListField',
+    'rich text': 'RichTextField',
+  };
 
-  // Shared resolver for every generated `AnyItem` implementer. Base fields
+  // Shared field-level resolver for TextField (and reused by C2 subtypes).
+  // The parent object is the enriched readHint result:
+  //   { __fieldType, __id, name, value, boolValue, numberValue, dateValue, jsonValue, definition }
+  const sharedItemFieldResolver = {
+    id: (parent: { __id?: string }, args: { format?: string }) =>
+      applyGuidFormat(parent.__id ?? ZERO_GUID, args?.format),
+    name: (parent: { name?: string }) => parent.name ?? '',
+    value: (parent: { value?: string }) => parent.value ?? null,
+    jsonValue: (parent: { jsonValue?: unknown }) => parent.jsonValue ?? { value: '' },
+    boolValue: (parent: { boolValue?: boolean | null }) => parent.boolValue ?? null,
+    numberValue: (parent: { numberValue?: number | null }) => parent.numberValue ?? null,
+    definition: (parent: { definition?: unknown }) => parent.definition ?? null,
+    // targetItem / targetItems: parse GUIDs from the raw field value and
+    // resolve each against the engine tree - identical to the old ItemField
+    // plain-type resolvers, now on the concrete TextField implementer.
+    targetItem: (parent: { value?: string }) => {
+      const ids = parseGuidList(parent?.value ?? undefined);
+      for (const id of ids) {
+        const node = engine.getItemById(id);
+        if (node) return node.item;
+      }
+      return null;
+    },
+    targetItems: (parent: { value?: string }) => {
+      const ids = parseGuidList(parent?.value ?? undefined);
+      const out: ScsItem[] = [];
+      for (const id of ids) {
+        const node = engine.getItemById(id);
+        if (node) out.push(node.item);
+      }
+      return out;
+    },
+  };
+
+  // ---------------------------------------------------------------------------
+  // Per-type resolver additions for C2 concrete ItemField subtypes.
+  // Each object is spread with sharedItemFieldResolver when registering
+  // the type's resolver map entry. Parent shape is the readHint result:
+  //   { __fieldType, __id, name, value, boolValue, numberValue, dateValue, jsonValue, definition }
+  // ---------------------------------------------------------------------------
+
+  /** Read the jsonValue attrs object for link/image fields. */
+  const jvAttrs = (parent: { jsonValue?: unknown }): Record<string, string> | null => {
+    const jv = parent.jsonValue as { value?: unknown } | undefined;
+    const v = jv?.value;
+    return v && typeof v === 'object' ? (v as Record<string, string>) : null;
+  };
+
+  const linkFieldResolvers = {
+    url: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.href ?? null,
+    text: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.text ?? null,
+    anchor: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.anchor ?? null,
+    queryString: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.querystring ?? null,
+    className: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.class ?? null,
+    target: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.target ?? null,
+    linkType: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.linktype ?? null,
+  };
+
+  const imageFieldResolvers = {
+    // src honors optional maxWidth/maxHeight args; always applies mediaBaseUrl
+    // from the outer closure so the CDN prefix is consistent.
+    src: (parent: { value?: string }, args: { maxWidth?: number; maxHeight?: number } | null) => {
+      const attrs = parseAuthoredAttrs(parent.value ?? '');
+      const mediaId = normalizeGuid(attrs.mediaid ?? '');
+      if (!mediaId) return null;
+      const node = engine.getItemById(mediaId);
+      if (!node) return null;
+      const w = args?.maxWidth != null ? String(args.maxWidth) : (attrs.width ?? '');
+      const h = args?.maxHeight != null ? String(args.maxHeight) : (attrs.height ?? '');
+      const { src } = buildMediaSrc(node.item, mediaBaseUrl, w, h);
+      return src;
+    },
+    // alt/width/height are already in the pre-computed jsonValue.value attrs
+    alt: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.alt ?? null,
+    width: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.width ?? null,
+    height: (parent: { jsonValue?: unknown }) => jvAttrs(parent)?.height ?? null,
+  };
+
+  const fileFieldResolvers = {
+    url: (parent: { value?: string }) => {
+      // File field XML: <file mediaid="{GUID}" /> - parse mediaid and build path
+      const attrs = parseAuthoredAttrs(parent.value ?? '');
+      const mediaId = normalizeGuid(attrs.mediaid ?? '');
+      if (!mediaId) return null;
+      const node = engine.getItemById(mediaId);
+      if (!node) return null;
+      return `${mediaBaseUrl}${buildMediaUrlPath(node.item)}`;
+    },
+  };
+
+  // Helper: resolve the first GUID in `value` to a media item and return it.
+  const resolveMediaItem = (value: string | undefined): ScsItem | null => {
+    const ids = parseGuidList(value);
+    for (const id of ids) {
+      const node = engine.getItemById(id);
+      if (node) return node.item;
+    }
+    return null;
+  };
+
+  const mediaItemFieldResolvers = {
+    title: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readItemFieldByHint(media, 'title')?.value ?? null) : null;
+    },
+    keywords: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readItemFieldByHint(media, 'keywords')?.value ?? null) : null;
+    },
+    description: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readItemFieldByHint(media, 'description')?.value ?? null) : null;
+    },
+    extension: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readSharedString(media, EXTENSION_FIELD_ID) || null) : null;
+    },
+    mimeType: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      return media ? (readSharedString(media, MIME_TYPE_FIELD_ID) || null) : null;
+    },
+    size: (parent: { value?: string }) => {
+      const media = resolveMediaItem(parent.value);
+      if (!media) return null;
+      const raw = readItemFieldByHint(media, 'size')?.value;
+      if (!raw) return null;
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) ? n : null;
+    },
+  };
+
+  const dateFieldResolvers = {
+    // dateValue: faithful Edge type - epoch milliseconds as Long (not ISO string).
+    // Parses the raw Sitecore field value via the shared ISO normalizer, then
+    // converts to ms since epoch. Returns null for unset or unparseable values.
+    dateValue: (parent: { dateValue?: string | null }) => {
+      if (!parent.dateValue) return null;
+      const ms = Date.parse(parent.dateValue);
+      return Number.isNaN(ms) ? null : ms;
+    },
+    // Best-effort formatted date string; format/offset args accepted for
+    // schema parity with real Edge but not yet applied (returns ISO string).
+    formattedDateValue: (parent: { value?: string }, _args: { format?: string; offset?: string } | null) => {
+      return parseFieldDate(parent.value ?? '');
+    },
+  };
+
+  const integerFieldResolvers = {
+    intValue: (parent: { value?: string }) => {
+      const trimmed = (parent.value ?? '').trim();
+      if (!trimmed) return null;
+      const n = parseInt(trimmed, 10);
+      return Number.isFinite(n) ? n : null;
+    },
+  };
+
+  const multilistFieldResolvers = {
+    targetIds: (parent: { value?: string }) => parseGuidList(parent.value ?? undefined),
+    count: (parent: { value?: string }) => parseGuidList(parent.value ?? undefined).length,
+    // targetItems is already covered by sharedItemFieldResolver; keep here for
+    // clarity so MultilistField has an explicit targetItems entry.
+    targetItems: (parent: { value?: string }) => {
+      const ids = parseGuidList(parent.value ?? undefined);
+      const out: ScsItem[] = [];
+      for (const id of ids) {
+        const node = engine.getItemById(id);
+        if (node) out.push(node.item);
+      }
+      return out;
+    },
+  };
+
+  const nameValueListFieldResolvers = {
+    // Sitecore Name Value List stores `key=value` pairs separated by `&`.
+    // Keys and values may be URI-encoded; decode them before returning.
+    values: (parent: { value?: string }) => {
+      const raw = (parent.value ?? '').trim();
+      if (!raw) return [];
+      return raw.split('&')
+        .map(pair => {
+          const eq = pair.indexOf('=');
+          if (eq === -1) {
+            const name = safeDecodeURI(pair.trim());
+            return name ? { name, value: '' } : null;
+          }
+          return {
+            name: safeDecodeURI(pair.slice(0, eq).trim()),
+            value: safeDecodeURI(pair.slice(eq + 1).trim()),
+          };
+        })
+        .filter((p): p is { name: string; value: string } => !!p?.name);
+    },
+  };
+
+  // Shared resolver for every generated `Item` implementer. Base fields
   // are identical across types; template-specific fields delegate to the
   // generic `readItemFieldByHint` lookup via a `fieldResolverMap` that
   // translates each graphql field name back to its Sitecore source name.
   const sharedItemResolver: Record<string, (item: ScsItem, args: unknown, ctx: MercuriusContext) => unknown> = {
-    id: (item: ScsItem) => item.id,
+    id: (item: ScsItem, args: unknown) =>
+      applyGuidFormat(item.id, (args as { format?: string } | undefined)?.format),
     name: (item: ScsItem) => item.path.split('/').pop() ?? '',
     displayName: (item: ScsItem) => item.path.split('/').pop() ?? '',
     path: (item: ScsItem) => item.path,
-    language: (item: ScsItem) => langOf(item),
+    language: (item: ScsItem) => buildItemLanguage(langOf(item)),
+    version: (item: ScsItem) => resolveItemVersion(item),
     template: (item: ScsItem) => {
       const tmplNode = engine.getItemById(item.template);
       return {
@@ -436,27 +1079,50 @@ export async function registerGraphQLRoutes(
     },
     url: (item: ScsItem, _args: unknown, ctx: MercuriusContext) => buildItemUrl(item, ctx),
     field: (item: ScsItem, args: unknown, ctx: MercuriusContext) => readHint(item, (args as { name: string }).name, ctx),
+    fields: (item: ScsItem, args: unknown, ctx: MercuriusContext) => {
+      const { ownFields: ownOnly } = (args ?? {}) as { ownFields?: boolean | null };
+      let tmplSchema: ReturnType<typeof getTemplateSchema>;
+      try {
+        tmplSchema = getTemplateSchema(item.template, ctx.engine);
+      } catch {
+        return [];
+      }
+      const normalizedTemplateId = item.template.toLowerCase();
+      const out: ReturnType<typeof readHint>[] = [];
+      for (const section of tmplSchema.sections) {
+        for (const f of section.fields) {
+          if (!f.name) continue;
+          if (ownOnly && f.sourceTemplateId.toLowerCase() !== normalizedTemplateId) continue;
+          out.push(readHint(item, f.name, ctx));
+        }
+      }
+      return out;
+    },
     children: (item: ScsItem, args: unknown) => {
       const node = engine.getItemById(item.id);
-      if (!node) return { results: [] };
+      if (!node) return { results: [], total: 0, pageInfo: { hasNext: false, endCursor: null } };
       const { includeTemplateIDs, first } = (args ?? {}) as {
         includeTemplateIDs?: string[] | null;
+        hasLayout?: boolean | null;
         first?: number | null;
         after?: string | null;
       };
       // Each child inherits the parent's requested language so the
       // child's own field reads stay consistent across a query tree.
       const lang = langOf(item);
-      let results = resolveItemChildren(engine, node, includeTemplateIDs).map(n => withLanguage(n.item, lang));
+      const filtered = resolveItemChildren(engine, node, includeTemplateIDs).map(n => withLanguage(n.item, lang));
+      // total is the count of filtered children BEFORE the first-slice.
+      const total = filtered.length;
       // `first` caps the result count after the template filter - matches the
       // semantics a head app expects from Experience Edge. `after` is accepted
       // for signature compatibility but unused: typical queries only issue
       // `first:`, and mockingbird doesn't surface a pagination cursor on this
       // connection shape.
+      let results = filtered;
       if (typeof first === 'number' && first >= 0) {
         results = results.slice(0, first);
       }
-      return { results };
+      return { results, total, pageInfo: { hasNext: false, endCursor: null } };
     },
     // Sitecore EdgeSchema.ResolveParent: returns null when the parent has no
     // versions in the requested language (item exists but was never authored).
@@ -470,6 +1136,24 @@ export async function registerGraphQLRoutes(
       if (!hasVersionsInLanguage(parentNode.item, lang)) return null;
       return withLanguage(parentNode.item, lang);
     },
+    // rendered: returns the RENDERED_SYM envelope when the item was produced by
+    // the layout resolver (withRendered), otherwise returns an empty object.
+    // Items fetched via Query.item or search carry no RENDERED_SYM, so they
+    // correctly return {} - matching Sitecore Edge's contract where rendered
+    // is only meaningful on the layout route item.
+    rendered: (item: ScsItem) => {
+      const tagged = item as RenderedTaggedItem;
+      return tagged[RENDERED_SYM] ?? {};
+    },
+    // languages: one language-tagged item per language that has at least one
+    // version. Each returned item is tagged via withLanguage so its own field
+    // reads resolve under that language. Mirrors Sitecore Edge's
+    // item.languages connection (one entry per language version present).
+    languages: (item: ScsItem) => {
+      return item.languages
+        .filter(l => l.versions.length > 0)
+        .map(l => withLanguage(item, l.language));
+    },
     // Sitecore EdgeSchema.ResolveAncestors: walks Axes.GetAncestors() (root-
     // first) then .Reverse() to produce immediate-parent-first order. Filters
     // ancestors without versions in the requested language. Optional
@@ -478,11 +1162,15 @@ export async function registerGraphQLRoutes(
     // DescendsFrom transitive matching, but mockingbird's children resolver
     // doesn't, and consistency across the two ancestor/child predicates beats
     // partial fidelity to one of them.
+    // `hasLayout` is accepted for schema parity with XM Cloud Edge but
+    // intentionally ignored here - full filtering is deferred to Task E1
+    // once layout data is available per item.
     ancestors: (item: ScsItem, args: unknown) => {
       const node = engine.getItemById(item.id);
       if (!node) return [];
       const { includeTemplateIDs } = (args ?? {}) as {
         includeTemplateIDs?: string[] | null;
+        hasLayout?: boolean | null;
       };
       const lang = langOf(item);
       const out: ScsItem[] = [];
@@ -554,33 +1242,34 @@ export async function registerGraphQLRoutes(
     queryDepth,
     resolvers: {
       JSON: GraphQLJSON,
-      AnyItem: { resolveType: resolveTypename },
-      Item: sharedItemResolver,
+      Long: GraphQLLong,
+      Item: { resolveType: resolveTypename },
+      UnknownItem: sharedItemResolver,
+      // ItemField is now an interface - resolveType dispatches to the right
+      // concrete type using FIELD_TYPE_TO_GQL. Unknown field types (no template
+      // declaration, or a type not in the map) fall back to TextField.
       ItemField: {
-        // Real Experience Edge exposes both singular and plural reference
-        // accessors on an ItemField. `value` is the raw Sitecore field string
-        // (a brace-wrapped GUID for Droplink/Droptree, a pipe-delimited brace
-        // list for Treelist/Multilist). Parse GUIDs out and resolve each
-        // against the engine tree - items that aren't in the tree are
-        // dropped.
-        targetItem: (parent: { value?: string | null }) => {
-          const ids = parseGuidList(parent?.value ?? undefined);
-          for (const id of ids) {
-            const node = engine.getItemById(id);
-            if (node) return node.item;
-          }
-          return null;
-        },
-        targetItems: (parent: { value?: string | null }) => {
-          const ids = parseGuidList(parent?.value ?? undefined);
-          const out: ScsItem[] = [];
-          for (const id of ids) {
-            const node = engine.getItemById(id);
-            if (node) out.push(node.item);
-          }
-          return out;
-        },
+        resolveType: (f: { __fieldType?: string }) =>
+          FIELD_TYPE_TO_GQL[(f.__fieldType ?? '').toLowerCase()] ?? 'TextField',
       },
+      // TextField is the fallback concrete implementer of ItemField. All field
+      // resolvers are shared with C2 subtypes via sharedItemFieldResolver.
+      TextField: sharedItemFieldResolver,
+      // C2 concrete subtypes - each spreads sharedItemFieldResolver for the 10
+      // interface fields and adds per-type resolvers for the extra fields.
+      LinkField: { ...sharedItemFieldResolver, ...linkFieldResolvers },
+      ImageField: { ...sharedItemFieldResolver, ...imageFieldResolvers },
+      FileField: { ...sharedItemFieldResolver, ...fileFieldResolvers },
+      MediaItemField: { ...sharedItemFieldResolver, ...mediaItemFieldResolvers },
+      DateField: { ...sharedItemFieldResolver, ...dateFieldResolvers },
+      // Checkbox/Number/Lookup/RichText have no added fields beyond the interface
+      CheckboxField: sharedItemFieldResolver,
+      NumberField: sharedItemFieldResolver,
+      IntegerField: { ...sharedItemFieldResolver, ...integerFieldResolvers },
+      LookupField: sharedItemFieldResolver,
+      MultilistField: { ...sharedItemFieldResolver, ...multilistFieldResolvers },
+      NameValueListField: { ...sharedItemFieldResolver, ...nameValueListFieldResolvers },
+      RichTextField: sharedItemFieldResolver,
       ItemTemplate: {
         // Walk the template item's `__Base template` shared field (standard
         // Sitecore field, id 12c33f3f-…) and return one ItemTemplate record
@@ -609,6 +1298,40 @@ export async function registerGraphQLRoutes(
           }
           return out;
         },
+        // ownFields: fields defined directly on this template (not inherited).
+        // Filters at the FIELD level using field.sourceTemplateId, which is
+        // populated per-field in collectOwnSections. This correctly handles the
+        // common Sitecore pattern of a derived template adding a field to an
+        // inherited section (same section name): the merged section carries the
+        // derived template's sourceTemplateId, but base-template fields appended
+        // into it keep their own field.sourceTemplateId, so they are excluded here.
+        ownFields: (parent: { id: string }) => {
+          const canonical = toCanonicalGuid(parent.id) ?? parent.id;
+          const normalizedId = canonical.toLowerCase();
+          const schema = getTemplateSchema(canonical, engine);
+          const out: Array<ReturnType<typeof toItemTemplateField>> = [];
+          for (const section of schema.sections) {
+            for (const f of section.fields) {
+              if (f.sourceTemplateId.toLowerCase() !== normalizedId) continue;
+              out.push(toItemTemplateField(f, section.name, section.sortOrder));
+            }
+          }
+          return out;
+        },
+        // fields: the full flattened field set (own + inherited via base templates).
+        // Mirrors real Edge's ItemTemplate.fields which includes all fields
+        // visible on the template regardless of where they were defined.
+        fields: (parent: { id: string }) => {
+          const canonical = toCanonicalGuid(parent.id) ?? parent.id;
+          const schema = getTemplateSchema(canonical, engine);
+          const out: Array<ReturnType<typeof toItemTemplateField>> = [];
+          for (const section of schema.sections) {
+            for (const f of section.fields) {
+              out.push(toItemTemplateField(f, section.name, section.sortOrder));
+            }
+          }
+          return out;
+        },
       },
       Query: {
         site: () => ({}),
@@ -617,10 +1340,15 @@ export async function registerGraphQLRoutes(
           console.log(`[graphql] item path=${args.path} lang=${args.language} → ${result ? result.id : 'null'}`);
           return result ? withLanguage(result, args.language) : null;
         },
-        search: (_root: unknown, args: { where?: SearchWhere; first?: number; after?: string }) => {
-          const page = resolveSearch(engine, args.where, { first: args.first, after: args.after });
-          console.log(`[graphql] search clauses=${args.where?.AND?.length ?? 0} → ${page.results.length} results, hasNext=${page.pageInfo.hasNext}`);
-          return page;
+        search: (_root: unknown, args: { where?: ItemSearchPredicate; first?: number; after?: string; orderBy?: { name: string; direction?: 'ASC' | 'DESC' | null } | null }) => {
+          const page = resolveSearch(engine, args.where as unknown as SearchWhere, { first: args.first, after: args.after, orderBy: args.orderBy ?? undefined });
+          const lang = searchLanguageOf(args.where);
+          console.log(`[graphql] search clauses=${args.where?.AND?.length ?? 0} → ${page.results.length} results (total=${page.total}), hasNext=${page.pageInfo.hasNext}`);
+          return {
+            total: page.total,
+            pageInfo: page.pageInfo,
+            results: page.results.map(r => withLanguage(r.item, lang)),
+          };
         },
         layout: async (
           _root: unknown,
@@ -693,34 +1421,37 @@ export async function registerGraphQLRoutes(
           for (const arr of Object.values(route.placeholders)) walk(arr);
           console.log(`[graphql] layout site=${site.name} route=${routePath} lang=${language} → ${placeholders.length} ph, ${components} comp, ${elapsed}ms`);
 
-          return {
-            item: {
-              rendered: {
-                sitecore: {
-                  context: {
-                    pageEditing: false,
-                    site: { name: site.name },
-                    pageState: 'normal',
-                    editMode: 'chromes',
-                    language,
-                    itemPath: routePath,
-                  },
-                  route,
-                },
+          // Build the presentation envelope (unchanged structure from previous
+          // LayoutItem.rendered shape - existing tests continue to assert the
+          // exact sitecore.context and sitecore.route paths).
+          const envelope = {
+            sitecore: {
+              context: {
+                pageEditing: false,
+                site: { name: site.name },
+                pageState: 'normal',
+                editMode: 'chromes',
+                language,
+                itemPath: routePath,
               },
+              route,
             },
+          };
+
+          // Resolve the actual route item using route.itemId (avoids a second
+          // path lookup and guarantees we return the same item resolveLayout
+          // found - no path-vs-item divergence risk).
+          const routeItemNode = ctx.engine.getItemById(route.itemId);
+          if (!routeItemNode) {
+            return { item: null };
+          }
+
+          return {
+            item: withRendered(routeItemNode.item, language, envelope),
           };
         },
       },
-      SearchItem: {
-        id: (parent: { item: ScsItem }) => searchItemId(parent.item),
-        url: (parent: { item: ScsItem }, _args: unknown, ctx: MercuriusContext) => buildItemUrl(parent.item, ctx),
-        field: (parent: { item: ScsItem }, args: { name: string }) => {
-          const value = readItemFieldByHint(parent.item, args.name);
-          return value ? { value: value.value } : null;
-        },
-      },
-      SiteQuery: {
+      SiteData: {
         siteInfo: (
           _root: unknown,
           args: { site: string },
@@ -734,32 +1465,144 @@ export async function registerGraphQLRoutes(
           return site; // SiteDefinition or null - GraphQL handles null by skipping nested fields
         },
         siteInfoCollection: () => discoverSiteDefinitions(engine),
+        allSiteInfo: (
+          _root: unknown,
+          args: { pageSize?: number | null; pageNumber?: number | null },
+        ) => {
+          const all = discoverSiteDefinitions(engine);
+          const pageSize = args.pageSize ?? 10;
+          const pageNumber = args.pageNumber ?? 1;
+          const start = (pageNumber - 1) * pageSize;
+          const results = all.slice(start, start + pageSize);
+          return { results, total: all.length };
+        },
       },
       SiteInfo: {
+        // Scalar fields resolved directly from the SiteDefinition parent.
+        // Both siteInfo(site) and siteInfoCollection pass a SiteDefinition as
+        // the parent, so these resolvers work identically in both paths.
+        name: (parent: SiteDefinition) => parent.name,
+        rootPath: (parent: SiteDefinition) => parent.rootPath,
+        hostname: (parent: SiteDefinition) => parent.hostname || null,
+        language: (parent: SiteDefinition) => parent.language || null,
+        startItem: (parent: SiteDefinition) => parent.startItem || null,
+        // Fidelity gap: Mockingbird has no robots.txt source. Edge exposes a
+        // robots: String field populated from site-grouping data; return null
+        // (valid for a nullable String) until a source is wired in.
+        robots: () => null,
+        // Fidelity gap: Mockingbird has no sitemap source. Edge exposes
+        // sitemap: [String!] (list of sitemap URLs); return null (valid for a
+        // nullable list) until a source is wired in.
+        sitemap: () => null,
         redirects: (parent: SiteDefinition) => {
           // resolveRedirects expects the start-item path: it slices the last
           // segment to recover the SXA site root, then locates Settings/
           // Redirects under that root. Pass routeBaseForSite, not parent.rootPath
           // (the SXA site root) - otherwise the slice drops one segment too far.
           const list = resolveRedirects(engine, parent.name, routeBaseForSite(parent));
-          console.log(`[graphql] redirects site=${parent.name} → ${list.length} entries`);
+          console.log(`[graphql] redirects site=${parent.name} -> ${list.length} entries`);
           return list;
         },
-        // Stubs matching real Experience Edge output for sites with no error
-        // pages configured - Content SDK expects these shapes exactly.
-        errorHandling: () => ({
+        // ErrorHandlingInfo - return empty defaults (site definition does not expose
+        // 404/500 page settings; real Edge returns empty strings when unset).
+        errorHandling: (_parent: SiteDefinition, _args: { language: string }) => ({
+          notFoundPagePath: null,
           notFoundPage: null,
-          notFoundPagePath: '',
+          serverErrorPagePath: null,
           serverErrorPage: null,
-          serverErrorPagePath: '',
         }),
-        // Stub - mockingbird has no dictionary support. Edge returns an empty
-        // connection for sites without dictionary entries, and Content SDK
-        // paginates until `hasNext === false` so matching the shape is critical.
-        dictionary: () => ({
-          pageInfo: { endCursor: null, hasNext: false },
+        // routes: walk descendants of the site start item that have presentation.
+        // An item "has layout" when its shared __Renderings field is non-empty OR
+        // any version carries a non-empty __Final Renderings field. This matches
+        // the layout engine's primary has-layout signal without re-running the
+        // full page-design pipeline.
+        routes: (
+          parent: SiteDefinition,
+          args: {
+            language: string;
+            includedPaths?: string[] | null;
+            excludedPaths?: string[] | null;
+            first?: number | null;
+            after?: string | null;
+          },
+        ) => {
+          const routeBase = routeBaseForSite(parent);
+          const routeBaseLower = routeBase.toLowerCase();
+          const allRoutes: Array<{ route: ScsItem; routePath: string }> = [];
+
+          for (const node of engine.getAllItems()) {
+            const pathLower = node.item.path.toLowerCase();
+            // Must be under or at the route base (include the start item itself).
+            if (pathLower !== routeBaseLower && !pathLower.startsWith(routeBaseLower + '/')) continue;
+
+            // Has layout: check shared __Renderings field OR any versioned __Final Renderings.
+            const hasSharedRenderings = node.item.sharedFields.some(
+              f => (f.id === RENDERINGS_FIELD_ID || f.hint === '__Renderings') && f.value,
+            );
+            const hasFinalRenderings = node.item.languages.some(l =>
+              l.versions.some(v =>
+                v.fields.some(
+                  f => (f.id === FINAL_RENDERINGS_FIELD_ID || f.hint === '__Final Renderings') && f.value,
+                ),
+              ),
+            );
+            if (!hasSharedRenderings && !hasFinalRenderings) continue;
+
+            // Route path: strip the route base prefix; default to '/' for the root item.
+            const routePath = node.item.path.slice(routeBase.length) || '/';
+
+            // Apply includedPaths filter (route path must start with one of them).
+            if (args.includedPaths && args.includedPaths.length > 0) {
+              const rp = routePath.toLowerCase();
+              const included = args.includedPaths.some(p => rp.startsWith(p.toLowerCase()));
+              if (!included) continue;
+            }
+            // Apply excludedPaths filter (skip route path starting with any excluded prefix).
+            if (args.excludedPaths && args.excludedPaths.length > 0) {
+              const rp = routePath.toLowerCase();
+              const excluded = args.excludedPaths.some(p => rp.startsWith(p.toLowerCase()));
+              if (excluded) continue;
+            }
+
+            allRoutes.push({ route: withLanguage(node.item, args.language), routePath });
+          }
+
+          const total = allRoutes.length;
+          const offset = decodeCursor(args.after ?? null);
+          const first = args.first ?? 100;
+          const page = allRoutes.slice(offset, offset + first);
+          const end = offset + page.length;
+          const hasNext = end < total;
+
+          return {
+            results: page,
+            total,
+            pageInfo: { hasNext, endCursor: hasNext ? encodeCursor(end) : null },
+          };
+        },
+        // dictionary: best-effort resolver. SXA dictionary items live under
+        // <siteRoot>/Dictionary. Mockingbird has no dedicated dictionary template
+        // registry; return a valid-empty DictionaryResult when no dictionary data
+        // is present. Shape must match exactly: results, total, pageInfo.
+        dictionary: (
+          _parent: SiteDefinition,
+          _args: { language: string; first?: number | null; after?: string | null },
+        ) => ({
           results: [],
+          total: 0,
+          pageInfo: { endCursor: null, hasNext: false },
         }),
+        // attributes: expose SiteDefinition properties as key/value pairs.
+        // Real Edge surfaces site-grouping settings (name, hostname, language, etc.)
+        // as attributes; return the known SiteDefinition scalars.
+        attributes: (parent: SiteDefinition) => [
+          { key: 'name', value: parent.name },
+          { key: 'hostname', value: parent.hostname },
+          { key: 'language', value: parent.language },
+          { key: 'rootPath', value: parent.rootPath },
+          { key: 'startItem', value: parent.startItem },
+          { key: 'linkable', value: String(parent.linkable) },
+        ],
       },
     },
     context: (request) => buildResolverContext(request),
@@ -795,17 +1638,17 @@ export async function registerGraphQLRoutes(
         return;
       }
 
-      // Update the __typename dispatch map so Item resolver returns the
-      // right concrete type for each item's template at runtime.
+      // Update the __typename dispatch map so the resolveType function returns
+      // the right concrete type for each item's template at runtime.
       generatedTemplatesById = generated.templatesById;
       generatedTypeNames = new Set(generated.concreteTypeNames);
 
       // Extend the schema with base interfaces + per-template concrete
-      // types + the `extend type Item` field union.
+      // types + the `extend type UnknownItem` field union.
       app.graphql.extendSchema(generated.sdl);
 
       // Build resolvers for every newly-declared type. Every concrete
-      // template type AND the existing `Item` fallback share the same
+      // template type AND the existing `UnknownItem` fallback share the same
       // shared resolver - the difference is just which __typename graphql-js
       // routes each item to. Template-specific field resolvers are added
       // to `sharedItemResolver` dynamically so all types pick them up.
@@ -815,10 +1658,10 @@ export async function registerGraphQLRoutes(
       }
 
       const perTypeResolvers: Record<string, Record<string, unknown>> = {
-        Item: sharedItemResolver as unknown as Record<string, unknown>,
+        UnknownItem: sharedItemResolver as unknown as Record<string, unknown>,
       };
       for (const name of generated.concreteTypeNames) {
-        if (name === 'Item') continue;
+        if (name === 'UnknownItem') continue;
         perTypeResolvers[name] = sharedItemResolver as unknown as Record<string, unknown>;
       }
       app.graphql.defineResolvers(perTypeResolvers);

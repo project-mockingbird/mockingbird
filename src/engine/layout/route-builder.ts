@@ -13,9 +13,7 @@ import {
   executeComponentQueryRequests,
   type GraphQLExecutor,
 } from './component-query.js';
-
-/** Well-known field ID for __Renderings (layout reference). */
-const RENDERINGS_FIELD_ID = 'f1a1fe9e-a60c-4ddb-a3a0-bb5b29fe732e';
+import { RENDERINGS_FIELD_ID } from '../constants.js';
 
 /**
  * SXA JSS Layout item ID - `/sitecore/layout/Layouts/Foundation/JSS Experience

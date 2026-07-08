@@ -84,20 +84,20 @@ describe('GraphQL item(path, language) honors the language argument', () => {
   afterAll(async () => { await app.close(); });
 
   it('returns the requested language on Item.language', async () => {
-    // language is declared on the AnyItem interface, so we can query it
-    // without an inline fragment regardless of which concrete type the
-    // schema generator picks for this template.
+    // language is declared on the AnyItem interface as an ItemLanguage object,
+    // so we must select subfields. Query `language { name }` to verify the
+    // per-item requested-language propagation.
     const res = await app.inject({
       method: 'POST',
       url: '/sitecore/api/graph/edge',
       payload: {
-        query: `query { item(path: "/sitecore/content/site/Home", language: "de") { language } }`,
+        query: `query { item(path: "/sitecore/content/site/Home", language: "de") { language { name } } }`,
       },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.errors).toBeUndefined();
-    expect(body.data.item.language).toBe('de');
+    expect(body.data.item.language.name).toBe('de');
   });
 
   it('reads versioned field values for the requested language', async () => {
