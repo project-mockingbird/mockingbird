@@ -13,8 +13,12 @@ import {
   templateNameToTypeName,
   fieldNameToGraphQLFieldName,
   generateSchemaFromRegistry,
+  isIncludedOotbPath,
 } from '../../../src/engine/schema/generate.js';
 import { BASE_SCHEMA } from '../../../src/api/routes/graphql.js';
+import { Registry } from '../../../src/engine/registry.js';
+import { fileURLToPath } from 'url';
+import { resolve } from 'path';
 
 function makeItem(overrides: Partial<ScsItem> & { id: string; path: string }): ScsItem {
   return {
@@ -408,4 +412,43 @@ describe('Edge template->schema fidelity: fields keep their subtype (RC-B)', () 
     expect(iface).toContain('f_image: ImageField');
     expect(obj).toContain('f_image: ImageField');
   });
+});
+
+describe('Edge template->schema fidelity: OOTB registry templates (RC-C)', () => {
+  it('isIncludedOotbPath: Foundation/Feature/CMP/DAM/Modules in, System/infrastructure out', () => {
+    expect(isIncludedOotbPath('/sitecore/templates/Foundation/Experience Accelerator/Taxonomy/Datasource/Tag')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/Feature/Foo/Bar')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/CMP/Foo')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/DAM/Foo')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/System/Templates/Standard template')).toBe(false);
+    expect(isIncludedOotbPath('/sitecore/templates/Sitecore Client/Foo')).toBe(false);
+    expect(isIncludedOotbPath('/sitecore/templates/Branches/Foo')).toBe(false);
+    expect(isIncludedOotbPath(undefined)).toBe(false);
+  });
+
+  it('generates OOTB Foundation templates (Tag) with own fields, drops system fields, skips System templates', async () => {
+    // Real IAR registry: exercises the full OOTB generation path end to end.
+    const reg = new Registry();
+    const registryPath = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../data/registry.json.gz');
+    await reg.loadFromGzip(registryPath);
+
+    const engine = Object.create(Engine.prototype) as Engine;
+    (engine as unknown as { tree: ItemTree }).tree = new ItemTree();
+    (engine as unknown as { registry: Registry }).registry = reg;
+
+    const result = generateSchemaFromRegistry(engine);
+
+    // Tag (OOTB SXA template under Foundation) is now in the schema.
+    const tagId = '6b40e84c-8785-49fc-8a10-6bca862ff7ea';
+    const tag = result.templatesById.get(tagId);
+    expect(tag).toBeDefined();
+    const tagFields = [...(tag?.fields.keys() ?? [])];
+    expect(tagFields).toContain('title'); // own field, kept
+    // System (Standard-template) fields are excluded.
+    expect(tagFields).not.toContain('created');
+    expect(tagFields).not.toContain('workflow');
+
+    // A System-only template (Standard template) is NOT generated.
+    expect(result.templatesById.get('1930bbeb-7805-471a-a3be-4858ac7cf696')).toBeUndefined();
+  }, 30000);
 });

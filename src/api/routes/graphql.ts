@@ -1623,9 +1623,22 @@ export async function registerGraphQLRoutes(
   const runExtension = (): void => {
     if (schemaExtended) return;
     try {
-      const generated = generateSchemaFromRegistry(engine);
+      // Defer until a workspace is actually loaded. The IAR registry alone
+      // yields OOTB types, so generation is non-empty even at no-project boot -
+      // but flipping the one-shot flag then would permanently exclude the
+      // workspace's own templates (which index after boot). Gate on the item
+      // tree, not the SDL, so the real extension runs once the workspace loads.
+      if (engine.getAllItems().length === 0) {
+        console.log('[graphql] schema generator: no workspace loaded yet - deferring extension');
+        return;
+      }
+      // Reserve the already-registered base-schema type names so a generated
+      // OOTB template (e.g. an SXA "Route" template) is suffixed rather than
+      // redefining an existing type - extendSchema rejects duplicates.
+      const reservedTypeNames = Object.keys(app.graphql.schema.getTypeMap());
+      const generated = generateSchemaFromRegistry(engine, reservedTypeNames);
       if (generated.sdl.trim().length === 0) {
-        console.log('[graphql] schema generator produced no template types - tree is empty');
+        console.log('[graphql] schema generator produced no types');
         return;
       }
 

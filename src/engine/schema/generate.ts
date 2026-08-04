@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import type { Engine } from '../index.js';
-import type { ScsItem, ItemNode } from '../types.js';
+import type { ScsItem } from '../types.js';
 import { TEMPLATE_TEMPLATE_ID, FIELD_IDS } from '../constants.js';
 import { getTemplateSchema } from '../template-schema.js';
 import { graphqlTypeize, graphqlFieldize } from './name-normalizer.js';
@@ -79,22 +79,6 @@ function shortHash(input: string): string {
 }
 
 /**
- * Scan the engine tree for all items whose template is the Sitecore
- * `Template` template - these are the user-authored template definitions
- * whose fields the generator walks. The registry's template items are
- * also picked up since they're merged into the same tree.
- */
-function collectTemplateNodes(engine: Engine): ItemNode[] {
-  const out: ItemNode[] = [];
-  for (const node of engine.getAllItems()) {
-    if (node.item.template.toLowerCase() === TEMPLATE_TEMPLATE_ID) {
-      out.push(node);
-    }
-  }
-  return out;
-}
-
-/**
  * Read the `__Base template` shared field and parse out the referenced
  * template ids (brace-wrapped GUIDs), lowercased. Returns an empty array when
  * the field is absent or empty.
@@ -102,11 +86,81 @@ function collectTemplateNodes(engine: Engine): ItemNode[] {
  * Exported for reuse in the search engine's transitive base-template walk.
  */
 export function readBaseTemplateIds(item: ScsItem): string[] {
-  const raw = item.sharedFields.find(f => f.id.toLowerCase() === FIELD_IDS.baseTemplate)?.value;
+  return parseBaseTemplateValue(item.sharedFields.find(f => f.id.toLowerCase() === FIELD_IDS.baseTemplate)?.value);
+}
+
+/** Parse brace-wrapped GUIDs out of a `__Base template` field value (lowercased). */
+function parseBaseTemplateValue(raw: string | undefined): string[] {
   if (!raw) return [];
   const matches = raw.match(/\{[^}]+\}/g);
   if (!matches) return [];
   return matches.map(m => m.slice(1, -1).toLowerCase());
+}
+
+/** Case-insensitive lookup in a registry item's `sharedFields` record. */
+function recordGetCI(rec: Record<string, string>, key: string): string | undefined {
+  if (key in rec) return rec[key];
+  const lk = key.toLowerCase();
+  for (const k of Object.keys(rec)) if (k.toLowerCase() === lk) return rec[k];
+  return undefined;
+}
+
+/**
+ * OOTB template roots whose registry (IAR) templates are generated into the
+ * schema, matching Sitecore Edge's content-template inclusion scope. System
+ * templates and pure infrastructure (sitecore client, branches, sample) are
+ * excluded. Project / User Defined live in the serialized workspace, not the
+ * registry, so they arrive via the tree.
+ */
+export const OOTB_INCLUDE_ROOTS = [
+  '/sitecore/templates/foundation/',
+  '/sitecore/templates/feature/',
+  '/sitecore/templates/project/',
+  '/sitecore/templates/user defined/',
+  '/sitecore/templates/cmp/',
+  '/sitecore/templates/modules/',
+  '/sitecore/templates/dam/',
+];
+
+/** True when an OOTB registry template path is inside an included content root. */
+export function isIncludedOotbPath(path: string | undefined): boolean {
+  const p = (path ?? '').toLowerCase();
+  return OOTB_INCLUDE_ROOTS.some(root => p.startsWith(root));
+}
+
+/** A template to generate, unified across the serialized tree and the IAR registry. */
+interface TemplateSource {
+  id: string;
+  path: string;
+  baseIds: string[];
+}
+
+/**
+ * Collect every template to generate: serialized workspace templates PLUS OOTB
+ * registry templates inside the included content roots. Serialized templates
+ * override a registry template of the same id (a workspace can customize an
+ * OOTB template). Registry-only templates (e.g. SXA `Tag` under Foundation)
+ * are what let head-app fragments on OOTB types resolve.
+ */
+function collectTemplateSources(engine: Engine): TemplateSource[] {
+  const byId = new Map<string, TemplateSource>();
+  for (const r of engine.getRegistryTemplates()) {
+    if (!isIncludedOotbPath(r.path)) continue;
+    byId.set(r.id.toLowerCase(), {
+      id: r.id,
+      path: r.path,
+      baseIds: parseBaseTemplateValue(recordGetCI(r.sharedFields, FIELD_IDS.baseTemplate)),
+    });
+  }
+  for (const node of engine.getAllItems()) {
+    if (node.item.template.toLowerCase() !== TEMPLATE_TEMPLATE_ID) continue;
+    byId.set(node.item.id.toLowerCase(), {
+      id: node.item.id,
+      path: node.item.path,
+      baseIds: readBaseTemplateIds(node.item),
+    });
+  }
+  return [...byId.values()];
 }
 
 /**
@@ -141,14 +195,6 @@ function safeGetSchema(templateId: string, engine: Engine) {
   } catch {
     return { sections: [] };
   }
-}
-
-/**
- * Pull the human-readable name of a template item from its path. Mirrors
- * what the item editor shows in the UI.
- */
-function templateItemName(node: ItemNode): string {
-  return node.item.path.split('/').pop() ?? '';
 }
 
 /** Field names owned by the `Item` interface - a template field can't shadow these. */
@@ -187,12 +233,20 @@ const ANY_ITEM_FIELDS = `    id(format: String = "N"): ID!
  * field-type map, TextField fallback). Fields that collide with an `Item`
  * interface field, or normalize to an empty name, are dropped.
  */
-function computeFields(templateId: string, engine: Engine): Map<string, { sitecoreName: string; gqlType: string }> {
+function computeFields(
+  templateId: string,
+  engine: Engine,
+  isSystemSource: (sourceTemplateId: string) => boolean,
+): Map<string, { sitecoreName: string; gqlType: string }> {
   const fields = new Map<string, { sitecoreName: string; gqlType: string }>();
   const schema = safeGetSchema(templateId, engine);
   for (const section of schema.sections) {
     for (const f of section.fields) {
       if (!f.name) continue;
+      // Edge drops fields inherited from System templates (the Standard
+      // template's __-prefixed fields et al): ContentSchemaProvider filters
+      // base templates under /sitecore/templates/system.
+      if (f.sourceTemplateId && isSystemSource(f.sourceTemplateId)) continue;
       const gqlName = fieldNameToGraphQLFieldName(f.name);
       if (!gqlName || RESERVED_ITEM_FIELDS.has(gqlName)) continue;
       fields.set(gqlName, { sitecoreName: f.name, gqlType: sitecoreFieldTypeToGraphQLType(f.type) });
@@ -222,48 +276,69 @@ function computeFields(templateId: string, engine: Engine): Map<string, { siteco
  * BASE_SCHEMA and are already registered; this only emits the dynamic
  * additions, delivered via mercurius's `extendSchema`.
  */
-export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResult {
-  const templateNodes = collectTemplateNodes(engine);
+export function generateSchemaFromRegistry(
+  engine: Engine,
+  reservedTypeNames: Iterable<string> = [],
+): GeneratedSchemaResult {
+  const sources = collectTemplateSources(engine);
   const templatesById = new Map<string, GeneratedTemplate>();
   const fieldResolverMap = new Map<string, string>();
   const concreteTypeNames: string[] = ['UnknownItem'];
 
+  // Memoized "is this field's source a System template?" - Edge drops
+  // system-inherited fields. System (Standard-template) sources are OOTB, so
+  // their path resolves via the registry; a serialized source resolves to
+  // undefined -> not system -> kept.
+  const systemMemo = new Map<string, boolean>();
+  const isSystemSource = (sourceId: string): boolean => {
+    const key = sourceId.toLowerCase();
+    let v = systemMemo.get(key);
+    if (v === undefined) {
+      const p = engine.getRegistryItem(key)?.path?.toLowerCase() ?? '';
+      v = p.startsWith('/sitecore/templates/system/') || p === '/sitecore/templates/system';
+      systemMemo.set(key, v);
+    }
+    return v;
+  };
+
   // Direct base-template ids per template (lowercased), and the set of every
   // template that is inherited by another (Edge's `nonLeafTemplates`). A base
   // is only counted as non-leaf if it is itself one of the generated
-  // templates; out-of-set (e.g. OOTB-registry-only) bases are ignored here.
-  const inSet = new Set(templateNodes.map(n => n.item.id.toLowerCase()));
+  // templates; out-of-set (e.g. System) bases are ignored here.
+  const inSet = new Set(sources.map(s => s.id.toLowerCase()));
   const baseIdsById = new Map<string, string[]>();
   const nonLeafIds = new Set<string>();
-  for (const node of templateNodes) {
-    const id = node.item.id.toLowerCase();
-    const bases = readBaseTemplateIds(node.item);
-    baseIdsById.set(id, bases);
-    for (const b of bases) if (inSet.has(b)) nonLeafIds.add(b);
+  for (const s of sources) {
+    const id = s.id.toLowerCase();
+    baseIdsById.set(id, s.baseIds);
+    for (const b of s.baseIds) if (inSet.has(b)) nonLeafIds.add(b);
   }
 
   // Pass 1: assign clean/interface/concrete names (collision-suffixed) and
-  // compute each template's flattened, typed field set.
-  const usedTypeNames = new Set<string>(['UnknownItem']);
+  // compute each template's flattened, typed field set. Seed with the reserved
+  // base-schema type names (Item, ItemField, Route, SiteInfo, ...) so an OOTB
+  // template named e.g. "Route" gets suffixed instead of clashing with a base
+  // type - mirroring Edge's Novelizer blacklist.
+  const usedTypeNames = new Set<string>(['UnknownItem', ...reservedTypeNames]);
   const reserve = (name: string, seedId: string): string => {
     let candidate = name;
     if (usedTypeNames.has(candidate)) candidate = `${name}_${shortHash(seedId)}`;
     usedTypeNames.add(candidate);
     return candidate;
   };
-  for (const node of templateNodes) {
-    const id = node.item.id.toLowerCase();
-    const sitecoreName = templateItemName(node);
+  for (const s of sources) {
+    const id = s.id.toLowerCase();
+    const sitecoreName = s.path.split('/').pop() ?? '';
     const isNonLeaf = nonLeafIds.has(id);
-    const fields = computeFields(node.item.id, engine);
+    const fields = computeFields(s.id, engine, isSystemSource);
 
-    const cleanName = reserve(templateNameToTypeName(sitecoreName), node.item.id);
+    const cleanName = reserve(templateNameToTypeName(sitecoreName), s.id);
     const interfaceName = isNonLeaf && fields.size > 0 ? cleanName : null;
     // A non-leaf template's concrete object is `C__<Name>`; the clean name is
     // the interface. Leaf templates keep the clean name for the object.
-    const typeName = isNonLeaf ? reserve(`C__${cleanName}`, node.item.id) : cleanName;
+    const typeName = isNonLeaf ? reserve(`C__${cleanName}`, s.id) : cleanName;
 
-    templatesById.set(id, { typeName, interfaceName, sitecoreName, templateId: node.item.id, isNonLeaf, fields });
+    templatesById.set(id, { typeName, interfaceName, sitecoreName, templateId: s.id, isNonLeaf, fields });
   }
 
   const fieldLines = (fields: Map<string, { sitecoreName: string; gqlType: string }>): string =>
