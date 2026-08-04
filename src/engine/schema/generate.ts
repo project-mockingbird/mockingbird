@@ -2,13 +2,14 @@ import { createHash } from 'crypto';
 import type { Engine } from '../index.js';
 import type { ScsItem, ItemNode } from '../types.js';
 import { TEMPLATE_TEMPLATE_ID, FIELD_IDS } from '../constants.js';
-import { getTemplateSchema, type TemplateFieldSchema } from '../template-schema.js';
+import { getTemplateSchema } from '../template-schema.js';
 import { graphqlTypeize, graphqlFieldize } from './name-normalizer.js';
+import { sitecoreFieldTypeToGraphQLType } from './field-graphql-type.js';
 
 /**
  * Convert a Sitecore template **name** into a GraphQL type identifier.
  * Uses the Sitecore-faithful NameNormalizer (splits on spaces only,
- * preserves underscores). Empty or whitespace-only input returns `'Item'`.
+ * preserves underscores). Empty or whitespace-only input returns `'UnknownItem'`.
  */
 export function templateNameToTypeName(name: string): string {
   if (!name || !name.trim()) return 'UnknownItem';
@@ -38,42 +39,43 @@ export function fieldNameToGraphQLFieldName(name: string): string {
 
 /**
  * Descriptor for one template emitted into the generated schema. The
- * graphql route uses this to build the per-type resolver map and the
- * `AnyItem.resolveType` dispatcher.
+ * graphql route uses `typeName` to build the `Item.resolveType` dispatcher
+ * (it maps an item's template id to the concrete object type name).
  */
 export interface GeneratedTemplate {
+  /**
+   * Concrete object type name. Faithful to Edge's `UpdateTemplateGraphName`:
+   * a NON-LEAF template (one that other templates inherit) yields `C__<Name>`
+   * so its clean `<Name>` belongs to the interface; a leaf yields `<Name>`.
+   */
   typeName: string;
+  /** Interface name (`<Name>`) when this template is emitted as an interface, else null. */
+  interfaceName: string | null;
   sitecoreName: string;
   templateId: string;
-  /** True if the template name starts with `_` - emitted as an interface too. */
-  isBase: boolean;
-  /** Pascal-cased base template names this type implements. */
-  baseTypeNames: string[];
-  /** graphql field name → original Sitecore field name. */
-  fields: Map<string, string>;
+  /** True when some other template inherits this one (Edge's non-leaf rule). */
+  isNonLeaf: boolean;
+  /** graphql field name -> { sitecoreName, gqlType } for this template's flattened fields. */
+  fields: Map<string, { sitecoreName: string; gqlType: string }>;
 }
 
 /**
  * Result of schema generation: the SDL text fragment to concatenate onto
- * the base schema, a map from template id → generated descriptor, a flat
+ * the base schema, a map from template id -> generated descriptor, a flat
  * field-resolver map for every field name the schema exposes, and the
- * ordered list of every emitted concrete type (for resolver registration).
+ * ordered list of every emitted concrete object type (for resolver registration).
  */
 export interface GeneratedSchemaResult {
   sdl: string;
   templatesById: Map<string, GeneratedTemplate>;
-  /** graphql field name → original Sitecore field name (global across all types). */
+  /** graphql field name -> original Sitecore field name (global across all types). */
   fieldResolverMap: Map<string, string>;
-  /** Every concrete `type` name emitted, including `Item`. */
+  /** Every concrete `type` name emitted, including `UnknownItem`. */
   concreteTypeNames: string[];
 }
 
 function shortHash(input: string): string {
   return createHash('sha256').update(input).digest('hex').slice(0, 6);
-}
-
-function isBaseTemplateName(name: string): boolean {
-  return name.startsWith('_');
 }
 
 /**
@@ -94,8 +96,8 @@ function collectTemplateNodes(engine: Engine): ItemNode[] {
 
 /**
  * Read the `__Base template` shared field and parse out the referenced
- * template ids (brace-wrapped GUIDs). Returns an empty array when the
- * field is absent or empty.
+ * template ids (brace-wrapped GUIDs), lowercased. Returns an empty array when
+ * the field is absent or empty.
  *
  * Exported for reuse in the search engine's transitive base-template walk.
  */
@@ -108,27 +110,12 @@ export function readBaseTemplateIds(item: ScsItem): string[] {
 }
 
 /**
- * Walk the full `__Base template` chain for a template and return the type
- * names of every transitively-reachable base template that is emitted as an
- * interface (name starts with `_`). Required by the GraphQL spec: an
- * implementing type or interface must declare every transitively-implemented
- * interface, not just its direct bases. A type that reaches `_BaseAlpha`
- * only through the intermediate `_BaseBeta` interface must
- * still list `_BaseAlpha`.
- *
- * The walk traverses THROUGH non-interface intermediate templates (a concrete
- * base in the chain doesn't sever reachability) but only collects the
- * `_`-prefixed interface templates. Ordering is breadth-first in base-template
- * declaration order (direct bases before their bases); duplicates and the
- * starting template's own type name are dropped. Cycle-guarded via a visited
- * set on template ids, so a base-template cycle terminates instead of hanging.
+ * Breadth-first walk of the full `__Base template` chain from `startId`,
+ * returning every transitively-reachable base template id (lowercased) in
+ * declaration order, excluding `startId` itself. Cycle-guarded via a visited
+ * set so a base-template cycle terminates instead of hanging.
  */
-function collectTransitiveBaseInterfaces(
-  startId: string,
-  selfTypeName: string,
-  templatesById: Map<string, GeneratedTemplate>,
-  baseIdsById: Map<string, string[]>,
-): string[] {
+function collectTransitiveBaseIds(startId: string, baseIdsById: Map<string, string[]>): string[] {
   const result: string[] = [];
   const visited = new Set<string>([startId]);
   const queue = [...(baseIdsById.get(startId) ?? [])];
@@ -136,10 +123,7 @@ function collectTransitiveBaseInterfaces(
     const baseId = queue.shift()!;
     if (visited.has(baseId)) continue;
     visited.add(baseId);
-    const baseDesc = templatesById.get(baseId);
-    if (baseDesc && baseDesc.isBase && baseDesc.typeName !== selfTypeName && !result.includes(baseDesc.typeName)) {
-      result.push(baseDesc.typeName);
-    }
+    result.push(baseId);
     for (const next of baseIdsById.get(baseId) ?? []) queue.push(next);
   }
   return result;
@@ -167,11 +151,17 @@ function templateItemName(node: ItemNode): string {
   return node.item.path.split('/').pop() ?? '';
 }
 
+/** Field names owned by the `Item` interface - a template field can't shadow these. */
+const RESERVED_ITEM_FIELDS = new Set([
+  'id', 'name', 'displayName', 'path', 'template', 'language', 'version', 'url',
+  'field', 'fields', 'children', 'parent', 'ancestors', 'hasChildren', 'rendered', 'languages',
+]);
+
 /**
- * Emit a single shared `Item` interface fields block - every type (generated
- * type, generic `UnknownItem`, plus any base-template interface) re-declares
- * this exact text. Keeping it inline instead of factoring to a fragment
- * variable avoids any ambiguity about SDL interpolation order.
+ * The shared `Item` interface fields block - every concrete object type
+ * re-declares this exact text (template interfaces do NOT; faithful to Edge,
+ * whose template interfaces carry only their own fields and do not implement
+ * `Item`). Kept inline to avoid ambiguity about SDL interpolation order.
  */
 const ANY_ITEM_FIELDS = `    id(format: String = "N"): ID!
     name: String!
@@ -191,154 +181,128 @@ const ANY_ITEM_FIELDS = `    id(format: String = "N"): ID!
     languages: [Item!]!`;
 
 /**
- * Build the full generated schema text from the engine's template
- * registry. Emits (in order):
+ * Compute a template's flattened GraphQL fields (own + inherited), each keyed
+ * by its graphql field name and carrying the Sitecore source name plus the
+ * resolved GraphQL field type (ImageField/DateField/... via the shared
+ * field-type map, TextField fallback). Fields that collide with an `Item`
+ * interface field, or normalize to an empty name, are dropped.
+ */
+function computeFields(templateId: string, engine: Engine): Map<string, { sitecoreName: string; gqlType: string }> {
+  const fields = new Map<string, { sitecoreName: string; gqlType: string }>();
+  const schema = safeGetSchema(templateId, engine);
+  for (const section of schema.sections) {
+    for (const f of section.fields) {
+      if (!f.name) continue;
+      const gqlName = fieldNameToGraphQLFieldName(f.name);
+      if (!gqlName || RESERVED_ITEM_FIELDS.has(gqlName)) continue;
+      fields.set(gqlName, { sitecoreName: f.name, gqlType: sitecoreFieldTypeToGraphQLType(f.type) });
+    }
+  }
+  return fields;
+}
+
+/**
+ * Build the generated schema text from the engine's templates, faithful to
+ * Sitecore Experience Edge's `ContentSchemaProvider` (decompiled). Emits, in
+ * order:
  *
- *   1. The `Item` interface + shared helper types (`ItemTemplate`,
- *      `ItemUrl`, `ItemField`, `ItemSearchResults`).
- *   2. A generic `type UnknownItem implements Item` fallback for any runtime
- *      item whose template isn't in the generated set.
- *   3. One `interface <BaseName>` per template whose name starts with `_`,
- *      carrying the flattened field set and declaring `implements` for every
- *      base interface it transitively inherits (e.g.
- *      `_BaseBeta implements _BaseAlpha`).
- *   4. One `type <Name> implements Item & <interfaces>` per template, with
- *      the full flattened field set (own + base + transitive base fields).
- *      `<interfaces>` is the TRANSITIVE set of base interfaces, not just the
- *      direct bases - the GraphQL spec requires declaring every
- *      transitively-implemented interface.
+ *   1. One `interface <Name>` per NON-LEAF template (a template that some
+ *      other template inherits) that has >=1 field. The interface carries the
+ *      template's flattened fields, each typed by its Sitecore field type. It
+ *      is FLAT - it does not declare `implements` for its own base interfaces
+ *      (only concrete object types do).
+ *   2. One concrete `type` per template. A non-leaf template's object type is
+ *      named `C__<Name>` (Edge's `UpdateTemplateGraphName`) so the clean name
+ *      belongs to the interface; a leaf's object type keeps `<Name>`. Each
+ *      object `implements Item` + its own interface (if non-leaf) + every
+ *      transitively-reached base template's interface. Its fields are the full
+ *      Item interface block plus its flattened, typed template fields.
  *
- * Cycles in the base-template graph are detected during the flatten pass
- * (delegated to `getTemplateSchema`, which already uses a visited set) and
- * via the visited guard in {@link collectTransitiveBaseInterfaces}.
+ * The generic `UnknownItem` fallback + all base helper types live in
+ * BASE_SCHEMA and are already registered; this only emits the dynamic
+ * additions, delivered via mercurius's `extendSchema`.
  */
 export function generateSchemaFromRegistry(engine: Engine): GeneratedSchemaResult {
-  const templatesById = new Map<string, GeneratedTemplate>();
-  const concreteTypeNames: string[] = ['UnknownItem'];
-  const fieldResolverMap = new Map<string, string>();
-  const usedTypeNames = new Set<string>(['UnknownItem']);
-
   const templateNodes = collectTemplateNodes(engine);
+  const templatesById = new Map<string, GeneratedTemplate>();
+  const fieldResolverMap = new Map<string, string>();
+  const concreteTypeNames: string[] = ['UnknownItem'];
 
-  // First pass: collect descriptors + resolve type-name collisions.
-  for (const node of templateNodes) {
-    const sitecoreName = templateItemName(node);
-    let typeName = templateNameToTypeName(sitecoreName);
-    if (usedTypeNames.has(typeName)) {
-      const suffix = shortHash(node.item.id);
-      typeName = `${typeName}_${suffix}`;
-    }
-    usedTypeNames.add(typeName);
-
-    templatesById.set(node.item.id.toLowerCase(), {
-      typeName,
-      sitecoreName,
-      templateId: node.item.id,
-      isBase: isBaseTemplateName(sitecoreName),
-      baseTypeNames: [], // filled after all names are known
-      fields: new Map(),
-    });
-  }
-
-  // Second pass: resolve the interface type names each template implements.
-  // The GraphQL spec requires declaring every TRANSITIVELY-implemented
-  // interface, not just direct bases ("Transitively implemented interfaces
-  // ... must also be defined on an implementing type or interface"). A type
-  // that reaches `_BaseAlpha` only through the intermediate
-  // `_BaseBeta` interface must still list `_BaseAlpha`,
-  // so we walk the full base-template chain (see collectTransitiveBaseInterfaces).
-  // A base whose template isn't in the current generation set is simply never
-  // reached, so it drops out of `implements` (its type doesn't exist).
+  // Direct base-template ids per template (lowercased), and the set of every
+  // template that is inherited by another (Edge's `nonLeafTemplates`). A base
+  // is only counted as non-leaf if it is itself one of the generated
+  // templates; out-of-set (e.g. OOTB-registry-only) bases are ignored here.
+  const inSet = new Set(templateNodes.map(n => n.item.id.toLowerCase()));
   const baseIdsById = new Map<string, string[]>();
-  for (const node of templateNodes) {
-    baseIdsById.set(node.item.id.toLowerCase(), readBaseTemplateIds(node.item));
-  }
+  const nonLeafIds = new Set<string>();
   for (const node of templateNodes) {
     const id = node.item.id.toLowerCase();
-    const desc = templatesById.get(id);
-    if (!desc) continue;
-    desc.baseTypeNames = collectTransitiveBaseInterfaces(id, desc.typeName, templatesById, baseIdsById);
+    const bases = readBaseTemplateIds(node.item);
+    baseIdsById.set(id, bases);
+    for (const b of bases) if (inSet.has(b)) nonLeafIds.add(b);
   }
 
-  // Third pass: flatten fields through the schema walker + record every
-  // graphql field name against its Sitecore source name.
+  // Pass 1: assign clean/interface/concrete names (collision-suffixed) and
+  // compute each template's flattened, typed field set.
+  const usedTypeNames = new Set<string>(['UnknownItem']);
+  const reserve = (name: string, seedId: string): string => {
+    let candidate = name;
+    if (usedTypeNames.has(candidate)) candidate = `${name}_${shortHash(seedId)}`;
+    usedTypeNames.add(candidate);
+    return candidate;
+  };
   for (const node of templateNodes) {
-    const desc = templatesById.get(node.item.id.toLowerCase());
-    if (!desc) continue;
-    const schema = safeGetSchema(node.item.id, engine);
-    for (const section of schema.sections) {
-      for (const f of section.fields) {
-        addField(desc, f, fieldResolverMap);
+    const id = node.item.id.toLowerCase();
+    const sitecoreName = templateItemName(node);
+    const isNonLeaf = nonLeafIds.has(id);
+    const fields = computeFields(node.item.id, engine);
+
+    const cleanName = reserve(templateNameToTypeName(sitecoreName), node.item.id);
+    const interfaceName = isNonLeaf && fields.size > 0 ? cleanName : null;
+    // A non-leaf template's concrete object is `C__<Name>`; the clean name is
+    // the interface. Leaf templates keep the clean name for the object.
+    const typeName = isNonLeaf ? reserve(`C__${cleanName}`, node.item.id) : cleanName;
+
+    templatesById.set(id, { typeName, interfaceName, sitecoreName, templateId: node.item.id, isNonLeaf, fields });
+  }
+
+  const fieldLines = (fields: Map<string, { sitecoreName: string; gqlType: string }>): string =>
+    Array.from(fields.entries())
+      .map(([gqlName, { gqlType }]) => `    ${gqlName}: ${gqlType}`)
+      .join('\n');
+
+  const parts: string[] = [];
+
+  // Interfaces: one per non-leaf template with >=1 field. Flat (no implements).
+  for (const desc of templatesById.values()) {
+    if (!desc.interfaceName) continue;
+    parts.push(`
+  interface ${desc.interfaceName} {
+${fieldLines(desc.fields)}
+  }`);
+  }
+
+  // Concrete object types. Each implements Item + own interface (if non-leaf)
+  // + every transitively-reached base template's interface.
+  for (const [id, desc] of templatesById) {
+    const implementsList = ['Item'];
+    if (desc.interfaceName) implementsList.push(desc.interfaceName);
+    for (const baseId of collectTransitiveBaseIds(id, baseIdsById)) {
+      const baseDesc = templatesById.get(baseId);
+      if (baseDesc?.interfaceName && !implementsList.includes(baseDesc.interfaceName)) {
+        implementsList.push(baseDesc.interfaceName);
       }
     }
-  }
-
-  // Collect the full union of graphql field names across every generated
-  // template. These are added to every concrete type (so the shared
-  // resolver map attaches cleanly) AND to the `Item` fallback type via
-  // `extend type Item` so queries that fall through to `Item` can still
-  // select any field (returning null if the underlying item lacks it).
-  // Mercurius requires every resolver-map entry to correspond to a
-  // declared schema field on every type it's attached to.
-  const allFieldNames = new Set<string>(fieldResolverMap.keys());
-  const allFieldsBlock = Array.from(allFieldNames)
-    .sort()
-    .map(name => `    ${name}: ItemField`)
-    .join('\n');
-
-  // Build the SDL text. The base interface (`Item`), fallback concrete type
-  // (`UnknownItem`) and helper types live in BASE_SCHEMA and are already
-  // registered by the time this runs - the generator only emits the
-  // dynamic *additions*, delivered via mercurius's `extendSchema` API.
-  const parts: string[] = [];
-  if (allFieldsBlock) {
+    const fieldBlock = fieldLines(desc.fields);
     parts.push(`
-  extend type UnknownItem {
-${allFieldsBlock}
+  type ${desc.typeName} implements ${implementsList.join(' & ')} {
+${ANY_ITEM_FIELDS}${fieldBlock ? `\n${fieldBlock}` : ''}
   }`);
-  }
-
-  // Base-template interfaces (one per `_Foo` template). Each declares the
-  // base interfaces it transitively implements - the GraphQL spec requires an
-  // interface derived from another interface to declare `implements` for it
-  // (and for everything that one implements, hence the transitive set in
-  // `baseTypeNames`). The flattened field bag already carries the inherited
-  // fields, so the implementing interface satisfies the spec's field rule.
-  for (const desc of templatesById.values()) {
-    if (!desc.isBase) continue;
-    const fieldLines = Array.from(desc.fields.keys())
-      .map(fname => `    ${fname}: ItemField`)
-      .join('\n');
-    const implementsClause = desc.baseTypeNames.length > 0
-      ? ` implements ${desc.baseTypeNames.join(' & ')}`
-      : '';
-    parts.push(`
-  interface ${desc.typeName}${implementsClause} {
-${fieldLines || '    _placeholder: ItemField'}
-  }`);
-  }
-
-  // Concrete types. Each type declares the full union of every generated
-  // field name - this lets the shared mercurius resolver map attach once
-  // per type without tripping the "Cannot find field X of type Y" check,
-  // and lets consuming queries select any field via an inline fragment
-  // without knowing whether that specific field was declared on the
-  // concrete template (a fallback-to-null is better than a parse error).
-  //
-  // Base templates (name starts with `_`) are emitted only as interfaces
-  // above - they don't instantiate as concrete items, so no runtime
-  // __typename will ever select them.
-  for (const desc of templatesById.values()) {
-    if (desc.isBase) continue;
-    const implementsList = ['Item', ...desc.baseTypeNames];
-    const implementsClause = implementsList.join(' & ');
-    const block = `
-  type ${desc.typeName} implements ${implementsClause} {
-${ANY_ITEM_FIELDS}
-${allFieldsBlock}
-  }`;
-    parts.push(block);
     concreteTypeNames.push(desc.typeName);
+
+    for (const [gqlName, { sitecoreName }] of desc.fields) {
+      fieldResolverMap.set(gqlName, sitecoreName);
+    }
   }
 
   return {
@@ -347,25 +311,4 @@ ${allFieldsBlock}
     fieldResolverMap,
     concreteTypeNames,
   };
-}
-
-function addField(
-  desc: GeneratedTemplate,
-  field: TemplateFieldSchema,
-  global: Map<string, string>,
-): void {
-  if (!field.name) return;
-  const gqlName = fieldNameToGraphQLFieldName(field.name);
-  if (!gqlName) return;
-  // Skip anything that collides with a base `Item` interface field - the
-  // concrete type already declares those with specific types the field-bag
-  // would shadow.
-  const RESERVED = new Set(['id', 'name', 'displayName', 'path', 'template', 'language', 'version', 'url', 'field', 'fields', 'children', 'parent', 'ancestors', 'hasChildren', 'rendered', 'languages']);
-  if (RESERVED.has(gqlName)) return;
-  desc.fields.set(gqlName, field.name);
-  // Last-writer-wins on the global map - fields with the same camelCase
-  // across templates must map to the same Sitecore name, which is already
-  // the case for SXA since the generator derives the gql name FROM the
-  // Sitecore name.
-  global.set(gqlName, field.name);
 }
