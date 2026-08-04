@@ -219,7 +219,17 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
           } else {
             try {
               await engine.openWorkspace(layers, { projectName: project.name, lazy: true });
-              app.extendMockingbirdSchema?.();
+              // A lazy open returns before background indexing populates the
+              // tree, so extending the GraphQL schema now would generate against
+              // an empty tree (zero concrete per-template types) and never
+              // re-run - the exact reason boot-replayed (headless) workspaces
+              // shipped without their `T_*` template types. openWorkspace(lazy)
+              // reset readiness to 'initializing'; chain the extension to THIS
+              // open's completion so generation walks the populated tree.
+              engine.readiness
+                .ready()
+                .then(() => app.extendMockingbirdSchema?.())
+                .catch((schemaErr) => app.log.warn({ err: schemaErr }, '[boot-replay] deferred schema extension failed'));
               app.log.info(`[boot-replay] restored project "${project.name}" (${hash})`);
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);

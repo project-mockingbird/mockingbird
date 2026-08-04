@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { createServer } from '../../src/api/server.js';
+import { writeConfig } from '../../src/api/state/config-store.js';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdtempSync, cpSync, rmSync } from 'fs';
@@ -121,6 +122,56 @@ describe('GraphQL schema extension across openWorkspace', () => {
       },
     });
     expect(openRes.statusCode).toBe(200);
+
+    const schemaRes = await app.inject({
+      method: 'POST',
+      url: '/api/graphql',
+      payload: { query: '{ __schema { types { name } } }' },
+    });
+    expect(schemaRes.statusCode).toBe(200);
+    const typeNames: string[] = schemaRes
+      .json()
+      .data.__schema.types.map((t: { name: string }) => t.name);
+
+    expect(typeNames).toContain('MyTemplate');
+  });
+
+  it('extends the schema for a workspace restored via boot-replay (lazy open)', async () => {
+    // Reproduces the 0.14.0 field report: a headless host boots Mockingbird,
+    // boot-replay reopens the last workspace LAZILY (returns before indexing
+    // populates the tree), so schema generation runs against an empty tree and
+    // never re-runs once the index completes. Concrete per-template types
+    // (e.g. `MyTemplate`) then never appear, and codegen fails with
+    // "Unknown type" for every template-typed fragment.
+    delete process.env.SCS_SITECORE_JSON;
+    delete process.env.SCS_CONTENT_SITECORE_JSON;
+    process.env.MOCKINGBIRD_WORKSPACE = workspaceTmp!;
+    const configPath = join(workspaceTmp!, 'config.mockingbird');
+    process.env.MOCKINGBIRD_CONFIG_PATH = configPath;
+
+    await writeConfig(configPath, {
+      version: 1,
+      projects: {
+        'boot-schema-hash': {
+          hash: 'boot-schema-hash',
+          name: 'Boot Schema',
+          layers: [{ sitecoreJsonPath: '/sitecore.json', name: 'authoring', color: '#22c55e' }],
+          createdAt: 1,
+          lastOpenedAt: 2,
+        },
+      },
+      lastOpenedHash: 'boot-schema-hash',
+    });
+
+    const created = await createServer({ registryPath: registryFixture });
+    app = created.app;
+
+    // Boot-replay opened the workspace lazily; wait for the reopened
+    // workspace's background index to finish, then flush any deferred
+    // schema-extension microtask before introspecting.
+    await created.engine.readiness.ready();
+    expect(created.engine.readiness.state).toBe('ready');
+    await new Promise((r) => setImmediate(r));
 
     const schemaRes = await app.inject({
       method: 'POST',
