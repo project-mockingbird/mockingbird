@@ -13,8 +13,12 @@ import {
   templateNameToTypeName,
   fieldNameToGraphQLFieldName,
   generateSchemaFromRegistry,
+  isIncludedOotbPath,
 } from '../../../src/engine/schema/generate.js';
 import { BASE_SCHEMA } from '../../../src/api/routes/graphql.js';
+import { Registry } from '../../../src/engine/registry.js';
+import { fileURLToPath } from 'url';
+import { resolve } from 'path';
 
 function makeItem(overrides: Partial<ScsItem> & { id: string; path: string }): ScsItem {
   return {
@@ -160,17 +164,9 @@ describe('generateSchemaFromRegistry', () => {
     const engine = buildEngine(tmpl);
     const result = generateSchemaFromRegistry(engine);
     expect(result.sdl).toContain('type DemoRoot implements Item');
-    expect(result.sdl).toContain('demoNodeText: ItemField');
-    expect(result.sdl).toContain('demoIcon: ItemField');
-    expect(result.sdl).toContain('demoHidden: ItemField');
-  });
-
-  it('emits an interface for templates whose name starts with an underscore', () => {
-    const base = buildTemplate('_Base Alpha', [{ name: 'Field Label' }]);
-    const engine = buildEngine(base);
-    const result = generateSchemaFromRegistry(engine);
-    expect(result.sdl).toContain('interface _BaseAlpha');
-    expect(result.sdl).toMatch(/interface _BaseAlpha\s*{[^}]*fieldLabel: ItemField/);
+    expect(result.sdl).toContain('demoNodeText: TextField');
+    expect(result.sdl).toContain('demoIcon: TextField');
+    expect(result.sdl).toContain('demoHidden: TextField');
   });
 
   it('concrete types implement all base-template interfaces AND Item', () => {
@@ -182,8 +178,8 @@ describe('generateSchemaFromRegistry', () => {
     expect(result.sdl).toContain('type ConcreteFour implements Item & _BaseAlpha');
     // Fields from both base and own template appear on the concrete type
     const concreteBlock = result.sdl.match(/type ConcreteFour[^{]*{[^}]*}/)?.[0] ?? '';
-    expect(concreteBlock).toContain('fieldLabel: ItemField');
-    expect(concreteBlock).toContain('concreteFourText: ItemField');
+    expect(concreteBlock).toContain('fieldLabel: TextField');
+    expect(concreteBlock).toContain('concreteFourText: TextField');
   });
 
   it('concrete types implement transitively-reached interfaces, not just direct bases', () => {
@@ -214,21 +210,6 @@ describe('generateSchemaFromRegistry', () => {
     expect(interfaces).toContain('_BaseAlpha');
   });
 
-  it('an interface derived from another interface declares that it implements the base interface', () => {
-    // GraphQL spec: a transitively-implemented interface must also be declared
-    // on the implementing interface. _Base Beta inherits _Base Alpha, so it
-    // must emit `implements _BaseAlpha`.
-    const baseAlpha = buildTemplate('_Base Alpha', [{ name: 'Field Name' }]);
-    const baseAlphaId = baseAlpha[0].id;
-    const baseBeta = buildTemplate('_Base Beta', [{ name: 'Placeholder' }], {
-      baseTemplateIds: [baseAlphaId],
-    });
-    const engine = buildEngine([...baseAlpha, ...baseBeta]);
-    const result = generateSchemaFromRegistry(engine);
-
-    expect(result.sdl).toMatch(/interface _BaseBeta implements _BaseAlpha\s*\{/);
-  });
-
   it('does not stack-overflow on a base-template cycle', () => {
     const a = buildTemplate('CycleA', [{ name: 'A Field' }]);
     const aId = a[0].id;
@@ -241,10 +222,11 @@ describe('generateSchemaFromRegistry', () => {
       value: `{${bId.toUpperCase()}}`,
     });
     const engine = buildEngine([...a, ...b]);
-    // Should return normally, not hang or overflow.
+    // Should return normally, not hang or overflow. Both templates are inherited
+    // (mutual cycle), so both are non-leaf -> concrete types are C__-prefixed.
     const result = generateSchemaFromRegistry(engine);
-    expect(result.sdl).toContain('type CycleA');
-    expect(result.sdl).toContain('type CycleB');
+    expect(result.sdl).toContain('type C__CycleA');
+    expect(result.sdl).toContain('type C__CycleB');
   });
 
   it('returns an empty SDL when the tree has no templates (BASE_SCHEMA handles the interface)', () => {
@@ -270,7 +252,7 @@ describe('generateSchemaFromRegistry', () => {
     const tmpl = buildTemplate('Quiet Template', [{ name: '' }, { name: 'Valid Field' }]);
     const engine = buildEngine(tmpl);
     const result = generateSchemaFromRegistry(engine);
-    expect(result.sdl).toContain('validField: ItemField');
+    expect(result.sdl).toContain('validField: TextField');
   });
 
   it('handles template name collisions by suffixing with a short hash', () => {
@@ -328,7 +310,7 @@ describe('generated schema is valid GraphQL and introspectable', () => {
         base: __type(name: "_BaseAlpha") { possibleTypes { name } }
         one: __type(name: "ConcreteOne") { interfaces { name } }
         two: __type(name: "ConcreteTwo") { interfaces { name } }
-        beta: __type(name: "_BaseBeta") { interfaces { name } }
+        beta: __type(name: "C___BaseBeta") { interfaces { name } }
       }`,
     });
     expect(res.errors).toBeUndefined();
@@ -345,4 +327,128 @@ describe('generated schema is valid GraphQL and introspectable', () => {
     expect(names(data.two.interfaces)).toContain('_BaseAlpha');
     expect(names(data.beta.interfaces)).toContain('_BaseAlpha');
   });
+});
+
+describe('Edge template->schema fidelity: base templates become interfaces (RC-A)', () => {
+  it('emits an interface for any template used as a base (non-leaf), not only _-prefixed names', () => {
+    const base = buildTemplate('T_Image', [{ name: 'f_image', type: 'Image' }]);
+    const baseId = base[0].id;
+    const page = buildTemplate('T_Article', [{ name: 'f_title' }], { baseTemplateIds: [baseId] });
+    const result = generateSchemaFromRegistry(buildEngine([...base, ...page]));
+    // T_Image is inherited by T_Article, so it is an interface (no _ prefix).
+    expect(result.sdl).toMatch(/interface T_Image[\s{]/);
+    // T_Article is a leaf: a concrete object implementing Item + the base interface.
+    expect(result.sdl).toMatch(/type T_Article implements Item & T_Image[\s{]/);
+  });
+
+  it('renames a non-leaf template concrete type to C__<Name> so the clean name is the interface', () => {
+    const base = buildTemplate('T_Image', [{ name: 'f_image', type: 'Image' }]);
+    const baseId = base[0].id;
+    const page = buildTemplate('T_Article', [{ name: 'f_title' }], { baseTemplateIds: [baseId] });
+    const result = generateSchemaFromRegistry(buildEngine([...base, ...page]));
+    expect(result.sdl).toMatch(/type C__T_Image implements Item & T_Image[\s{]/);
+    // __typename dispatch for an item of T_Image resolves to the concrete C__ name.
+    expect(result.templatesById.get(baseId.toLowerCase())?.typeName).toBe('C__T_Image');
+    expect(result.concreteTypeNames).toContain('C__T_Image');
+    expect(result.concreteTypeNames).toContain('T_Article');
+  });
+
+  it('does not emit an interface for a leaf template even when its name starts with an underscore', () => {
+    // Old rule made every _-prefixed template an interface; Edge only makes a
+    // template an interface when something inherits it.
+    const leaf = buildTemplate('_Base Alpha', [{ name: 'Field Label' }]);
+    const result = generateSchemaFromRegistry(buildEngine(leaf));
+    expect(result.sdl).not.toMatch(/interface _BaseAlpha[\s{]/);
+    expect(result.sdl).toMatch(/type _BaseAlpha implements Item[\s{]/);
+  });
+
+  it('a concrete type implements every transitively reached base interface', () => {
+    const alpha = buildTemplate('T_Alpha', [{ name: 'a' }]);
+    const alphaId = alpha[0].id;
+    const beta = buildTemplate('T_Beta', [{ name: 'b' }], { baseTemplateIds: [alphaId] });
+    const betaId = beta[0].id;
+    const leaf = buildTemplate('T_Page', [{ name: 'p' }], { baseTemplateIds: [betaId] });
+    const result = generateSchemaFromRegistry(buildEngine([...alpha, ...beta, ...leaf]));
+    const clause = result.sdl.match(/type T_Page implements ([^{]+)\{/)?.[1] ?? '';
+    const ifaces = clause.split('&').map(s => s.trim()).filter(Boolean);
+    expect(ifaces).toEqual(expect.arrayContaining(['Item', 'T_Beta', 'T_Alpha']));
+  });
+
+  it('template interfaces are flat: they do not declare implements for their base interfaces', () => {
+    const alpha = buildTemplate('T_Alpha', [{ name: 'a' }]);
+    const alphaId = alpha[0].id;
+    const beta = buildTemplate('T_Beta', [{ name: 'b' }], { baseTemplateIds: [alphaId] });
+    const betaId = beta[0].id;
+    const leaf = buildTemplate('T_Page', [{ name: 'p' }], { baseTemplateIds: [betaId] });
+    const result = generateSchemaFromRegistry(buildEngine([...alpha, ...beta, ...leaf]));
+    const ifaceHeader = result.sdl.match(/interface T_Beta[^{]*\{/)?.[0] ?? '';
+    expect(ifaceHeader).not.toContain('implements');
+  });
+});
+
+describe('Edge template->schema fidelity: fields keep their subtype (RC-B)', () => {
+  it('types each generated field by its Sitecore field type', () => {
+    const tmpl = buildTemplate('T_Card', [
+      { name: 'f_image', type: 'Image' },
+      { name: 'f_when', type: 'Datetime' },
+      { name: 'f_link', type: 'General Link' },
+      { name: 'f_title', type: 'Single-Line Text' },
+    ]);
+    const result = generateSchemaFromRegistry(buildEngine(tmpl));
+    const block = result.sdl.match(/type T_Card[^{]*\{[^}]*\}/)?.[0] ?? '';
+    expect(block).toContain('f_image: ImageField');
+    expect(block).toContain('f_when: DateField');
+    expect(block).toContain('f_link: LinkField');
+    expect(block).toContain('f_title: TextField'); // unmapped text type -> fallback
+  });
+
+  it('an inherited field keeps the same subtype on the base interface and the deriving type', () => {
+    const base = buildTemplate('T_Image', [{ name: 'f_image', type: 'Image' }]);
+    const baseId = base[0].id;
+    const page = buildTemplate('T_Article', [{ name: 'f_title' }], { baseTemplateIds: [baseId] });
+    const result = generateSchemaFromRegistry(buildEngine([...base, ...page]));
+    const iface = result.sdl.match(/interface T_Image[^{]*\{[^}]*\}/)?.[0] ?? '';
+    const obj = result.sdl.match(/type T_Article[^{]*\{[^}]*\}/)?.[0] ?? '';
+    expect(iface).toContain('f_image: ImageField');
+    expect(obj).toContain('f_image: ImageField');
+  });
+});
+
+describe('Edge template->schema fidelity: OOTB registry templates (RC-C)', () => {
+  it('isIncludedOotbPath: Foundation/Feature/CMP/DAM/Modules in, System/infrastructure out', () => {
+    expect(isIncludedOotbPath('/sitecore/templates/Foundation/Experience Accelerator/Taxonomy/Datasource/Tag')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/Feature/Foo/Bar')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/CMP/Foo')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/DAM/Foo')).toBe(true);
+    expect(isIncludedOotbPath('/sitecore/templates/System/Templates/Standard template')).toBe(false);
+    expect(isIncludedOotbPath('/sitecore/templates/Sitecore Client/Foo')).toBe(false);
+    expect(isIncludedOotbPath('/sitecore/templates/Branches/Foo')).toBe(false);
+    expect(isIncludedOotbPath(undefined)).toBe(false);
+  });
+
+  it('generates OOTB Foundation templates (Tag) with own fields, drops system fields, skips System templates', async () => {
+    // Real IAR registry: exercises the full OOTB generation path end to end.
+    const reg = new Registry();
+    const registryPath = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../data/registry.json.gz');
+    await reg.loadFromGzip(registryPath);
+
+    const engine = Object.create(Engine.prototype) as Engine;
+    (engine as unknown as { tree: ItemTree }).tree = new ItemTree();
+    (engine as unknown as { registry: Registry }).registry = reg;
+
+    const result = generateSchemaFromRegistry(engine);
+
+    // Tag (OOTB SXA template under Foundation) is now in the schema.
+    const tagId = '6b40e84c-8785-49fc-8a10-6bca862ff7ea';
+    const tag = result.templatesById.get(tagId);
+    expect(tag).toBeDefined();
+    const tagFields = [...(tag?.fields.keys() ?? [])];
+    expect(tagFields).toContain('title'); // own field, kept
+    // System (Standard-template) fields are excluded.
+    expect(tagFields).not.toContain('created');
+    expect(tagFields).not.toContain('workflow');
+
+    // A System-only template (Standard template) is NOT generated.
+    expect(result.templatesById.get('1930bbeb-7805-471a-a3be-4858ac7cf696')).toBeUndefined();
+  }, 30000);
 });

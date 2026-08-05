@@ -29,6 +29,7 @@ import {
 import { parseGuidList, toCanonicalGuid, formatGuidEdge, normalizeGuid } from '../../engine/guid.js';
 import { FIELD_IDS, FINAL_RENDERINGS_FIELD_ID, RENDERINGS_FIELD_ID } from '../../engine/constants.js';
 import { buildJsonValue, lookupFieldType } from '../../engine/item-query/field-json-value.js';
+import { FIELD_TYPE_TO_GQL } from '../../engine/schema/field-graphql-type.js';
 import { getTemplateSchema, type TemplateFieldSchema } from '../../engine/template-schema.js';
 import { parseAuthoredAttrs } from '../../engine/render-field/html-utils.js';
 import { buildMediaSrc, buildMediaUrlPath, readSharedString } from '../../engine/render-field/media.js';
@@ -849,20 +850,10 @@ export async function registerGraphQLRoutes(
     return !!lang && lang.versions.length > 0;
   };
 
-  // Sitecore field-type string -> GraphQL concrete type name. Any type not
-  // listed here (or any type whose concrete type isn't yet registered) falls
-  // back to TextField. Phase C2 adds the remaining concrete types.
-  const FIELD_TYPE_TO_GQL: Record<string, string> = {
-    'general link': 'LinkField', 'link': 'LinkField',
-    'image': 'ImageField', 'file': 'FileField', 'media item': 'MediaItemField',
-    'date': 'DateField', 'datetime': 'DateField',
-    'checkbox': 'CheckboxField',
-    'number': 'NumberField', 'integer': 'IntegerField',
-    'droplink': 'LookupField', 'droptree': 'LookupField', 'reference': 'LookupField',
-    'multilist': 'MultilistField', 'treelist': 'MultilistField', 'checklist': 'MultilistField',
-    'name value list': 'NameValueListField', 'name lookup value list': 'NameValueListField',
-    'rich text': 'RichTextField',
-  };
+  // Sitecore field-type string -> GraphQL concrete type name lives in the
+  // shared `field-graphql-type` module (also used by the schema generator so
+  // the runtime ItemField dispatch and the static per-template field types
+  // never diverge). Any unlisted type falls back to TextField.
 
   // Shared field-level resolver for TextField (and reused by C2 subtypes).
   // The parent object is the enriched readHint result:
@@ -1632,9 +1623,22 @@ export async function registerGraphQLRoutes(
   const runExtension = (): void => {
     if (schemaExtended) return;
     try {
-      const generated = generateSchemaFromRegistry(engine);
+      // Defer until a workspace is actually loaded. The IAR registry alone
+      // yields OOTB types, so generation is non-empty even at no-project boot -
+      // but flipping the one-shot flag then would permanently exclude the
+      // workspace's own templates (which index after boot). Gate on the item
+      // tree, not the SDL, so the real extension runs once the workspace loads.
+      if (engine.getAllItems().length === 0) {
+        console.log('[graphql] schema generator: no workspace loaded yet - deferring extension');
+        return;
+      }
+      // Reserve the already-registered base-schema type names so a generated
+      // OOTB template (e.g. an SXA "Route" template) is suffixed rather than
+      // redefining an existing type - extendSchema rejects duplicates.
+      const reservedTypeNames = Object.keys(app.graphql.schema.getTypeMap());
+      const generated = generateSchemaFromRegistry(engine, reservedTypeNames);
       if (generated.sdl.trim().length === 0) {
-        console.log('[graphql] schema generator produced no template types - tree is empty');
+        console.log('[graphql] schema generator produced no types');
         return;
       }
 
@@ -1643,26 +1647,26 @@ export async function registerGraphQLRoutes(
       generatedTemplatesById = generated.templatesById;
       generatedTypeNames = new Set(generated.concreteTypeNames);
 
-      // Extend the schema with base interfaces + per-template concrete
-      // types + the `extend type UnknownItem` field union.
+      // Extend the schema with per-template interfaces + concrete object types.
       app.graphql.extendSchema(generated.sdl);
 
-      // Build resolvers for every newly-declared type. Every concrete
-      // template type AND the existing `UnknownItem` fallback share the same
-      // shared resolver - the difference is just which __typename graphql-js
-      // routes each item to. Template-specific field resolvers are added
-      // to `sharedItemResolver` dynamically so all types pick them up.
-      for (const [gqlFieldName, sitecoreFieldName] of generated.fieldResolverMap) {
-        if (gqlFieldName in sharedItemResolver) continue;
-        sharedItemResolver[gqlFieldName] = (item: ScsItem, _args: unknown, ctx: MercuriusContext) => readHint(item, sitecoreFieldName, ctx);
-      }
-
+      // Build per-type resolvers. Each concrete object type declares its OWN
+      // flattened field set now (not a union of every field), so it gets the
+      // base `Item` field resolvers plus a `readHint` resolver for each of its
+      // own template fields. A single shared all-fields object would no longer
+      // match any one type's declared fields (mercurius rejects unknown-field
+      // resolvers). The `UnknownItem` fallback declares only the base Item
+      // fields, so it gets just those.
+      const baseItemResolver = sharedItemResolver as unknown as Record<string, unknown>;
       const perTypeResolvers: Record<string, Record<string, unknown>> = {
-        UnknownItem: sharedItemResolver as unknown as Record<string, unknown>,
+        UnknownItem: { ...baseItemResolver },
       };
-      for (const name of generated.concreteTypeNames) {
-        if (name === 'UnknownItem') continue;
-        perTypeResolvers[name] = sharedItemResolver as unknown as Record<string, unknown>;
+      for (const desc of generated.templatesById.values()) {
+        const typeResolver: Record<string, unknown> = { ...baseItemResolver };
+        for (const [gqlFieldName, { sitecoreName }] of desc.fields) {
+          typeResolver[gqlFieldName] = (item: ScsItem, _args: unknown, ctx: MercuriusContext) => readHint(item, sitecoreName, ctx);
+        }
+        perTypeResolvers[desc.typeName] = typeResolver;
       }
       app.graphql.defineResolvers(perTypeResolvers);
 
