@@ -21,9 +21,29 @@ import { buildRegistryItemDetail } from '../items-from-registry.js';
 import { serializeItem } from '../../engine/serializer.js';
 import { applyFieldEdit, readCurrentFieldValue } from '../../engine/mutate-fields.js';
 import { buildSchemaFieldMaps, resolveFieldKey } from '../../engine/plan-update-fields.js';
+import { resolveComparer } from '../../engine/sorting/index.js';
+import type { TemplateFieldSchema } from '../template-schema.js';
 import { unifiedDiff } from '../../engine/unified-diff.js';
 import type { MutationPlan } from '../../engine/mutation-plan.js';
 import { toHostPath } from '../host-path.js';
+
+/**
+ * Order a section's Builder fields exactly the way the content tree orders the
+ * section's field-item children - via the section's own `__Subitems Sorting`
+ * comparer (default = sortorder then name, underscore-last). This is display
+ * ordering ONLY: `getTemplateSchema` deliberately keeps Sitecore's
+ * `Template.GetFields` order (load-bearing for GraphQL schema / layout / package
+ * emission), so we sort here in the route rather than mutate the shared schema.
+ * Without this the Builder showed fields in raw tree-insertion order, which
+ * diverged from the tree (and shuffled after a Refresh).
+ */
+function sortFieldsLikeTree(engine: Engine, sectionId: string, fields: TemplateFieldSchema[]): TemplateFieldSchema[] {
+  const comparer = resolveComparer(engine, sectionId);
+  return [...fields].sort((a, b) => comparer(
+    { id: a.id, name: a.name, sortOrder: a.sortOrder, displayName: a.displayName || a.name, createdAt: 0, updatedAt: 0 },
+    { id: b.id, name: b.name, sortOrder: b.sortOrder, displayName: b.displayName || b.name, createdAt: 0, updatedAt: 0 },
+  ));
+}
 
 export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
   app.get('/api/items/by-path', async (request, reply) => {
@@ -616,7 +636,10 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     // Registry-only template items still get their own sections via the same path.
     if (classifyItem(itemTemplate) === 'template') {
       const ownSchema = getTemplateSchema(id, engine);
-      return { ...schema, builderSections: ownSchema.sections.filter(s => s.sourceTemplateId === id) };
+      const builderSections = ownSchema.sections
+        .filter(s => s.sourceTemplateId === id)
+        .map(s => ({ ...s, fields: sortFieldsLikeTree(engine, s.id, s.fields) }));
+      return { ...schema, builderSections };
     }
 
     return schema;
