@@ -13,7 +13,7 @@ import { Icon } from '@/lib/icon';
 import { mdiFileOutline } from '@mdi/js';
 import { toast } from 'sonner';
 import { TemplateEditor, type BuilderChanges, type TemplateBuilderHandle } from './TemplateEditor';
-import { applyBuilderStructuralChanges } from '@/lib/builder-save';
+import { applyBuilderStructuralChanges, applyBuilderFieldPropEdits } from '@/lib/builder-save';
 import { RenderingsFieldEditor } from './field-editors/renderings';
 import { QuickInfo } from './QuickInfo';
 import { VersionTrimmer } from './VersionTrimmer';
@@ -114,9 +114,15 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
       // Brand-new Builder sections/fields are item creations, not field-value
       // edits - they go through POST /api/items first (sections before fields,
       // so a field's parent section exists). The field-value PUT below only
-      // mutates existing fields (including Builder field-prop edits).
+      // mutates THIS item's own fields.
       if (structural && item && (structural.newSections.length > 0 || structural.newFields.length > 0)) {
         await applyBuilderStructuralChanges(item.path, structural);
+      }
+      // Builder field-property edits (Type/Source/Shared/Unversioned on existing
+      // fields) live on the field-definition items, so they route to per-field
+      // PUTs - never folded into this item's field-value PUT below.
+      if (structural && structural.fieldUpdates.size > 0) {
+        await applyBuilderFieldPropEdits(structural.fieldUpdates);
       }
       if (Object.keys(fields).length > 0) {
         const res = await fetch(`/api/items/${selectedId}`, {
@@ -158,18 +164,15 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
     // input but not yet confirmed with Enter is still persisted. Falls back to
     // the reported builderChanges when the Builder isn't mounted.
     const structural = builderRef.current?.flush() ?? builderChanges;
-    const allFields: Record<string, string> = { ...editedFields };
-    if (structural) {
-      for (const [fieldId, props] of structural.fieldUpdates) {
-        for (const [propId, val] of Object.entries(props)) {
-          allFields[`${fieldId}:${propId}`] = val;
-        }
-      }
-    }
+    // Field-property edits are NOT merged into this item's field-value payload:
+    // they target the field-definition items and are dispatched as per-field
+    // PUTs inside the mutation. `fields` carries only this item's own edits.
+    const fields: Record<string, string> = { ...editedFields };
+    const hasFieldProps = structural !== null && structural.fieldUpdates.size > 0;
     const hasStructural = structural !== null &&
       (structural.newSections.length > 0 || structural.newFields.length > 0);
-    if (Object.keys(allFields).length === 0 && !hasStructural) return;
-    saveMutation.mutate({ fields: allFields, structural });
+    if (Object.keys(fields).length === 0 && !hasStructural && !hasFieldProps) return;
+    saveMutation.mutate({ fields, structural });
   };
 
   const dirty = Object.keys(editedFields).length > 0 ||

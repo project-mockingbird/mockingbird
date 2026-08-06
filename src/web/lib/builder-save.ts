@@ -47,3 +47,30 @@ export async function applyBuilderStructuralChanges(
     );
   }
 }
+
+/**
+ * Persist the Builder's staged field-property edits (Type / Source / Shared /
+ * Unversioned changes on EXISTING fields).
+ *
+ * Each key in `fieldUpdates` is a field-DEFINITION item's id, mapping to the
+ * property-field GUIDs edited on it. Those properties live on the field item
+ * itself (Type/Source/... are shared fields on the Template Field template),
+ * so each entry is a PUT to `/api/items/<fieldItemId>` - NOT a write to the
+ * template item. Folding these into the template's own field-value PUT (the
+ * previous behaviour, via composite `"<fieldId>:<propId>"` keys) wrote a ghost
+ * field on the template and lost the value on reload.
+ */
+export async function applyBuilderFieldPropEdits(
+  fieldUpdates: BuilderChanges['fieldUpdates'],
+  fetchFn: typeof fetch = fetch,
+): Promise<void> {
+  for (const [fieldItemId, props] of fieldUpdates) {
+    if (Object.keys(props).length === 0) continue;
+    const res = await fetchFn(`/api/items/${fieldItemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: props }),
+    });
+    if (!res.ok) throw new Error(`Failed to update field ${fieldItemId}: ${res.status}`);
+  }
+}
