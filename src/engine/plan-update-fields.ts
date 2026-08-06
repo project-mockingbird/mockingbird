@@ -5,6 +5,23 @@ import { applyFieldEdit } from './mutate-fields.js';
 import { serializeItem } from './serializer.js';
 import { readFile } from 'fs/promises';
 import { getTemplateSchema, type TemplateSchema } from './template-schema.js';
+import { TEMPLATE_FIELD_TEMPLATE_ID, FIELD_IDS } from './constants.js';
+
+/**
+ * The Template Field definition properties the Builder edits. All four are
+ * SHARED fields on the Template Field template (template-schema.ts reads each
+ * via `getSharedField`). They are seeded into the scope map below so a write
+ * lands in the shared scope even when the Template Field template schema is a
+ * bare registry stub that doesn't itself declare them - otherwise the write
+ * would default to `versioned` while the schema read looks in `shared`, and
+ * the value would silently vanish on reload.
+ */
+const TEMPLATE_FIELD_SHARED_PROPS = [
+  FIELD_IDS.type,
+  FIELD_IDS.source,
+  FIELD_IDS.shared,
+  FIELD_IDS.unversioned,
+];
 
 /**
  * Lookup maps derived from a template schema. Shared between planUpdateFields
@@ -28,7 +45,7 @@ export interface SchemaFieldMaps {
  * SPE-edit-context callers passing the SCS hint string land on the
  * intended field even when a downstream template shares a display name.
  */
-export function buildSchemaFieldMaps(schema: TemplateSchema): SchemaFieldMaps {
+export function buildSchemaFieldMaps(schema: TemplateSchema, itemTemplateId?: string): SchemaFieldMaps {
   const scopeByFieldId = new Map<string, 'shared' | 'unversioned' | 'versioned'>();
   const nameByFieldId = new Map<string, string>();
   const idByName = new Map<string, string>();
@@ -43,6 +60,17 @@ export function buildSchemaFieldMaps(schema: TemplateSchema): SchemaFieldMaps {
         const lowerDn = field.displayName.toLowerCase();
         if (!idByName.has(lowerDn)) idByName.set(lowerDn, lowerId);
       }
+    }
+  }
+  // When editing a Template Field item, guarantee its definition properties
+  // resolve to the shared scope even if the Template Field template schema
+  // didn't declare them (registry stub). The schema READ side always uses
+  // getSharedField for these, so the WRITE must match. Never override an entry
+  // the schema already produced.
+  if (itemTemplateId?.toLowerCase() === TEMPLATE_FIELD_TEMPLATE_ID) {
+    for (const propId of TEMPLATE_FIELD_SHARED_PROPS) {
+      const lowerId = propId.toLowerCase();
+      if (!scopeByFieldId.has(lowerId)) scopeByFieldId.set(lowerId, 'shared');
     }
   }
   return { scopeByFieldId, nameByFieldId, idByName };
@@ -83,7 +111,7 @@ export async function planUpdateFields(
   const before = await readFile(node.filePath, 'utf-8').catch(() => serializeItem(node.item));
 
   const schema = getTemplateSchema(node.item.template, engine);
-  const maps = buildSchemaFieldMaps(schema);
+  const maps = buildSchemaFieldMaps(schema, node.item.template);
 
   // Clone the item so we don't mutate the live tree during planning
   const cloned = structuredClone(node.item);

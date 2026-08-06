@@ -4,7 +4,7 @@ import { classifyItem, FIELD_IDS } from '../../engine/constants.js';
 import { statSync } from 'fs';
 import type { ItemNode, ScsItem } from '../../engine/types.js';
 import { resolveFieldValue } from '../resolve.js';
-import { getTemplateSchema, enrichSchemaWithStoredFields } from '../template-schema.js';
+import { getTemplateSchema, enrichSchemaWithStoredFields, clearTemplateSchemaCache } from '../template-schema.js';
 import { notifyItemChange } from '../notify.js';
 import { getPlaceholderPaths } from '../../engine/renderings/placeholder-paths.js';
 import { getComposedLayout } from '../../engine/renderings/composed-layout.js';
@@ -370,7 +370,7 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     // helpers so both the dry-run plan and the live-tree replay agree on which
     // field is being mutated.
     const schema = getTemplateSchema(node.item.template, engine);
-    const maps = buildSchemaFieldMaps(schema);
+    const maps = buildSchemaFieldMaps(schema, node.item.template);
     // Capture pre-mutation values so we can revert in-memory if applyPlan
     // throws. Without this, a partial-disk-write failure leaves the live
     // tree showing values that never landed on disk.
@@ -403,6 +403,17 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
         }
       }
       throw err;
+    }
+    // Editing a Template Field / Section / Template item changes the design of
+    // every template that inherits it. The memoized template-schema cache is
+    // keyed on tree generation, which a field-value edit does NOT bump (the
+    // edit mutates the item in place + writes disk; no tree add/remove/relink).
+    // Drop the cache explicitly so the Builder re-reads a fresh schema instead
+    // of a stale one - otherwise a just-saved field property (Type / Source /
+    // Shared / Unversioned) appears lost on reload.
+    const editedClass = classifyItem(node.item.template);
+    if (editedClass === 'template' || editedClass === 'templateSection' || editedClass === 'templateField') {
+      clearTemplateSchemaCache();
     }
     notifyItemChange(engine, { type: 'changed', itemId: node.item.id, itemPath: node.item.path });
     return serializeItemNode(node, engine);
