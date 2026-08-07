@@ -73,6 +73,8 @@ import { ProvenanceBar } from './ProvenanceBar';
 import { LayerLegend } from './LayerLegend';
 import { containingFolder } from '@/lib/folder-path';
 import { pickNeighborAfterDelete } from '@/lib/delete-neighbor';
+import { reorderState, computeReorderedIds, type ReorderOp } from '@/lib/reorder';
+import { useReorderSiblings } from '@/hooks/useReorderSiblings';
 import { toast } from 'sonner';
 
 // ---- type-to-icon map (mirrors old TreeNode.tsx TYPE_ICONS) ----
@@ -477,6 +479,21 @@ function ContentTreeNode({
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [duplicateServerError, setDuplicateServerError] = useState<string | null>(null);
   const parentChildrenQuery = useChildren(parentId, database);
+
+  const reorder = useMemo(
+    () => reorderState(parentChildrenQuery.data ?? [], node.id),
+    [parentChildrenQuery.data, node.id],
+  );
+
+  const doReorder = (op: ReorderOp) => {
+    if (!parentId || !reorder.canReorder) return;
+    const orderedChildIds = computeReorderedIds(parentChildrenQuery.data ?? [], node.id, op);
+    reorderSiblings.mutate(
+      { parentId, orderedChildIds, db: database },
+      { onError: (e) => toast.error(e instanceof Error ? e.message : 'Reorder failed') },
+    );
+  };
+
   const siblingsForDuplicate = useMemo(() => {
     const children = parentChildrenQuery.data ?? [];
     return children
@@ -501,6 +518,7 @@ function ContentTreeNode({
   // Move-mode disable list) when the Move dialog is open.
   const copyItem = useCopyItem();
   const moveItem = useMoveItem();
+  const reorderSiblings = useReorderSiblings();
   const refreshItemMutation = useRefreshItem();
   const handleRefresh = () => {
     refreshItemMutation.mutate(node.id, {
@@ -938,6 +956,26 @@ function ContentTreeNode({
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => setMoveDialogOpen(true)}>
                 Move to...
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger disabled={isRegistry || !reorder.canReorder}>
+              Sorting
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              <ContextMenuItem disabled={!reorder.canUp} onSelect={() => doReorder('up')}>
+                Move Up
+              </ContextMenuItem>
+              <ContextMenuItem disabled={!reorder.canDown} onSelect={() => doReorder('down')}>
+                Move Down
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem disabled={!reorder.canUp} onSelect={() => doReorder('first')}>
+                Move to First
+              </ContextMenuItem>
+              <ContextMenuItem disabled={!reorder.canDown} onSelect={() => doReorder('last')}>
+                Move to Last
               </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
