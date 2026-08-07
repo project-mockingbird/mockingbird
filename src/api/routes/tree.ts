@@ -10,6 +10,9 @@ import {
 import { resolveComparer, parseSitecoreDate } from '../../engine/sorting/index.js';
 import type { ItemSortKey } from '../../engine/sorting/types.js';
 import { toHostPath } from '../host-path.js';
+import { applyFieldEditsWithRollback, type FieldEditSpec } from '../../engine/mutate-fields.js';
+import { planReorderSiblings } from '../../engine/reorder-siblings.js';
+import { notifyItemChange } from '../notify.js';
 
 const SORTORDER_FIELD_ID = FIELD_IDS.sortorder;
 
@@ -139,6 +142,78 @@ export function registerTreeRoutes(app: FastifyInstance, engine: Engine): void {
 
     const children = getMergedChildren(id, engine, maxDepth, 0, database);
     return children;
+  });
+
+  // POST /api/tree/reorder - reassign spaced __Sortorder to a parent's children
+  // in the requested order. Same-parent only; all children must be serialized.
+  app.post('/api/tree/reorder', async (request, reply) => {
+    const { parentId, orderedChildIds, db } = request.body as {
+      parentId?: string; orderedChildIds?: string[]; db?: string;
+    };
+    const database = db ?? 'master';
+    if (!parentId || typeof parentId !== 'string' ||
+        !Array.isArray(orderedChildIds) || orderedChildIds.length === 0 ||
+        !orderedChildIds.every(x => typeof x === 'string')) {
+      return reply.status(400).send({ error: 'parentId (string) and non-empty orderedChildIds (string[]) are required', statusCode: 400 });
+    }
+
+    const parentExists =
+      engine.getItemById(parentId) || engine.getRegistryItem(parentId) || findRegistryByPath(engine, parentId);
+    if (!parentExists) {
+      return reply.status(404).send({ error: `Item not found: ${parentId}`, statusCode: 404 });
+    }
+
+    const current = getMergedChildren(parentId, engine, 0, 0, database);
+
+    // Same-parent permutation: exactly the current child-id set, no dupes.
+    const currentIds = current.map(c => c.id.toLowerCase());
+    const requested = orderedChildIds.map(x => x.toLowerCase());
+    const uniqueRequested = new Set(requested);
+    const sameSet =
+      requested.length === currentIds.length &&
+      uniqueRequested.size === requested.length &&
+      currentIds.every(id => uniqueRequested.has(id));
+    if (!sameSet) {
+      return reply.status(409).send({
+        error: 'orderedChildIds must be a permutation of the current children',
+        statusCode: 409,
+      });
+    }
+
+    // All children must be serialized (registry/OOTB items cannot be written).
+    if (current.some(c => c.source !== 'serialized')) {
+      return reply.status(400).send({
+        error: 'group contains OOTB items that cannot be reordered',
+        statusCode: 400,
+      });
+    }
+
+    const { plan, changedIds } = await planReorderSiblings(engine, orderedChildIds);
+    if (plan.files.length === 0) {
+      return getMergedChildren(parentId, engine, 0, 0, database); // no-op
+    }
+
+    // Capture previous live sortorder values, replay on the live tree, apply
+    // the plan, and roll back in-memory on failure - see
+    // applyFieldEditsWithRollback for the shared contract (also used by the
+    // PUT /api/items/:id field-update route).
+    const edits: FieldEditSpec[] = changedIds.map(({ id, value }) => ({
+      item: engine.getItemById(id)!.item,
+      fieldId: SORTORDER_FIELD_ID,
+      value,
+      lang: 'en',
+      version: 1,
+      scope: 'shared',
+      hint: '__Sortorder',
+    }));
+    await applyFieldEditsWithRollback(edits, plan, p => engine.applyPlan(p));
+
+    for (const { id } of changedIds) {
+      const node = engine.getItemById(id)!;
+      notifyItemChange(engine, { type: 'changed', itemId: node.item.id, itemPath: node.item.path });
+    }
+
+    return getMergedChildren(parentId, engine, 0, 0, database);
   });
 
   // GET /api/databases - list available databases

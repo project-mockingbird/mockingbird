@@ -19,11 +19,31 @@ import { insertItemAtParent } from '../../engine/insert-item.js';
 import { resolveInsertParent } from '../../engine/insert-branch.js';
 import { buildRegistryItemDetail } from '../items-from-registry.js';
 import { serializeItem } from '../../engine/serializer.js';
-import { applyFieldEdit, readCurrentFieldValue } from '../../engine/mutate-fields.js';
+import { applyFieldEditsWithRollback, type FieldEditSpec } from '../../engine/mutate-fields.js';
 import { buildSchemaFieldMaps, resolveFieldKey } from '../../engine/plan-update-fields.js';
+import { resolveComparer } from '../../engine/sorting/index.js';
+import type { TemplateFieldSchema } from '../template-schema.js';
 import { unifiedDiff } from '../../engine/unified-diff.js';
 import type { MutationPlan } from '../../engine/mutation-plan.js';
 import { toHostPath } from '../host-path.js';
+
+/**
+ * Order a section's Builder fields exactly the way the content tree orders the
+ * section's field-item children - via the section's own `__Subitems Sorting`
+ * comparer (default = sortorder then name, underscore-last). This is display
+ * ordering ONLY: `getTemplateSchema` deliberately keeps Sitecore's
+ * `Template.GetFields` order (load-bearing for GraphQL schema / layout / package
+ * emission), so we sort here in the route rather than mutate the shared schema.
+ * Without this the Builder showed fields in raw tree-insertion order, which
+ * diverged from the tree (and shuffled after a Refresh).
+ */
+function sortFieldsLikeTree(engine: Engine, sectionId: string, fields: TemplateFieldSchema[]): TemplateFieldSchema[] {
+  const comparer = resolveComparer(engine, sectionId);
+  return [...fields].sort((a, b) => comparer(
+    { id: a.id, name: a.name, sortOrder: a.sortOrder, displayName: a.displayName || a.name, createdAt: 0, updatedAt: 0 },
+    { id: b.id, name: b.name, sortOrder: b.sortOrder, displayName: b.displayName || b.name, createdAt: 0, updatedAt: 0 },
+  ));
+}
 
 export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
   app.get('/api/items/by-path', async (request, reply) => {
@@ -371,39 +391,27 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     // field is being mutated.
     const schema = getTemplateSchema(node.item.template, engine);
     const maps = buildSchemaFieldMaps(schema, node.item.template);
-    // Capture pre-mutation values so we can revert in-memory if applyPlan
-    // throws. Without this, a partial-disk-write failure leaves the live
+    // Capture pre-mutation values, replay on the live tree, apply the plan,
+    // and roll back in-memory on failure - see applyFieldEditsWithRollback
+    // for the shared contract (also used by the POST /api/tree/reorder
+    // route). Without this, a partial-disk-write failure leaves the live
     // tree showing values that never landed on disk.
-    const previousValues: Record<string, string | undefined> = {};
-    for (const rawId of Object.keys(body.fields)) {
+    // Pass the schema-resolved name as hint so applyFieldEdit's existing-field
+    // heal-empty-Hint branch fires. Without this, the live tree's in-memory
+    // hint stays empty even though the on-disk plan wrote the healed value.
+    const edits: FieldEditSpec[] = Object.entries(body.fields).map(([rawId, value]) => {
       const resolved = resolveFieldKey(maps, rawId);
-      previousValues[resolved] = readCurrentFieldValue(node.item, resolved, language, version);
-    }
-    for (const [rawId, value] of Object.entries(body.fields)) {
-      const resolved = resolveFieldKey(maps, rawId);
-      // Pass the schema-resolved name as hint so applyFieldEdit's existing-field
-      // heal-empty-Hint branch fires. Without this, the live tree's in-memory
-      // hint stays empty even though the on-disk plan wrote the healed value.
-      applyFieldEdit(node.item, resolved, value, language, version,
-        maps.scopeByFieldId.get(resolved), maps.nameByFieldId.get(resolved) ?? '');
-    }
-    try {
-      await engine.applyPlan(plan);
-    } catch (err) {
-      // Revert each field whose pre-mutation value was defined. If a field
-      // didn't exist before the edit, we leave the appended entry in place;
-      // removing newly-pushed entries would require pulling them back out
-      // of the correct scope array, which is more invasive than the
-      // disk-vs-memory mismatch we are guarding against here.
-      for (const rawId of Object.keys(body.fields)) {
-        const resolved = resolveFieldKey(maps, rawId);
-        const old = previousValues[resolved];
-        if (old !== undefined) {
-          applyFieldEdit(node.item, resolved, old, language, version, maps.scopeByFieldId.get(resolved), maps.nameByFieldId.get(resolved) ?? '');
-        }
-      }
-      throw err;
-    }
+      return {
+        item: node.item,
+        fieldId: resolved,
+        value,
+        lang: language,
+        version,
+        scope: maps.scopeByFieldId.get(resolved),
+        hint: maps.nameByFieldId.get(resolved) ?? '',
+      };
+    });
+    await applyFieldEditsWithRollback(edits, plan, p => engine.applyPlan(p));
     // Editing a Template Field / Section / Template item changes the design of
     // every template that inherits it. The memoized template-schema cache is
     // keyed on tree generation, which a field-value edit does NOT bump (the
@@ -616,7 +624,10 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     // Registry-only template items still get their own sections via the same path.
     if (classifyItem(itemTemplate) === 'template') {
       const ownSchema = getTemplateSchema(id, engine);
-      return { ...schema, builderSections: ownSchema.sections.filter(s => s.sourceTemplateId === id) };
+      const builderSections = ownSchema.sections
+        .filter(s => s.sourceTemplateId === id)
+        .map(s => ({ ...s, fields: sortFieldsLikeTree(engine, s.id, s.fields) }));
+      return { ...schema, builderSections };
     }
 
     return schema;

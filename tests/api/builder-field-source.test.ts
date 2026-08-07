@@ -63,4 +63,17 @@ describe('Builder template-field Source persistence', () => {
     const after = (await app.inject({ method: 'GET', url: `/api/items/${tpl.id}/template-schema` })).json();
     expect(iconField(after, field.id)?.source).toBe('/sitecore/media library');
   });
+
+  it('orders builderSections fields the way the content tree does (sortorder then name), not creation order', async () => {
+    const tpl = await post({ type: 'template', name: 'OrderTest', parentPath: PARENT });
+    await post({ type: 'section', name: 'Content', parentPath: tpl.path });
+    // Create in deliberately non-alphabetical order; with no __Sortorder set,
+    // the tree falls back to name order, so the Builder must too.
+    for (const name of ['Zebra', 'Apple', 'Mango']) {
+      await post({ type: 'field', name, parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    }
+    const schema = (await app.inject({ method: 'GET', url: `/api/items/${tpl.id}/template-schema` })).json();
+    const section = (schema.builderSections ?? []).find((s: { name: string }) => s.name === 'Content');
+    expect(section.fields.map((f: { name: string }) => f.name)).toEqual(['Apple', 'Mango', 'Zebra']);
+  });
 });
