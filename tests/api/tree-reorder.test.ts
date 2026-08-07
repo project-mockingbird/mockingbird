@@ -107,6 +107,52 @@ describe('POST /api/tree/reorder', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('returns 409 when orderedChildIds contains a duplicate id (right length, not a valid permutation)', async () => {
+    const tpl = await create({ type: 'template', name: 'DupTest', parentPath: PARENT });
+    await create({ type: 'section', name: 'Content', parentPath: tpl.path });
+    const a = await create({ type: 'field', name: 'Alpha', parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    await create({ type: 'field', name: 'Bravo', parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    const section = (await app.inject({ method: 'GET', url: `/api/items/by-path?path=${encodeURIComponent(tpl.path + '/Content')}` })).json();
+
+    // Right length (2), but Alpha listed twice instead of Alpha+Bravo.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tree/reorder',
+      payload: { parentId: section.id, orderedChildIds: [a.id, a.id] },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('returns 409 when orderedChildIds contains a foreign id (right length, one id not a current child)', async () => {
+    const tpl = await create({ type: 'template', name: 'ForeignTest', parentPath: PARENT });
+    await create({ type: 'section', name: 'Content', parentPath: tpl.path });
+    const a = await create({ type: 'field', name: 'Alpha', parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    await create({ type: 'field', name: 'Bravo', parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    const section = (await app.inject({ method: 'GET', url: `/api/items/by-path?path=${encodeURIComponent(tpl.path + '/Content')}` })).json();
+
+    // Right length (2), but the second id is not one of this section's children.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tree/reorder',
+      payload: { parentId: section.id, orderedChildIds: [a.id, '99999999-9999-9999-9999-999999999999'] },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('returns 400 when orderedChildIds contains a non-string element', async () => {
+    const tpl = await create({ type: 'template', name: 'MalformedTest', parentPath: PARENT });
+    await create({ type: 'section', name: 'Content', parentPath: tpl.path });
+    const a = await create({ type: 'field', name: 'Alpha', parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    const section = (await app.inject({ method: 'GET', url: `/api/items/by-path?path=${encodeURIComponent(tpl.path + '/Content')}` })).json();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tree/reorder',
+      payload: { parentId: section.id, orderedChildIds: [a.id, 12345] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('returns 400 when a child is a registry/OOTB item', async () => {
     // The shared `app` above boots with no registryPath (registry-free, so
     // the plain-hex-GUID 404 test above stays a true not-found case). This

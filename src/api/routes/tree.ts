@@ -10,7 +10,7 @@ import {
 import { resolveComparer, parseSitecoreDate } from '../../engine/sorting/index.js';
 import type { ItemSortKey } from '../../engine/sorting/types.js';
 import { toHostPath } from '../host-path.js';
-import { applyFieldEdit, readCurrentFieldValue } from '../../engine/mutate-fields.js';
+import { applyFieldEditsWithRollback, type FieldEditSpec } from '../../engine/mutate-fields.js';
 import { planReorderSiblings } from '../../engine/reorder-siblings.js';
 import { notifyItemChange } from '../notify.js';
 
@@ -151,8 +151,10 @@ export function registerTreeRoutes(app: FastifyInstance, engine: Engine): void {
       parentId?: string; orderedChildIds?: string[]; db?: string;
     };
     const database = db ?? 'master';
-    if (!parentId || !Array.isArray(orderedChildIds) || orderedChildIds.length === 0) {
-      return reply.status(400).send({ error: 'parentId and non-empty orderedChildIds are required', statusCode: 400 });
+    if (!parentId || typeof parentId !== 'string' ||
+        !Array.isArray(orderedChildIds) || orderedChildIds.length === 0 ||
+        !orderedChildIds.every(x => typeof x === 'string')) {
+      return reply.status(400).send({ error: 'parentId (string) and non-empty orderedChildIds (string[]) are required', statusCode: 400 });
     }
 
     const parentExists =
@@ -191,29 +193,20 @@ export function registerTreeRoutes(app: FastifyInstance, engine: Engine): void {
       return getMergedChildren(parentId, engine, 0, 0, database); // no-op
     }
 
-    // Capture previous live sortorder values for rollback.
-    const previous = changedIds.map(({ id }) => {
-      const node = engine.getItemById(id)!;
-      return { id, prev: readCurrentFieldValue(node.item, SORTORDER_FIELD_ID, 'en', 1) };
-    });
-
-    // Replay on the live tree so in-memory matches what we write.
-    for (const { id, value } of changedIds) {
-      const node = engine.getItemById(id)!;
-      applyFieldEdit(node.item, SORTORDER_FIELD_ID, value, 'en', 1, 'shared', '__Sortorder');
-    }
-
-    try {
-      await engine.applyPlan(plan);
-    } catch (err) {
-      for (const { id, prev } of previous) {
-        const node = engine.getItemById(id);
-        if (node && prev !== undefined) {
-          applyFieldEdit(node.item, SORTORDER_FIELD_ID, prev, 'en', 1, 'shared', '__Sortorder');
-        }
-      }
-      throw err;
-    }
+    // Capture previous live sortorder values, replay on the live tree, apply
+    // the plan, and roll back in-memory on failure - see
+    // applyFieldEditsWithRollback for the shared contract (also used by the
+    // PUT /api/items/:id field-update route).
+    const edits: FieldEditSpec[] = changedIds.map(({ id, value }) => ({
+      item: engine.getItemById(id)!.item,
+      fieldId: SORTORDER_FIELD_ID,
+      value,
+      lang: 'en',
+      version: 1,
+      scope: 'shared',
+      hint: '__Sortorder',
+    }));
+    await applyFieldEditsWithRollback(edits, plan, p => engine.applyPlan(p));
 
     for (const { id } of changedIds) {
       const node = engine.getItemById(id)!;

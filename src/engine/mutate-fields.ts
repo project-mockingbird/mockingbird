@@ -1,5 +1,6 @@
 // src/engine/mutate-fields.ts
 import type { ScsItem } from './types.js';
+import type { MutationPlan } from './mutation-plan.js';
 
 /**
  * Read the current value of `fieldId` on `item`, walking the same
@@ -98,4 +99,65 @@ export function applyFieldEdit(
     language.versions.push(ver);
   }
   ver.fields.push({ id: fieldId, hint, value });
+}
+
+/** A single field write to be applied (and, on failure, rolled back). */
+export interface FieldEditSpec {
+  item: ScsItem;
+  fieldId: string;
+  value: string;
+  lang: string;
+  version: number;
+  scope: 'shared' | 'unversioned' | 'versioned' | undefined;
+  hint: string;
+}
+
+/**
+ * Shared capture/replay/rollback dance for live-tree field writes that must
+ * stay in sync with a disk-writing `applyPlan`. Used by both the reorder
+ * (`POST /api/tree/reorder`) and field-update (`PUT /api/items/:id`) routes,
+ * which otherwise duplicated this exact sequence:
+ *
+ *   1. Capture each edit's prior value via `readCurrentFieldValue` BEFORE
+ *      mutating (so a later revert knows what to restore).
+ *   2. Replay `applyFieldEdit` for every edit on the live (in-memory) item,
+ *      so the tree matches what the plan is about to write to disk.
+ *   3. Run `applyPlan`. On success, return normally - the caller's
+ *      post-write side effects (cache invalidation, notifyItemChange, etc.)
+ *      are the caller's responsibility and happen after this returns.
+ *   4. On failure, revert every edit whose captured prior value was
+ *      defined, then rethrow. Edits whose field did not previously exist
+ *      are deliberately left in place - removing a freshly-pushed entry
+ *      would require pulling it back out of the correct scope array, which
+ *      is more invasive than the disk-vs-memory mismatch this guards
+ *      against.
+ *
+ * `applyPlan` is taken as a plain function (callers pass
+ * `p => engine.applyPlan(p)`) so this module does not need to import the
+ * `Engine` type.
+ */
+export async function applyFieldEditsWithRollback(
+  edits: FieldEditSpec[],
+  plan: MutationPlan,
+  applyPlan: (plan: MutationPlan) => Promise<void>,
+): Promise<void> {
+  const previous = edits.map(edit => ({
+    edit,
+    prev: readCurrentFieldValue(edit.item, edit.fieldId, edit.lang, edit.version),
+  }));
+
+  for (const edit of edits) {
+    applyFieldEdit(edit.item, edit.fieldId, edit.value, edit.lang, edit.version, edit.scope, edit.hint);
+  }
+
+  try {
+    await applyPlan(plan);
+  } catch (err) {
+    for (const { edit, prev } of previous) {
+      if (prev !== undefined) {
+        applyFieldEdit(edit.item, edit.fieldId, prev, edit.lang, edit.version, edit.scope, edit.hint);
+      }
+    }
+    throw err;
+  }
 }
