@@ -322,3 +322,9 @@ export interface MoveItemRequest {
   sourceId: string;
   destinationParentId: string;
 }
+
+export interface ReorderSiblingsRequest {
+  parentId: string;
+  orderedChildIds: string[];
+  db?: string;
+}

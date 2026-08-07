@@ -4,7 +4,7 @@ import type {
   RenderingMeta, RenderingPlaceholderPath, ComposedLayout, CompatibleRenderingsResponse,
   InsertOptionsResponse, InsertItemRequest, InsertItemResponse,
   DuplicateItemRequest, CopyItemRequest, MoveItemRequest, AllTemplatesResponse,
-  DescendantItem,
+  DescendantItem, ReorderSiblingsRequest,
 } from './types';
 
 const BASE = '';
@@ -85,6 +85,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ type: 'moveTo', ...data }),
     }),
+  reorderSiblings: (data: ReorderSiblingsRequest) =>
+    request<TreeNode[]>('/api/tree/reorder', { method: 'POST', body: JSON.stringify(data) }),
   refreshItem: (id: string) =>
     request<{ rootItemId: string; refreshed: number; removed: number; item: ItemDetail }>(
       `/api/items/${bareGuid(id)}/refresh`,
