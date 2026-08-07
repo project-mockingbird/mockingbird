@@ -73,7 +73,7 @@ import { ProvenanceBar } from './ProvenanceBar';
 import { LayerLegend } from './LayerLegend';
 import { containingFolder } from '@/lib/folder-path';
 import { pickNeighborAfterDelete } from '@/lib/delete-neighbor';
-import { reorderState, computeReorderedIds, type ReorderOp } from '@/lib/reorder';
+import { reorderState, computeReorderedIds, reorderByDrop, type ReorderOp } from '@/lib/reorder';
 import { useReorderSiblings } from '@/hooks/useReorderSiblings';
 import { toast } from 'sonner';
 
@@ -821,6 +821,29 @@ function ContentTreeNode({
     }),
     className: rowClassName,
     style: { paddingLeft: `${depth * 16 + 16}px` },
+    draggable: reorder.canReorder,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData('text/mockingbird-item', node.id);
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (reorder.canReorder) e.preventDefault(); // allow drop
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const draggedId = e.dataTransfer.getData('text/mockingbird-item');
+      if (!draggedId || draggedId === node.id || !parentId) return;
+      // Only reorder within the SAME parent; ignore cross-parent drops
+      // (the dragged id must be one of this node's siblings).
+      const siblings = parentChildrenQuery.data ?? [];
+      if (!siblings.some((s) => s.id === draggedId)) return;
+      const orderedChildIds = reorderByDrop(siblings, draggedId, node.id);
+      reorderSiblings.mutate(
+        { parentId, orderedChildIds, db: database },
+        { onError: (err) => toast.error(err instanceof Error ? err.message : 'Reorder failed') },
+      );
+    },
     onClick: () => {
       kbNav.setFocusedId(node.id);
       onSelect(node.id);
