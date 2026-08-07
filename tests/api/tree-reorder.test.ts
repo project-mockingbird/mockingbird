@@ -10,6 +10,11 @@ import { tmpdir } from 'os';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const FIXTURES = resolve(__dirname, '../fixtures/valid');
 const PARENT = '/sitecore/templates/Project/MyProject';
+// Real OOTB registry, needed for the 400 (registry/OOTB child) guard test.
+// The tempDir fixture only covers serialized items under
+// /sitecore/templates/Project/MyProject, so it never collides with the
+// registry's System templates subtree.
+const REGISTRY_JSON_GZ = resolve(__dirname, '../../data/registry.json.gz');
 
 describe('POST /api/tree/reorder', () => {
   let app: FastifyInstance;
@@ -53,5 +58,55 @@ describe('POST /api/tree/reorder', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(await childNames(section.id)).toEqual(['Charlie', 'Alpha', 'Bravo']);
+  });
+
+  it('returns 404 when the parent does not exist', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tree/reorder',
+      payload: { parentId: '11111111-1111-1111-1111-111111111111', orderedChildIds: ['22222222-2222-2222-2222-222222222222'] },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 409 when orderedChildIds is not a permutation of the children', async () => {
+    const tpl = await create({ type: 'template', name: 'PermTest', parentPath: PARENT });
+    await create({ type: 'section', name: 'Content', parentPath: tpl.path });
+    const a = await create({ type: 'field', name: 'Alpha', parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    await create({ type: 'field', name: 'Bravo', parentPath: `${tpl.path}/Content`, fieldType: 'Single-Line Text' });
+    const section = (await app.inject({ method: 'GET', url: `/api/items/by-path?path=${encodeURIComponent(tpl.path + '/Content')}` })).json();
+
+    // Missing one child id.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/tree/reorder',
+      payload: { parentId: section.id, orderedChildIds: [a.id] },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('returns 400 when a child is a registry/OOTB item', async () => {
+    // The shared `app` above boots with no registryPath (registry-free, so
+    // the plain-hex-GUID 404 test above stays a true not-found case). This
+    // test needs real OOTB registry data, so it spins up its own server with
+    // registryPath set and no rootDir (no-project mode; registry only).
+    // /sitecore/templates/System has registry (OOTB) children only.
+    const registryResult = await createServer({ registryPath: REGISTRY_JSON_GZ });
+    const registryApp = registryResult.app;
+    await registryResult.engine.readiness.ready();
+    try {
+      const parent = (await registryApp.inject({ method: 'GET', url: `/api/items/by-path?path=${encodeURIComponent('/sitecore/templates/System')}` })).json();
+      const children = (await registryApp.inject({ method: 'GET', url: `/api/tree/children/${parent.id}` })).json();
+      expect(children.length).toBeGreaterThan(1);
+      expect(children.every((c: { source: string }) => c.source === 'registry')).toBe(true);
+      const res = await registryApp.inject({
+        method: 'POST',
+        url: '/api/tree/reorder',
+        payload: { parentId: parent.id, orderedChildIds: children.map((c: { id: string }) => c.id) },
+      });
+      expect(res.statusCode).toBe(400);
+    } finally {
+      await registryApp.close();
+    }
   });
 });
