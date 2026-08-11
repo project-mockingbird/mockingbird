@@ -60,7 +60,15 @@ describe('GET /api/icon/*', () => {
   });
 
   it('404s a path-traversal attempt', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/icon/../../package.json' });
+    // Percent-encode the dot-segments (including the slashes, as %2f) so the
+    // WHATWG URL parser inside app.inject() does not collapse "../../" down
+    // to "/package.json" before Fastify routes the request - that would
+    // route it straight to the SPA index.html fallback (200) and never
+    // reach our handler's traversal guard at all. The encoded form survives
+    // intact, find-my-way decodes the wildcard param back to
+    // "../../package.json", and our guard in icons.ts correctly rejects it.
+    // Do not "simplify" this back to a literal "../../package.json" string.
+    const res = await app.inject({ method: 'GET', url: '/api/icon/%2e%2e%2f%2e%2e%2fpackage.json' });
     expect(res.statusCode).toBe(404);
   });
 });
