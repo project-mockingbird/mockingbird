@@ -55,6 +55,8 @@ interface TreeNodeResponse {
   sortOrder?: number;
   /** `__Display Name` value, falling back to name. Used by display-name sort. */
   displayName?: string;
+  /** `__Icon` value (theme-relative sprite path or media ref). Present only when set. */
+  icon?: string;
   /** `__Created` parsed to epoch ms; absent when missing/malformed. */
   createdAt?: number;
   /** `__Updated` parsed to epoch ms; absent when missing/malformed. */
@@ -254,6 +256,7 @@ function buildRegistryNode(item: RegistryItem, engine: Engine, maxDepth: number,
   const displayNameValue = readReg(FIELD_IDS.displayName);
   const createdValue = readReg(FIELD_IDS.created);
   const updatedValue = readReg(FIELD_IDS.updated);
+  const iconValue = readReg(FIELD_IDS.icon);
 
   const node: TreeNodeResponse = {
     id: item.id,
@@ -268,6 +271,7 @@ function buildRegistryNode(item: RegistryItem, engine: Engine, maxDepth: number,
     displayName: displayNameValue && displayNameValue !== '' ? displayNameValue : undefined,
     createdAt: parseSitecoreDate(createdValue) || undefined,
     updatedAt: parseSitecoreDate(updatedValue) || undefined,
+    icon: iconValue && iconValue !== '' ? iconValue : undefined,
     autoExpand: autoExpand || undefined,
   };
 
@@ -290,6 +294,7 @@ function buildSerializedSubtree(node: ItemNode, engine: Engine, maxDepth: number
   const displayNameValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.displayName, 'en');
   const createdValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.created, 'en');
   const updatedValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.updated, 'en');
+  const iconValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.icon, 'en');
 
   const result: TreeNodeResponse = {
     id: node.item.id,
@@ -304,6 +309,7 @@ function buildSerializedSubtree(node: ItemNode, engine: Engine, maxDepth: number
     displayName: displayNameValue !== undefined && displayNameValue !== '' ? displayNameValue : undefined,
     createdAt: parseSitecoreDate(createdValue) || undefined,
     updatedAt: parseSitecoreDate(updatedValue) || undefined,
+    icon: iconValue !== undefined && iconValue !== '' ? iconValue : undefined,
     filePath: toHostPath(node.filePath),
   };
 
