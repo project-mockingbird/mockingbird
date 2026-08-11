@@ -82,6 +82,17 @@ COPY data/registry.json.gz* /app/data/
 
 ENV REGISTRY_PATH=/app/data/registry.json.gz
 
+# Bake the Sitecore sprite icon set (dev-run scripts/extract-icons.ps1 produces
+# data/sitecore-icons.tar.gz). Optional glob so builds without it still succeed;
+# the icon feature is simply unavailable then. Mirrors the registry bake.
+COPY data/sitecore-icons.tar.gz* /app/data/
+RUN if [ -f /app/data/sitecore-icons.tar.gz ]; then \
+      mkdir -p /app/data/sitecore-icons && \
+      tar xzf /app/data/sitecore-icons.tar.gz -C /app/data/sitecore-icons && \
+      rm /app/data/sitecore-icons.tar.gz; \
+    fi
+ENV MOCKINGBIRD_ICON_ROOT=/app/data/sitecore-icons
+
 # Run as the built-in non-root `node` user (uid/gid 1000). /app owns the
 # bind-mount targets (/scs, /scs-content, /data/cache) plus the baked
 # registry, so giving `node` ownership lets the engine write the cache.
