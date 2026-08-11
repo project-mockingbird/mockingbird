@@ -18,6 +18,7 @@ import { isFolderTemplate } from '@/lib/folder-templates';
 import { useTree, useChildren, useCreateItem, useDeleteItem, useAncestors } from '@/hooks/useItems';
 import { useValidation } from '@/hooks/useValidation';
 import { useEngineStatus } from '@/hooks/useEngineStatus';
+import { spriteIconSrc } from '@/lib/sprite-icon';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -735,6 +736,9 @@ function ContentTreeNode({
   const [addRootDialogOpen, setAddRootDialogOpen] = useState(false);
 
   const iconPath = nodeIconPath(node);
+  const { data: engineStatus } = useEngineStatus();
+  const spriteSrc = engineStatus?.iconsEnabled ? spriteIconSrc(node.icon) : null;
+  const [spriteFailed, setSpriteFailed] = useState(false);
 
   const menuItems = [
     ...(node.type === 'template'
@@ -773,15 +777,26 @@ function ContentTreeNode({
       ) : (
         <span className="w-4" />
       )}
-      <Icon
-        path={iconPath}
-        className={cn(
-          'h-3.5 w-3.5 shrink-0',
-          isRegistry
-            ? 'text-muted-foreground/50'
-            : 'text-muted-foreground',
-        )}
-      />
+      {spriteSrc && !spriteFailed ? (
+        <img
+          src={spriteSrc}
+          alt=""
+          width={16}
+          height={16}
+          className="h-3.5 w-3.5 shrink-0 object-contain"
+          onError={() => setSpriteFailed(true)}
+        />
+      ) : (
+        <Icon
+          path={iconPath}
+          className={cn(
+            'h-3.5 w-3.5 shrink-0',
+            isRegistry
+              ? 'text-muted-foreground/50'
+              : 'text-muted-foreground',
+          )}
+        />
+      )}
       <span className={cn('truncate flex-1 min-w-0', isRegistry && 'italic')}>
         {node.name}
       </span>
