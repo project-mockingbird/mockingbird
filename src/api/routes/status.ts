@@ -3,6 +3,7 @@ import type { Engine } from '../../engine/index.js';
 import type { SessionManager } from '../../spe/host/session-manager.js';
 import { getPhaseTimings } from '../../engine/index-timing.js';
 import { layersWithEffectiveCount } from './projects.js';
+import { iconsEnabled } from './icons.js';
 
 // Default URL scheme for the "Open in editor" buttons in QuickInfo and the
 // Raw YAML tab. VS Code understands `vscode://file/<absolute-path>`, accepts
@@ -19,6 +20,7 @@ export function registerStatusRoute(
   app.get('/api/status', async () => {
     const speSnap = speManager?.state ?? null;
     const layers = layersWithEffectiveCount(engine);
+    const icons = await iconsEnabled();
     return {
       state: engine.readiness.state,
       progress: engine.readiness.progress,
@@ -30,6 +32,7 @@ export function registerStatusRoute(
       cacheStale: engine.isCacheStale(),
       editorUrlTemplate: process.env.MOCKINGBIRD_EDITOR_URL_TEMPLATE ?? DEFAULT_EDITOR_URL_TEMPLATE,
       taco: process.env.TACO === '1',
+      iconsEnabled: icons,
       phaseTimings: getPhaseTimings().map((t) => ({
         label: t.label,
         durationMs: Math.round(t.durationMs * 100) / 100,

@@ -71,4 +71,26 @@ describe('GET /api/icon/*', () => {
     const res = await app.inject({ method: 'GET', url: '/api/icon/%2e%2e%2f%2e%2e%2fpackage.json' });
     expect(res.statusCode).toBe(404);
   });
+
+  it('status reports iconsEnabled false when the switch is off', async () => {
+    const saved = process.env.MOCKINGBIRD_ICONS;
+    delete process.env.MOCKINGBIRD_ICONS;
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/status' });
+      expect(res.json().iconsEnabled).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env.MOCKINGBIRD_ICONS; else process.env.MOCKINGBIRD_ICONS = saved;
+    }
+  });
+
+  it('status reports iconsEnabled true when the switch is on and icons are baked', async () => {
+    const saved = process.env.MOCKINGBIRD_ICONS;
+    process.env.MOCKINGBIRD_ICONS = '1';
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/status' });
+      expect(res.json().iconsEnabled).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.MOCKINGBIRD_ICONS; else process.env.MOCKINGBIRD_ICONS = saved;
+    }
+  });
 });
