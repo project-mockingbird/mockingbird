@@ -330,3 +330,8 @@ export interface ReorderSiblingsRequest {
   orderedChildIds: string[];
   db?: string;
 }
+
+export interface IconCategory {
+  key: string;
+  label: string;
+}

@@ -4,7 +4,7 @@ import type {
   RenderingMeta, RenderingPlaceholderPath, ComposedLayout, CompatibleRenderingsResponse,
   InsertOptionsResponse, InsertItemRequest, InsertItemResponse,
   DuplicateItemRequest, CopyItemRequest, MoveItemRequest, AllTemplatesResponse,
-  DescendantItem, ReorderSiblingsRequest,
+  DescendantItem, ReorderSiblingsRequest, IconCategory,
 } from './types';
 
 const BASE = '';
@@ -158,4 +158,13 @@ export const api = {
     request<{ count: number }>(
       `/api/package/source-size?rootItemId=${encodeURIComponent(rootItemId)}&scope=${encodeURIComponent(scope)}`,
     ),
+  getIconCategories: () =>
+    request<IconCategory[]>('/api/icons/categories'),
+  getIconList: (category: string) =>
+    request<string[]>(`/api/icons?category=${encodeURIComponent(category)}`),
+  setIcon: (id: string, icon: string) =>
+    request<ItemDetail>(`/api/items/${bareGuid(id)}/icon`, {
+      method: 'POST',
+      body: JSON.stringify({ icon }),
+    }),
 };
