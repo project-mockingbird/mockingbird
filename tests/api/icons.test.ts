@@ -94,3 +94,73 @@ describe('GET /api/icon/*', () => {
     }
   });
 });
+
+describe('icon listing endpoints', () => {
+  let app: FastifyInstance;
+  let tempDir: string;
+  let iconRoot: string;
+  const savedRoot = process.env.MOCKINGBIRD_ICON_ROOT;
+  const savedSwitch = process.env.MOCKINGBIRD_ICONS;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(resolve(tmpdir(), 'scp-iconlist-'));
+    cpSync(FIXTURES, tempDir, { recursive: true });
+    iconRoot = resolve(tempDir, 'sitecore-icons');
+    // Two curated folders + one non-curated (V2) folder, all at 32x32.
+    for (const rel of ['Office/32x32/folder.png', 'Network/32x32/home.png', 'ApplicationsV2/32x32/gear.png']) {
+      await mkdir(resolve(iconRoot, rel, '..'), { recursive: true });
+      await writeFile(resolve(iconRoot, rel), PNG_1x1);
+    }
+    process.env.MOCKINGBIRD_ICON_ROOT = iconRoot;
+    process.env.MOCKINGBIRD_ICONS = '1';
+    const result = await createServer({ rootDir: tempDir });
+    app = result.app;
+    await result.engine.readiness.ready();
+  });
+  afterEach(async () => {
+    await app.close();
+    await rm(tempDir, { recursive: true, force: true });
+    if (savedRoot === undefined) delete process.env.MOCKINGBIRD_ICON_ROOT; else process.env.MOCKINGBIRD_ICON_ROOT = savedRoot;
+    if (savedSwitch === undefined) delete process.env.MOCKINGBIRD_ICONS; else process.env.MOCKINGBIRD_ICONS = savedSwitch;
+  });
+
+  it('lists curated categories present in the set plus an All catch-all', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/icons/categories' });
+    expect(res.statusCode).toBe(200);
+    const cats = res.json() as Array<{ key: string; label: string }>;
+    const keys = cats.map(c => c.key);
+    expect(keys).toContain('Office');
+    expect(keys).toContain('Network');
+    expect(keys).not.toContain('ApplicationsV2'); // non-curated, reachable only via All
+    expect(cats[cats.length - 1]).toEqual({ key: '*', label: 'All icons' });
+    // A curated folder that is not baked must be absent.
+    expect(keys).not.toContain('People');
+  });
+
+  it('lists a category\'s 32x32 paths sorted', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/icons?category=Office' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(['Office/32x32/folder.png']);
+  });
+
+  it('All spans every folder including non-curated ones', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/icons?category=*' });
+    const list = res.json() as string[];
+    expect(list).toContain('ApplicationsV2/32x32/gear.png');
+    expect(list).toContain('Office/32x32/folder.png');
+    expect(list).toEqual([...list].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it('400s when category is missing', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/icons' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('404s the listing endpoints when the switch is off', async () => {
+    process.env.MOCKINGBIRD_ICONS = '0';
+    const a = await app.inject({ method: 'GET', url: '/api/icons/categories' });
+    const b = await app.inject({ method: 'GET', url: '/api/icons?category=Office' });
+    expect(a.statusCode).toBe(404);
+    expect(b.statusCode).toBe(404);
+  });
+});
