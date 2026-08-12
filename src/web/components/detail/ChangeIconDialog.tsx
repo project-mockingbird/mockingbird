@@ -46,9 +46,12 @@ export function ChangeIconDialog({ itemId, currentIcon, open, onOpenChange }: Pr
     setCategory(match ? match.key : categories[0].key);
   }, [open, categories, currentIcon, category]);
 
-  // Reset transient state each time the dialog opens.
+  // Reset transient state each time the dialog opens. Clearing category here
+  // (not just selected/query/tab) lets the category-default effect above
+  // re-derive it from this open's currentIcon instead of keeping whatever
+  // category a prior item resolved to.
   useEffect(() => {
-    if (open) { setSelected(currentIcon); setQuery(''); setTab('icons'); }
+    if (open) { setSelected(currentIcon); setQuery(''); setTab('icons'); setCategory(null); }
   }, [open, currentIcon]);
 
   const { data: allIcons } = useIconList(tab === 'icons' ? category : null);
