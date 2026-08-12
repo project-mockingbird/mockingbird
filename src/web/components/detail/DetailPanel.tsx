@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertTitle } from '@/components/ui/alert';
 import { ReadOnlyBanner } from './ReadOnlyBanner';
+import { ChangeIconButton } from './ChangeIconButton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Icon } from '@/lib/icon';
@@ -241,6 +242,7 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
           </>
         )}
         <div className="flex items-center gap-2 ml-auto">
+          {!readOnly && item && <ChangeIconButton item={item} />}
           {!readOnly && dirty && (
             <>
               <Button onClick={handleDiscard} variant="ghost" size="sm" disabled={saveMutation.isPending}>
