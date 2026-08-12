@@ -82,6 +82,14 @@ COPY data/registry.json.gz* /app/data/
 
 ENV REGISTRY_PATH=/app/data/registry.json.gz
 
+# Bake the Sitecore sprite icon set (dev-run scripts/extract-icons.ps1 produces
+# data/sitecore-icons.tar.gz). ADD auto-extracts the archive in a single layer,
+# so the tarball is never retained (COPY + RUN extract + rm still keeps the
+# tarball in the COPY layer, doubling the on-image cost). Optional glob so
+# builds without it still succeed; the feature is simply unavailable then.
+ADD data/sitecore-icons.tar.gz* /app/data/sitecore-icons/
+ENV MOCKINGBIRD_ICON_ROOT=/app/data/sitecore-icons
+
 # Run as the built-in non-root `node` user (uid/gid 1000). /app owns the
 # bind-mount targets (/scs, /scs-content, /data/cache) plus the baked
 # registry, so giving `node` ownership lets the engine write the cache.

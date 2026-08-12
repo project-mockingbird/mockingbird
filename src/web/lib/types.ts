@@ -24,6 +24,8 @@ export interface TreeNode {
   hasChildren: boolean;
   /** `__Sortorder`; default 100 when missing. */
   sortOrder?: number;
+  /** `__Icon` value from the tree API; used to render the real Sitecore sprite. */
+  icon?: string;
   /** `__Display Name`, falling back to name. */
   displayName?: string;
   /** `__Created` epoch ms; absent when missing. */

@@ -27,6 +27,9 @@ data/cache
 # The uncompressed registry.json is an intermediate artifact of
 # extract-registry.ps1; only registry.json.gz is COPYed into the image.
 data/registry.json
+# Uncompressed icon staging is an intermediate of extract-icons.ps1; only
+# sitecore-icons.tar.gz is COPYed into the image.
+data/sitecore-icons/
 # Local dev scripts (debug probes, extraction helpers) - not part of the
 # runtime image.
 scripts
