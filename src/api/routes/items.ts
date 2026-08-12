@@ -20,6 +20,8 @@ import { resolveInsertParent } from '../../engine/insert-branch.js';
 import { buildRegistryItemDetail } from '../items-from-registry.js';
 import { serializeItem } from '../../engine/serializer.js';
 import { applyFieldEditsWithRollback, type FieldEditSpec } from '../../engine/mutate-fields.js';
+import { iconsEnabled } from './icons.js';
+import { planSetIcon } from '../../engine/plan-set-icon.js';
 import { buildSchemaFieldMaps, resolveFieldKey } from '../../engine/plan-update-fields.js';
 import { resolveComparer } from '../../engine/sorting/index.js';
 import type { TemplateFieldSchema } from '../template-schema.js';
@@ -423,6 +425,36 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     if (editedClass === 'template' || editedClass === 'templateSection' || editedClass === 'templateField') {
       clearTemplateSchemaCache();
     }
+    notifyItemChange(engine, { type: 'changed', itemId: node.item.id, itemPath: node.item.path });
+    return serializeItemNode(node, engine);
+  });
+
+  app.post('/api/items/:id/icon', async (request, reply) => {
+    if (!(await iconsEnabled())) {
+      return reply.status(404).send({ error: 'icons not available', statusCode: 404 });
+    }
+    const { id } = request.params as { id: string };
+    const { icon } = (request.body ?? {}) as { icon?: string };
+    if (typeof icon !== 'string' || icon.trim() === '') {
+      return reply.status(400).send({ error: 'icon (non-empty string) is required', statusCode: 400 });
+    }
+    const node = engine.getItemById(id);
+    if (!node) {
+      // A registry-only item exists but cannot be written; anything else is 404.
+      if (engine.getRegistryItem(id)) {
+        return reply.status(400).send({ error: 'OOTB registry items cannot be edited', statusCode: 400 });
+      }
+      return reply.status(404).send({ error: `Item not found: ${id}`, statusCode: 404 });
+    }
+    const plan = await planSetIcon(engine, id, icon);
+    if (plan.files.length === 0) {
+      return serializeItemNode(node, engine); // no-op (unchanged)
+    }
+    const edits: FieldEditSpec[] = [{
+      item: node.item, fieldId: FIELD_IDS.icon, value: icon,
+      lang: 'en', version: 1, scope: 'shared', hint: '__Icon',
+    }];
+    await applyFieldEditsWithRollback(edits, plan, p => engine.applyPlan(p));
     notifyItemChange(engine, { type: 'changed', itemId: node.item.id, itemPath: node.item.path });
     return serializeItemNode(node, engine);
   });
