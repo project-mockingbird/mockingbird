@@ -5,6 +5,7 @@
 // Sitecore's "Change Icon" dialog - click a tile, confirm with OK.
 
 import { useMemo, useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -66,9 +67,14 @@ export function ChangeIconDialog({ itemId, currentIcon, open, onOpenChange }: Pr
 
   async function handleSave() {
     if (!selected) return;
-    await setIcon.mutateAsync(selected);
-    writeRecentIcons(addRecentIcon(readRecentIcons(), selected));
-    onOpenChange(false);
+    try {
+      await setIcon.mutateAsync(selected);
+      writeRecentIcons(addRecentIcon(readRecentIcons(), selected));
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(`Failed to change icon: ${err instanceof Error ? err.message : String(err)}`);
+      // Leave the dialog open so the user can retry or pick a different icon.
+    }
   }
 
   return (
