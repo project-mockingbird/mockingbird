@@ -57,66 +57,74 @@ describe('metadataEntries - keys and field mapping', () => {
     expect(decodeUtf8(out['metadata/sc_license.txt'])).toBe('MIT');
   });
 
-  it('emits all six entries when every field is populated', () => {
-    const out = metadataEntries({
-      name: 'N',
-      author: 'A',
-      version: 'V',
-      comment: 'C',
-      publisher: 'P',
-      license: 'L',
-    });
+  it('always emits the full set of ten recognized metadata keys (empty where unset)', () => {
+    // Real Sitecore writes all MetadataView keys, empty where unset - the
+    // sample CM package shipped all ten, populated only on sc_name.
+    const out = metadataEntries({ name: 'N' });
     expect(Object.keys(out).sort()).toEqual([
       'metadata/sc_author.txt',
       'metadata/sc_comment.txt',
       'metadata/sc_license.txt',
       'metadata/sc_name.txt',
+      'metadata/sc_packageid.txt',
+      'metadata/sc_poststep.txt',
       'metadata/sc_publisher.txt',
+      'metadata/sc_readme.txt',
+      'metadata/sc_revision.txt',
       'metadata/sc_version.txt',
     ]);
+    // Populated value present; the rest are empty (0-byte) placeholders.
+    expect(decodeUtf8(out['metadata/sc_name.txt'])).toBe('N');
+    expect(out['metadata/sc_author.txt'].length).toBe(0);
+    expect(out['metadata/sc_revision.txt'].length).toBe(0);
+    expect(out['metadata/sc_packageid.txt'].length).toBe(0);
+  });
+
+  it('populates each PackageMetadata field into its entry', () => {
+    const out = metadataEntries({
+      name: 'N', author: 'A', version: 'V', comment: 'C', publisher: 'P', license: 'L',
+    });
+    expect(decodeUtf8(out['metadata/sc_name.txt'])).toBe('N');
+    expect(decodeUtf8(out['metadata/sc_author.txt'])).toBe('A');
+    expect(decodeUtf8(out['metadata/sc_version.txt'])).toBe('V');
+    expect(decodeUtf8(out['metadata/sc_comment.txt'])).toBe('C');
+    expect(decodeUtf8(out['metadata/sc_publisher.txt'])).toBe('P');
+    expect(decodeUtf8(out['metadata/sc_license.txt'])).toBe('L');
   });
 });
 
-describe('metadataEntries - omission of empty/undefined values', () => {
-  it('omits entries for undefined optional fields', () => {
+describe('metadataEntries - empty placeholders for unset values', () => {
+  it('emits all ten keys with empty placeholders for undefined optional fields', () => {
     const out = metadataEntries({ name: 'Pkg' });
-    expect(Object.keys(out)).toEqual(['metadata/sc_name.txt']);
+    expect(Object.keys(out)).toHaveLength(10);
+    // Only sc_name carries a value; the rest are 0-byte placeholders.
+    for (const [key, bytes] of Object.entries(out)) {
+      if (key === 'metadata/sc_name.txt') {
+        expect(decodeUtf8(bytes)).toBe('Pkg');
+      } else {
+        expect(bytes.length, `${key} should be an empty placeholder`).toBe(0);
+      }
+    }
   });
 
-  it('omits entries for empty-string optional fields', () => {
+  it('emits empty placeholders for empty-string optional fields', () => {
     const out = metadataEntries({
-      name: 'Pkg',
-      author: '',
-      version: '',
-      comment: '',
-      publisher: '',
-      license: '',
+      name: 'Pkg', author: '', version: '', comment: '', publisher: '', license: '',
     });
-    expect(Object.keys(out)).toEqual(['metadata/sc_name.txt']);
+    expect(out['metadata/sc_author.txt'].length).toBe(0);
+    expect(out['metadata/sc_version.txt'].length).toBe(0);
+    expect(decodeUtf8(out['metadata/sc_name.txt'])).toBe('Pkg');
   });
 
-  it('omits sc_name.txt when name is the empty string (parser-tolerant)', () => {
-    // Name is required at the type level, but defending against a runtime
-    // empty string keeps the rule "skip empty values" uniform across all
-    // fields. Callers should set a default before invoking.
-    const out = metadataEntries({ name: '' });
-    expect(Object.keys(out)).not.toContain('metadata/sc_name.txt');
-  });
-
-  it('keeps populated fields and skips empty ones in the same call', () => {
+  it('keeps populated fields and leaves unset ones empty in the same call', () => {
     const out = metadataEntries({
-      name: 'Pkg',
-      author: 'Alice',
-      version: '',
-      comment: '',
-      publisher: 'Foo Corp',
-      license: '',
+      name: 'Pkg', author: 'Alice', version: '', comment: '', publisher: 'Foo Corp', license: '',
     });
-    expect(Object.keys(out).sort()).toEqual([
-      'metadata/sc_author.txt',
-      'metadata/sc_name.txt',
-      'metadata/sc_publisher.txt',
-    ]);
+    expect(decodeUtf8(out['metadata/sc_author.txt'])).toBe('Alice');
+    expect(decodeUtf8(out['metadata/sc_publisher.txt'])).toBe('Foo Corp');
+    expect(out['metadata/sc_version.txt'].length).toBe(0);
+    expect(out['metadata/sc_comment.txt'].length).toBe(0);
+    expect(out['metadata/sc_license.txt'].length).toBe(0);
   });
 });
 
@@ -213,16 +221,19 @@ describe('metadataEntries - fixture round-trip', () => {
     }
   });
 
-  it('does NOT emit sc_readme.txt when readme is not on PackageMetadata (v1 omits empty fields)', () => {
-    // The fixture has a 0-byte sc_readme.txt that Sitecore Desktop emitted
-    // for an empty Readme. v1 PackageMetadata has no readme field, so the
-    // emitter must not produce that entry.
+  it('emits an empty (0-byte) sc_readme.txt matching the fixture', async () => {
+    // The fixture has a 0-byte sc_readme.txt that Sitecore emitted for an empty
+    // Readme. PackageMetadata has no readme field, so the emitter produces the
+    // empty placeholder - byte-identical to the fixture's 0-byte file.
     const out = metadataEntries({
       name: 'Content Package',
       author: 'Jason Wilkerson',
       version: '1',
       publisher: 'Sitecore Ukraine',
     });
-    expect(Object.keys(out)).not.toContain('metadata/sc_readme.txt');
+    expect(out['metadata/sc_readme.txt']).toBeDefined();
+    const expected = await readFile(resolvePath(FIXTURE_METADATA_DIR, 'sc_readme.txt'));
+    expect(out['metadata/sc_readme.txt'].length).toBe(expected.length);
+    expect(out['metadata/sc_readme.txt'].length).toBe(0);
   });
 });

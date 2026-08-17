@@ -256,7 +256,7 @@ describe('emitItemXml - root attributes', () => {
 });
 
 describe('emitItemXml - <fields> container', () => {
-  it('emits one <field> per template-defined field, including empty ones', () => {
+  it('emits one <field> per STORED field on the item, not the full template schema', () => {
     clearTemplateSchemaCache();
     const templateId = '33333333-3333-3333-3333-333333333333';
     const titleId = 'f0000001-0000-0000-0000-000000000001';
@@ -291,12 +291,74 @@ describe('emitItemXml - <fields> container', () => {
       createdIso: '20260505T000000Z',
     });
 
+    // Stored Title is emitted with its schema-derived key + type.
     expect(xml).toContain(
       `<field tfid="{F0000001-0000-0000-0000-000000000001}" key="title" type="Single-Line Text"><content>Hello World</content></field>`,
     );
-    // Empty Subtitle renders as <content />.
+    // Subtitle is defined by the template but NOT stored on the item, so it is
+    // absent - real Sitecore serializes only the item's stored fields.
+    expect(xml).not.toContain('key="subtitle"');
+    // Exactly one <field> in the container.
+    expect((xml.match(/<field /g) ?? []).length).toBe(1);
+  });
+
+  it('renders a stored-but-empty field as <content /> (real Sitecore keeps stored empties)', () => {
+    clearTemplateSchemaCache();
+    const templateId = '33333333-3333-3333-3333-333333333334';
+    const titleId = 'f0000001-0000-0000-0000-000000000003';
+    const tplItems = buildTemplate({
+      templateId,
+      templateName: 'T2',
+      fields: [{ id: titleId, name: 'Title', type: 'Single-Line Text' }],
+    });
+    const item: ScsItem = makeItem({
+      id: 'a1b2c3d4-e5f6-7890-1234-56789012340a',
+      parent: '11111111-1111-1111-1111-111111111111',
+      template: templateId,
+      path: '/sitecore/content/Empty',
+      languages: [{
+        language: 'en',
+        fields: [],
+        versions: [{ version: 1, fields: [{ id: titleId, hint: 'Title', value: '' }] }],
+      }],
+    });
+    const engine = buildEngine([...tplItems, item]);
+    const xml = emitItemXml(engine, item, { language: 'en', version: 1 }, {
+      itemName: 'Empty',
+      templateName: 'T2',
+      createdIso: '20260505T000000Z',
+    });
     expect(xml).toContain(
-      `<field tfid="{F0000002-0000-0000-0000-000000000002}" key="subtitle" type="Single-Line Text"><content /></field>`,
+      `<field tfid="{F0000001-0000-0000-0000-000000000003}" key="title" type="Single-Line Text"><content /></field>`,
+    );
+  });
+
+  it('emits a fieldOverride even when the item does not store it (blob stripped from cache)', () => {
+    clearTemplateSchemaCache();
+    const templateId = '33333333-3333-3333-3333-333333333335';
+    const blobId = '40e50ed9-ba07-4702-992e-a912738d32dc';
+    const tplItems = buildTemplate({
+      templateId,
+      templateName: 'Image2',
+      fields: [{ id: blobId, name: 'Blob', type: 'attachment', shared: true }],
+    });
+    const item: ScsItem = makeItem({
+      id: 'a1b2c3d4-e5f6-7890-1234-56789012340b',
+      parent: '11111111-1111-1111-1111-111111111111',
+      template: templateId,
+      path: '/sitecore/media library/x',
+      sharedFields: [], // Blob stripped from the in-memory item
+      languages: [{ language: 'en', fields: [], versions: [{ version: 1, fields: [] }] }],
+    });
+    const engine = buildEngine([...tplItems, item]);
+    const xml = emitItemXml(engine, item, { language: 'en', version: 1 }, {
+      itemName: 'x',
+      templateName: 'Image2',
+      createdIso: '20260505T000000Z',
+      fieldOverrides: { [blobId]: 'deadbeef-dead-beef-dead-beefdeadbeef' },
+    });
+    expect(xml).toContain(
+      `key="blob" type="attachment"><content>deadbeef-dead-beef-dead-beefdeadbeef</content></field>`,
     );
   });
 
@@ -537,30 +599,34 @@ function compareItemXml(expected: string, actual: string): FixtureCompareResult 
 
   // 2. Compare the set of <field> elements by tfid.
   //
-  // The fixture emits fields the way Sitecore Desktop does: only those for
-  // which the item has a SQL field row (stored value), regardless of whether
-  // the row's value is populated or empty. Our emitter walks the full
-  // template definition (per the spec: "every field the template defines")
-  // and so emits a superset - every fixture field plus extra base-template
-  // fields the Home item never stored. Both behaviors are valid per the
-  // package format reference (the install-side parser tolerates either:
-  // populated fields are stored, empty-content fields are skipped per
-  // ItemInstaller.ParseField). We compare by requiring every fixture field
-  // to be present in the emitter output and matching byte-for-byte; extra
-  // fields in our output are tolerated, but a `_extras` field in the
-  // returned details surfaces them so they aren't silently overlooked.
+  // Real Sitecore serializes the item's stored SQL field rows - populated OR
+  // stored-empty. Our emitter serializes the fields the SCS source item
+  // carries, which is a SUBSET of those rows: SCS filters out fields left at
+  // default/standard values that the DB still kept as empty rows. So the
+  // contract is `actual is a subset of fixture`: every field we emit must
+  // exist in the real package AND match byte-for-byte, but the fixture may
+  // carry stored-empty fields the SCS source dropped.
+  //
+  // Emitting only the stored fields (rather than the full template schema) is
+  // a correctness improvement: ItemInstaller.ParseField does NOT skip empty
+  // <content /> - it calls builder.AddField(id, "") for every field element,
+  // so an over-emitted empty field would install an empty row that overrides
+  // standard-value inheritance. For a media item this subset equals the real
+  // package exactly (media items store only their populated fields).
   const ef = parseFields(e);
   const af = parseFields(a);
 
-  const missing = [...ef.keys()].filter(k => !af.has(k));
-  if (missing.length) {
+  // No field we emit may be absent from the real Sitecore output.
+  const extras = [...af.keys()].filter(k => !ef.has(k));
+  if (extras.length) {
     return {
       ok: false,
-      details: `field set mismatch (missing in actual: ${missing.length}).\n  ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? ', ...' : ''}`,
+      details: `emitted ${extras.length} field(s) absent from the real Sitecore output:\n  ${extras.slice(0, 10).join(', ')}${extras.length > 10 ? ', ...' : ''}`,
     };
   }
 
-  // 3. For each tfid the fixture has, compare the field XML byte-for-byte.
+  // 3. For each field we emit, compare its XML byte-for-byte against the
+  //    fixture's counterpart.
   //
   //    Tolerated divergences (documented; not silent):
   //      a. CR characters inside <content> on multi-line fields. The
@@ -581,8 +647,8 @@ function compareItemXml(expected: string, actual: string): FixtureCompareResult 
   //         this gap is a Phase-2.x followup; case-insensitive comparison
   //         on the type attribute is the v1 acceptance criterion.
   const mismatches: string[] = [];
-  for (const [id, expectedField] of ef) {
-    const actualField = af.get(id)!;
+  for (const [id, actualField] of af) {
+    const expectedField = ef.get(id)!;
     const eNorm = normalizeFieldXml(expectedField);
     const aNorm = normalizeFieldXml(actualField);
     if (eNorm !== aNorm) {
@@ -596,14 +662,13 @@ function compareItemXml(expected: string, actual: string): FixtureCompareResult 
     };
   }
 
-  // 4. Surface extras informationally so the test report shows what we emit
-  // beyond Sitecore Desktop. These are the base-template fields the Home
-  // item didn't store on the source side (e.g. __Source, __Boost) but that
-  // are part of the Standard template chain.
-  const extras = [...af.keys()].filter(k => !ef.has(k));
+  // 4. Surface the stored-empty fields the real package has but the SCS source
+  // filtered out, so the report shows what the DB-row set contained beyond our
+  // source (e.g. __Source, __Boost). Install-equivalent (empties are skipped).
+  const filtered = [...ef.keys()].filter(k => !af.has(k));
   return {
     ok: true,
-    details: extras.length > 0 ? `Note: actual emits ${extras.length} additional template-defined fields not present in the fixture (Sitecore Desktop emits only fields with stored SQL rows; our emitter walks the full template per spec).` : '',
+    details: filtered.length > 0 ? `Note: the real package carries ${filtered.length} stored-empty field(s) the SCS source filtered out; install skips empty fields so this is equivalent.` : '',
   };
 }
 

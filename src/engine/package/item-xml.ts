@@ -41,7 +41,7 @@
 import type { Engine } from '../index.js';
 import type { ScsItem, ScsField } from '../types.js';
 import { formatGuidBraced } from '../guid.js';
-import { getTemplateSchema, type TemplateFieldSchema } from '../template-schema.js';
+import { getTemplateSchema } from '../template-schema.js';
 import { FIELD_IDS } from '../constants.js';
 
 const ZERO_GUID = '{00000000-0000-0000-0000-000000000000}';
@@ -109,18 +109,50 @@ export function emitItemXml(
   }
   out.push('>');
 
-  // <fields> container. Walk the template schema to enumerate every defined
-  // field (own + inherited).
+  // <fields> container. Emit ONLY the fields the item actually stores for this
+  // (language, version) - shared, then unversioned, then versioned - which is
+  // what real Sitecore serializes (an item's stored field rows, not the full
+  // template schema). The schema is consulted only to resolve each field's
+  // name + type. Fields injected via fieldOverrides (e.g. a Blob stripped from
+  // the in-memory index) are appended even when the item does not carry them.
   out.push('<fields>');
 
-  const schema = getTemplateSchema(item.template, engine);
+  const meta = buildFieldMeta(item.template, engine);
   const language = versionRef.language;
   const versionNumber = versionRef.version;
 
-  for (const section of schema.sections) {
-    for (const field of section.fields) {
-      out.push(emitField(field, item, language, versionNumber, ctx.fieldOverrides));
+  // Normalize override keys to lowercase so lookups are case-insensitive.
+  const overrides: Record<string, string> | undefined = ctx.fieldOverrides
+    ? Object.fromEntries(Object.entries(ctx.fieldOverrides).map(([k, v]) => [k.toLowerCase(), v]))
+    : undefined;
+
+  const stored = new Map<string, { hint: string; value: string }>();
+  const collect = (fields: ScsField[]): void => {
+    for (const f of fields) {
+      const id = f.id.toLowerCase();
+      if (!stored.has(id)) stored.set(id, { hint: f.hint, value: f.value });
     }
+  };
+  collect(item.sharedFields);
+  const lang = item.languages.find(l => l.language === language);
+  if (lang) {
+    collect(lang.fields);
+    const ver = lang.versions.find(v => v.version === versionNumber);
+    if (ver) collect(ver.fields);
+  }
+  if (overrides) {
+    for (const id of Object.keys(overrides)) {
+      if (!stored.has(id)) stored.set(id, { hint: '', value: '' });
+    }
+  }
+
+  for (const [id, field] of stored) {
+    const m = meta.get(id);
+    const name = (m?.name ?? field.hint ?? '').toLowerCase();
+    const type = m?.type ?? '';
+    const override = overrides?.[id];
+    const value = override !== undefined ? override : field.value;
+    out.push(renderField(id, name, type, value));
   }
 
   out.push('</fields>');
@@ -129,58 +161,28 @@ export function emitItemXml(
 }
 
 /**
- * Look up a field's value on the ScsItem according to its sharing kind:
- *   - shared:      look in item.sharedFields
- *   - unversioned: look in item.languages[L].fields
- *   - versioned:   look in item.languages[L].versions[V].fields
- *
- * Returns empty string when not present.
+ * Build a `fieldId (lowercase) -> { name, type }` lookup from the item's
+ * template schema, used to resolve the `key` (field name) and `type` attributes
+ * for each emitted field.
  */
-function getFieldValue(
-  field: TemplateFieldSchema,
-  item: ScsItem,
-  language: string,
-  versionNumber: number,
-): string {
-  const fieldIdLc = field.id.toLowerCase();
-
-  if (field.shared) {
-    return findFieldValue(item.sharedFields, fieldIdLc);
+function buildFieldMeta(
+  templateId: string,
+  engine: Engine,
+): Map<string, { name: string; type: string }> {
+  const schema = getTemplateSchema(templateId, engine);
+  const map = new Map<string, { name: string; type: string }>();
+  for (const section of schema.sections) {
+    for (const field of section.fields) {
+      map.set(field.id.toLowerCase(), { name: field.name, type: field.type });
+    }
   }
-
-  const lang = item.languages.find(l => l.language === language);
-  if (!lang) return '';
-
-  if (field.unversioned) {
-    return findFieldValue(lang.fields, fieldIdLc);
-  }
-
-  const ver = lang.versions.find(v => v.version === versionNumber);
-  if (!ver) return '';
-  return findFieldValue(ver.fields, fieldIdLc);
+  return map;
 }
 
-function findFieldValue(fields: ScsField[], fieldIdLc: string): string {
-  for (const f of fields) {
-    if (f.id.toLowerCase() === fieldIdLc) return f.value;
-  }
-  return '';
-}
-
-function emitField(
-  field: TemplateFieldSchema,
-  item: ScsItem,
-  language: string,
-  versionNumber: number,
-  fieldOverrides?: Record<string, string>,
-): string {
-  const tfid = formatGuidBraced(field.id);
-  const key = xmlAttrEscape(field.name.toLowerCase());
-  const type = xmlAttrEscape(field.type);
-  const override = fieldOverrides?.[field.id.toLowerCase()];
-  const value = override !== undefined ? override : getFieldValue(field, item, language, versionNumber);
-
-  const headOpen = `<field tfid="${tfid}" key="${key}" type="${type}">`;
+/** Render a single `<field .../>` element from resolved id/name/type/value. */
+function renderField(id: string, name: string, type: string, value: string): string {
+  const tfid = formatGuidBraced(id);
+  const headOpen = `<field tfid="${tfid}" key="${xmlAttrEscape(name)}" type="${xmlAttrEscape(type)}">`;
   if (value.length === 0) {
     return `${headOpen}<content /></field>`;
   }
