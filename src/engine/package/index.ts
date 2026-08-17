@@ -18,6 +18,7 @@ import type { ScsItem } from '../types.js';
 import { collectSources } from './collect.js';
 import { emitItemXml, type VersionRef } from './item-xml.js';
 import { emitProperties } from './properties.js';
+import { collectItemBlobs } from './blobs.js';
 import { metadataEntries } from './metadata.js';
 import { resolveItemName, resolveTemplateName } from './lookups.js';
 import { buildItemKey } from './item-key.js';
@@ -63,12 +64,24 @@ export async function buildPackage(
   const warnings: PackageWarning[] = [...collectWarnings];
 
   const itemEntries: Record<string, Uint8Array> = {};
+  const blobEntries: Record<string, Uint8Array> = {};
   const enc = new TextEncoder();
 
   for (const item of items) {
     try {
       const itemName = resolveItemName(item);
       const templateName = resolveTemplateName(engine, item.template).toLowerCase();
+
+      // Resolve any media blobs on this item. The bytes go to a top-level
+      // `blob/master/{guid}` entry; the minted GUID replaces the item's stored
+      // attachment value (raw base64, or absent after cache-stripping) in the
+      // item XML so the installer pairs field -> blob entry.
+      const blobs = await collectItemBlobs(engine, item, engine.getItemById(item.id)?.filePath);
+      const fieldOverrides: Record<string, string> = {};
+      for (const blob of blobs) {
+        fieldOverrides[blob.fieldId] = blob.blobGuid;
+        blobEntries[`blob/master/${blob.blobGuid}`] = blob.bytes;
+      }
 
       // For each (language, version) on the item, emit two zip entries:
       // the XML body and its properties companion.
@@ -79,6 +92,7 @@ export async function buildPackage(
             itemName,
             templateName,
             createdIso: deriveCreatedIso(item, lang.language, v.version),
+            fieldOverrides,
           });
           const propsBytes = emitProperties(engine, item, versionRef);
           const key = buildItemKey(item, versionRef, 'master');
@@ -102,6 +116,7 @@ export async function buildPackage(
     installerVersion: INSTALLER_VERSION,
     metadata: meta,
     itemEntries,
+    blobEntries,
   });
   const outerZip = buildOuterZip(innerZip);
 

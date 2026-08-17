@@ -16,6 +16,7 @@ import { StatusPage } from '@/components/admin/StatusPage';
 import { LogsPage } from '@/components/admin/LogsPage';
 import { useEngineStatus } from '@/hooks/useEngineStatus';
 import { WorkspaceShell } from '@/components/workspace/WorkspaceShell';
+import { RestartButton } from '@/components/RestartButton';
 import { CartPane, readPersistedCartPaneOpen } from '@/components/package/CartPane';
 import { CheckoutDialog } from '@/components/package/CheckoutDialog';
 import { ProjectSidebar } from '@/components/sidebar/ProjectSidebar';
@@ -264,6 +265,7 @@ export function App() {
         <QueryClientProvider client={queryClient}>
           <WebSocketConnection />
           <Routes />
+          <RestartButton />
           <Toaster />
         </QueryClientProvider>
       </SettingsProvider>

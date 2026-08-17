@@ -1,5 +1,5 @@
-import { mkdir, writeFile, stat, rm } from 'fs/promises';
-import { resolve, dirname, sep } from 'path';
+import { mkdir, writeFile, stat, rm, readdir } from 'fs/promises';
+import { resolve, dirname, sep, join } from 'path';
 import { createHash } from 'crypto';
 import { scanDirectory, scanAdditionalRoot, collectFileTargets, type FileTarget } from './scanner.js';
 import { ItemTree } from './tree.js';
@@ -1472,6 +1472,74 @@ export class Engine {
   /** Returns the project name set when opening the workspace, or null if not provided. */
   getProjectName(): string | null {
     return this._projectName;
+  }
+
+  /**
+   * Re-index the currently-loaded workspace/root in place - the engine side of
+   * the in-app "Restart" button. Resets readiness to 'initializing'
+   * SYNCHRONOUSLY (so an HTTP handler that returns 202 and reloads the client
+   * immediately observes the warming-up state, splash included) and runs the
+   * actual re-index in the background. Returns false and touches nothing when
+   * there is no workspace or root to re-index (the caller should surface a
+   * "nothing to restart" response).
+   *
+   * With `clearCache`, the on-disk index caches are deleted first so the
+   * re-index is a full cold reparse instead of a warm cache load.
+   */
+  beginReindex(options?: { clearCache?: boolean }): boolean {
+    const canReindex = this._layers.length > 0 || Boolean(this.options.rootDir);
+    if (!canReindex) return false;
+    this.readiness.reset();
+    void this._runReindex(options).catch((err) => {
+      if (!this.readiness.isReady()) {
+        this.readiness.markError(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+    return true;
+  }
+
+  private async _runReindex(options?: { clearCache?: boolean }): Promise<void> {
+    if (options?.clearCache) await this._clearIndexCaches();
+
+    const layers = this._layers.slice();
+    if (layers.length > 0) {
+      // Workspace mode: re-open the same layers (resets readiness + rebuilds
+      // the tree, tearing down the old watcher via closeWorkspace).
+      await this.openWorkspace(layers, { projectName: this._projectName ?? undefined });
+      return;
+    }
+
+    // Single-root mode (rootDir, no workspace layers): close the watcher and
+    // re-run the initial index against the same root.
+    if (this.watcher) {
+      await this.watcher.close().catch(() => {});
+      this.watcher = null;
+    }
+    this._initStarted = false;
+    this.readiness.reset();
+    await this.startInit();
+  }
+
+  /**
+   * Delete every engine index cache (`index*.json.gz`) in the cache directory,
+   * leaving unrelated files intact. Best-effort: a missing directory or a
+   * locked file is swallowed. Mirrors the manual `rm index-*.json.gz` used to
+   * force a cold start.
+   */
+  private async _clearIndexCaches(): Promise<void> {
+    const base = this.options.indexCachePath;
+    if (!base) return;
+    const dir = dirname(base);
+    try {
+      const names = await readdir(dir);
+      await Promise.all(
+        names
+          .filter((n) => /^index.*\.json\.gz$/i.test(n))
+          .map((n) => rm(join(dir, n), { force: true }).catch(() => {})),
+      );
+    } catch {
+      /* cache dir absent - nothing to clear */
+    }
   }
 
   /**
