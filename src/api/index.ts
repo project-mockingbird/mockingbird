@@ -32,8 +32,16 @@ const contentSitecoreJson = process.env.SCS_CONTENT_SITECORE_JSON;
 const contentPaths = contentSitecoreJson ? [dirname(resolve(contentSitecoreJson))] : [];
 
 async function main(): Promise<void> {
-  const { app, engine, speManager } = await createServer({ rootDir, contentPaths, registryPath, indexCachePath, port, host });
+  const { app, engine, speManager, startEngine } = await createServer({ rootDir, contentPaths, registryPath, indexCachePath, port, host, deferEngineStart: true });
   await app.listen({ port, host });
+
+  // Bind the listener BEFORE warming the engine so a cold start never refuses
+  // connections (which a reverse proxy surfaces as "Bad Gateway"). While the
+  // registry loads and the tree indexes, the starting-splash hook answers
+  // browser navigations and the readiness gate 503s /api/*; both flip to the
+  // real app once engine.readiness resolves. `startEngine()` never rejects on
+  // the listen path - indexing failures land in engine.readiness as 'error'.
+  void startEngine();
 
   // Eager pwsh primer: runs in parallel with engine indexing. The primer is
   // claimed by the first POST /api/spe/sessions, turning what was a 10-30s

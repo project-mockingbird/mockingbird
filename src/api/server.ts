@@ -13,6 +13,7 @@ import { resolveWorkspacePath, getWorkspaceRoot } from './state/workspace-path.j
 import { registerWebSocket } from './websocket.js';
 import { notifyItemChange } from './notify.js';
 import { registerReadinessGate } from './hooks/readiness-gate.js';
+import { registerStartingSplash } from './hooks/starting-splash.js';
 import { registerStatusRoute } from './routes/status.js';
 import { registerFsRoutes } from './routes/fs.js';
 import { registerProjectsRoutes } from './routes/projects.js';
@@ -33,9 +34,20 @@ export interface ServerOptions {
   contentPaths?: string[];
   registryPath?: string;
   indexCachePath?: string;
+  /**
+   * When true, createServer registers all routes but does NOT initialize the
+   * engine (registry load + tree indexing) or run boot-replay before
+   * returning. Instead it returns a `startEngine()` callback the caller invokes
+   * AFTER `app.listen()`, so the HTTP listener binds in milliseconds and a
+   * reverse proxy never sees a refused connection (Bad Gateway) during a cold
+   * start. While the engine warms up, the starting-splash hook answers browser
+   * navigations. Production (src/api/index.ts) sets this; tests default to the
+   * eager path so they observe a started engine when createServer resolves.
+   */
+  deferEngineStart?: boolean;
 }
 
-export async function createServer(opts: ServerOptions): Promise<{ app: FastifyInstance; engine: Engine; speManager: SessionManager }> {
+export async function createServer(opts: ServerOptions): Promise<{ app: FastifyInstance; engine: Engine; speManager: SessionManager; startEngine: () => Promise<void> }> {
   const bridge = createPinoBridge(serverLogBuffer);
   // Pass the multistream as the `stream` field of Fastify's logger config
   // rather than a pre-built pino instance via `loggerInstance`. The latter
@@ -60,7 +72,9 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
     onItemChange: (event) => notifyItemChange(engine, event),
   });
 
-  await engine.startInit();
+  // Engine initialization (registry load + tree indexing) is deferred to the
+  // `startEngine()` callback below so the caller can bind the HTTP listener
+  // first. See ServerOptions.deferEngineStart.
 
   // Ensure workspace cache directory and .gitignore are set up. This is
   // idempotent and runs once at server startup. Non-fatal if it fails
@@ -129,6 +143,13 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   });
 
   registerReadinessGate(app, engine.readiness);
+  // Cold-start splash: only meaningful when the listener binds before the
+  // engine finishes warming up (deferEngineStart). In the eager path the engine
+  // is already started by the time createServer returns, so the splash window
+  // would never open and registering it only risks intercepting test requests.
+  if (opts.deferEngineStart) {
+    registerStartingSplash(app, engine.readiness);
+  }
   registerStatusRoute(app, engine, speManager);
   registerFsRoutes(app);
   registerProjectsRoutes(app, engine);
@@ -201,8 +222,11 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   // Boot-time replay: if no rootDir was provided (i.e., SCS_SITECORE_JSON is
   // unset) and config.mockingbird has a lastOpenedHash matching a saved
   // project, replay the open so headless consumers (rendering hosts hitting
-  // /api/graphql) do not need a human to visit the web UI first.
-  if (!opts.rootDir) {
+  // /api/graphql) do not need a human to visit the web UI first. Runs as part
+  // of `startEngine()` (after engine.startInit), never before the listener
+  // binds.
+  const runBootReplay = async (): Promise<void> => {
+    if (opts.rootDir) return;
     try {
       const config = await readConfig(resolveConfigPath());
       const hash = config.lastOpenedHash;
@@ -245,7 +269,7 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
     } catch (err) {
       app.log.warn({ err }, '[boot-replay] config read failed; continuing in no-project mode');
     }
-  }
+  };
 
   // Serve static Web UI if built
   const __apiDir = fileURLToPath(new URL('.', import.meta.url));
@@ -296,5 +320,19 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
     await engine.close();
   });
 
-  return { app, engine, speManager };
+  // The engine-start sequence: load the registry + kick off tree indexing
+  // (engine.startInit) and then, in headless mode, replay the last-opened
+  // workspace. Exposed so the caller can bind the HTTP listener first and run
+  // this afterwards (deferEngineStart). In the eager path we run it here so
+  // callers see a started engine when createServer resolves.
+  const startEngine = async (): Promise<void> => {
+    await engine.startInit();
+    await runBootReplay();
+  };
+
+  if (!opts.deferEngineStart) {
+    await startEngine();
+  }
+
+  return { app, engine, speManager, startEngine };
 }
