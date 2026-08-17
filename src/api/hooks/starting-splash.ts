@@ -21,6 +21,7 @@
 // with a no-store body passes through any proxy untouched.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { MOCKINGBIRD_LOGO_DATA_URI } from './mockingbird-logo.js';
 
 /** Minimal readiness surface the hook needs. Satisfied by ReadinessState. */
 export interface ReadinessLike {
@@ -77,7 +78,7 @@ const SPLASH_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Starting Mockingbird...</title>
 <style>
-  :root { color-scheme: dark light; }
+  :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
     margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -85,26 +86,21 @@ const SPLASH_HTML = `<!doctype html>
     font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   .card { width: min(90vw, 420px); text-align: center; padding: 32px; }
-  .bird { font-size: 56px; line-height: 1; animation: pulse 1.6s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { transform: scale(1); opacity: .82 } 50% { transform: scale(1.12); opacity: 1 } }
-  h1 { font-size: 20px; font-weight: 600; margin: 18px 0 6px; letter-spacing: .2px; }
+  .logo { width: 76px; height: 76px; display: inline-block; animation: pulse 1.7s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { transform: scale(1); opacity: .85 } 50% { transform: scale(1.09); opacity: 1 } }
+  h1 { font-size: 20px; font-weight: 600; margin: 20px 0 6px; letter-spacing: .2px; }
   .sub { color: #9aa2ab; font-size: 13px; min-height: 18px; font-variant-numeric: tabular-nums; }
   .sub.err { color: #f87171; }
   .bar { margin-top: 18px; height: 6px; border-radius: 999px; background: #1c2128; overflow: hidden; }
   .bar.hidden { display: none; }
-  .fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #3b82f6, #22d3ee); transition: width .4s ease; }
+  .fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #ff6a2a, #ff9a5a); transition: width .4s ease; }
   .bar.indeterminate .fill { width: 35%; animation: slide 1.15s ease-in-out infinite; }
   @keyframes slide { 0% { margin-left: -35% } 100% { margin-left: 100% } }
-  @media (prefers-color-scheme: light) {
-    body { background: #f6f7f9; color: #1c2128; }
-    .bar { background: #e3e6ea; }
-    .sub { color: #6b7280; }
-  }
 </style>
 </head>
 <body>
   <div class="card">
-    <div class="bird">&#128038;</div>
+    <img class="logo" width="76" height="76" alt="Mockingbird" src="${MOCKINGBIRD_LOGO_DATA_URI}">
     <h1>Starting Mockingbird...</h1>
     <div class="sub" id="sub">Warming up</div>
     <div class="bar indeterminate" id="bar"><div class="fill" id="fill"></div></div>
