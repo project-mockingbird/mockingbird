@@ -56,6 +56,15 @@ export interface EmitItemXmlContext {
   createdIso: string;
   /** Database name. Defaults to `'master'` (only supported database in v1). */
   database?: 'master';
+  /**
+   * Per-field content overrides, keyed by lowercase field id. Used to inject
+   * blob GUIDs into attachment fields: the item's stored value is the raw
+   * base64 (or, after cache-stripping, absent), but the package XML must carry
+   * the blob GUID that pairs with the `blob/{db}/{guid}` entry. When a field
+   * id is present here, its value replaces whatever the item would otherwise
+   * yield - including forcing an empty item value to render the GUID.
+   */
+  fieldOverrides?: Record<string, string>;
 }
 
 export interface VersionRef {
@@ -110,7 +119,7 @@ export function emitItemXml(
 
   for (const section of schema.sections) {
     for (const field of section.fields) {
-      out.push(emitField(field, item, language, versionNumber));
+      out.push(emitField(field, item, language, versionNumber, ctx.fieldOverrides));
     }
   }
 
@@ -163,11 +172,13 @@ function emitField(
   item: ScsItem,
   language: string,
   versionNumber: number,
+  fieldOverrides?: Record<string, string>,
 ): string {
   const tfid = formatGuidBraced(field.id);
   const key = xmlAttrEscape(field.name.toLowerCase());
   const type = xmlAttrEscape(field.type);
-  const value = getFieldValue(field, item, language, versionNumber);
+  const override = fieldOverrides?.[field.id.toLowerCase()];
+  const value = override !== undefined ? override : getFieldValue(field, item, language, versionNumber);
 
   const headOpen = `<field tfid="${tfid}" key="${key}" type="${type}">`;
   if (value.length === 0) {

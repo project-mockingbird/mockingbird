@@ -45,6 +45,12 @@ export interface InnerZipArgs {
    * Bytes verbatim - caller has already emitted XML and properties text.
    */
   itemEntries: Record<string, Uint8Array>;
+  /**
+   * Media blob payloads, keyed by full zip path `blob/{database}/{guid}`
+   * (Sitecore.Install.Constants.BlobDataPrefix = "blob"). Bytes are the raw
+   * decoded blob content. Optional; absent/empty for content-only packages.
+   */
+  blobEntries?: Record<string, Uint8Array>;
 }
 
 /**
@@ -62,6 +68,11 @@ export function buildInnerZip(args: InnerZipArgs): Uint8Array {
   }
   for (const [key, value] of Object.entries(args.itemEntries)) {
     entries[key] = value;
+  }
+  if (args.blobEntries) {
+    for (const [key, value] of Object.entries(args.blobEntries)) {
+      entries[key] = value;
+    }
   }
 
   return zipSync(entries);
