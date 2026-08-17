@@ -61,6 +61,17 @@ export const api = {
   },
   getDatabases: () =>
     request<string[]>('/api/databases'),
+  /**
+   * Re-index the current workspace in place (the "Restart" power button). With
+   * clearCache, wipes the on-disk index caches first for a full cold rebuild.
+   * Returns 202 immediately; the engine re-indexes in the background and
+   * readiness flips to 'initializing', so callers typically reload afterward.
+   */
+  reindex: (clearCache: boolean) =>
+    request<{ status: string; clearCache: boolean }>('/api/admin/reindex', {
+      method: 'POST',
+      body: JSON.stringify({ clearCache }),
+    }),
   getItem: (id: string) =>
     request<ItemDetail>(`/api/items/${id}`),
   getItemByPath: (path: string) =>

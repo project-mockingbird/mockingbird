@@ -316,6 +316,9 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   const { registerAdminLogsRoutes } = await import('./routes/admin-logs.js');
   await registerAdminLogsRoutes(app);
 
+  const { registerAdminReindexRoute } = await import('./routes/admin-reindex.js');
+  registerAdminReindexRoute(app, engine);
+
   app.addHook('onClose', async () => {
     await engine.close();
   });
