@@ -1,6 +1,7 @@
 import { Icon } from '@/lib/icon';
 import { mdiFileTree, mdiGraphql, mdiPowershell, mdiShieldCrownOutline } from '@mdi/js';
 import { useEngineStatus } from '@/hooks/useEngineStatus';
+import { RestartButton } from '@/components/RestartButton';
 
 export function LaunchPage() {
   const { data } = useEngineStatus();
@@ -50,6 +51,8 @@ export function LaunchPage() {
           </a>
         ) : null}
       </div>
+      {/* Restart controls live only on the launchpad, not over working pages. */}
+      <RestartButton />
     </div>
   );
 }
