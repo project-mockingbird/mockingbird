@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFile } from 'fs/promises';
-import { resolve as resolvePath } from 'path';
+import { readFile, mkdtemp, writeFile, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { resolve as resolvePath, join } from 'path';
 import { fileURLToPath } from 'url';
 import { unzipSync, strFromU8 } from 'fflate';
 import { Engine } from '../../../src/engine/index.js';
@@ -11,11 +12,14 @@ import {
   TEMPLATE_SECTION_TEMPLATE_ID,
   TEMPLATE_FIELD_TEMPLATE_ID,
   FIELD_IDS,
+  BLOB_FIELD_ID,
 } from '../../../src/engine/constants.js';
 import type { ScsItem, RegistryData, RegistryItem } from '../../../src/engine/types.js';
 import { parseItemFromString } from '../../../src/engine/parser.js';
 import { clearTemplateSchemaCache } from '../../../src/engine/template-schema.js';
 import { buildPackage } from '../../../src/engine/package/index.js';
+import { deriveBlobGuid, collectItemBlobs } from '../../../src/engine/package/blobs.js';
+import { readSharedFieldOnItem } from '../../../src/engine/layout/item-fields.js';
 import type { CartSource } from '../../../src/engine/package/types.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -141,6 +145,47 @@ function setupSimpleEngineAndSource(): { engine: Engine; sources: CartSource[]; 
   return { engine, sources, itemId: ITEM_ID };
 }
 
+// ---------------------------------------------------------------------------
+// Media-blob fixture: an Image-like template with a shared `attachment` Blob
+// field, plus a media item that carries the blob as base64 on its shared
+// fields (mirrors how mockingbird stores media bytes in the item YAML).
+// ---------------------------------------------------------------------------
+
+const MEDIA_ITEM_ID = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+const IMG_TPL_ID = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+const OTHER_FIELD_ID = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+
+function setupMediaEngineAndSource(base64: string): {
+  engine: Engine;
+  sources: CartSource[];
+  itemId: string;
+} {
+  clearTemplateSchemaCache();
+  const tplItems = buildTemplate({
+    templateId: IMG_TPL_ID,
+    templateName: 'Image',
+    fields: [{ id: BLOB_FIELD_ID, name: 'Blob', type: 'attachment', shared: true }],
+  });
+  const item = makeItem({
+    id: MEDIA_ITEM_ID,
+    parent: ITEM_PARENT_ID,
+    template: IMG_TPL_ID,
+    path: '/sitecore/media library/Project/test/icon',
+    sharedFields: [{ id: BLOB_FIELD_ID, hint: 'Blob', value: base64 }],
+    languages: [{ language: 'en', fields: [], versions: [{ version: 1, fields: [] }] }],
+  });
+  const engine = buildEngine([...tplItems, item]);
+  const sources: CartSource[] = [{
+    id: 'src-media',
+    rootItemId: MEDIA_ITEM_ID,
+    rootItemPath: '/sitecore/media library/Project/test/icon',
+    rootItemName: 'icon',
+    scope: 'itemAndDescendants',
+    database: 'master',
+  }];
+  return { engine, sources, itemId: MEDIA_ITEM_ID };
+}
+
 function source(overrides: Partial<CartSource> & { rootItemId: string }): CartSource {
   return {
     id: `src-${overrides.rootItemId.slice(0, 8)}`,
@@ -245,6 +290,138 @@ describe('buildPackage - input validation', () => {
     await expect(
       buildPackage(engine, sources, { name: '' }),
     ).rejects.toThrow(/metadata\.name is required/i);
+  });
+});
+
+// ===========================================================================
+// Media blobs
+// ===========================================================================
+//
+// Regression coverage for the bug where generated packages carried empty
+// `<content />` blob fields and no blob payload. A real Sitecore package puts
+// the blob GUID in the item XML's attachment field and stores the raw bytes
+// in a top-level `blob/{database}/{guid}` entry (Sitecore.Install.Constants
+// BlobDataPrefix = "blob"; Sitecore.Install.BlobData.BlobEntryData.Key).
+
+describe('buildPackage - media blobs', () => {
+  const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x2a, 0xff]);
+  const base64 = Buffer.from(bytes).toString('base64');
+
+  it('deriveBlobGuid is deterministic and unbraced lowercase dashed', () => {
+    const g1 = deriveBlobGuid(MEDIA_ITEM_ID, BLOB_FIELD_ID);
+    const g2 = deriveBlobGuid(MEDIA_ITEM_ID, BLOB_FIELD_ID);
+    expect(g1).toBe(g2);
+    expect(g1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    // Distinct field id on the same item yields a distinct blob guid.
+    expect(deriveBlobGuid(MEDIA_ITEM_ID, OTHER_FIELD_ID)).not.toBe(g1);
+  });
+
+  it('collectItemBlobs decodes the blob base64 and mints a matching guid', async () => {
+    const { engine, itemId } = setupMediaEngineAndSource(base64);
+    const node = engine.getItemById(itemId)!;
+    const blobs = await collectItemBlobs(engine, node.item, node.filePath);
+    expect(blobs).toHaveLength(1);
+    expect(blobs[0].fieldId).toBe(BLOB_FIELD_ID);
+    expect(blobs[0].blobGuid).toBe(deriveBlobGuid(itemId, BLOB_FIELD_ID));
+    expect(Array.from(blobs[0].bytes)).toEqual(Array.from(bytes));
+  });
+
+  it('emits a blob/master/{guid} entry containing the raw image bytes', async () => {
+    const { engine, sources, itemId } = setupMediaEngineAndSource(base64);
+    const result = await buildPackage(engine, sources, { name: 'media-pkg' });
+    const inner = unzipSync(unzipSync(result.zip)['package.zip']);
+    const guid = deriveBlobGuid(itemId, BLOB_FIELD_ID);
+    const key = `blob/master/${guid}`;
+    expect(inner[key]).toBeDefined();
+    expect(Array.from(inner[key])).toEqual(Array.from(bytes));
+  });
+
+  it('writes the blob guid (not base64, not empty) into the item XML blob field', async () => {
+    const { engine, sources, itemId } = setupMediaEngineAndSource(base64);
+    const result = await buildPackage(engine, sources, { name: 'media-pkg' });
+    const inner = unzipSync(unzipSync(result.zip)['package.zip']);
+    const xmlKey = Object.keys(inner).find(k => k.startsWith('items/master/'))!;
+    const xml = strFromU8(inner[xmlKey]);
+    const guid = deriveBlobGuid(itemId, BLOB_FIELD_ID);
+    expect(xml).toContain(`key="blob" type="attachment"><content>${guid}</content>`);
+    // The raw base64 payload must NOT be inlined into the item XML.
+    expect(xml).not.toContain(base64);
+  });
+
+  it('produces no blob entries for non-media items', async () => {
+    const { engine, sources } = setupSimpleEngineAndSource();
+    const result = await buildPackage(engine, sources, { name: 'plain' });
+    const inner = unzipSync(unzipSync(result.zip)['package.zip']);
+    expect(Object.keys(inner).filter(k => k.startsWith('blob/'))).toHaveLength(0);
+  });
+
+  it('fault-reads the blob from the item YAML when it was stripped from the in-memory copy', async () => {
+    // Production reality: index-cache strips the Blob field from the
+    // in-memory tree, so the bytes must be recovered from the item's YAML on
+    // disk (the slow path). This asserts that path end-to-end.
+    clearTemplateSchemaCache();
+    const bytes = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8, 250, 200]);
+    const b64 = Buffer.from(bytes).toString('base64');
+
+    const dir = await mkdtemp(join(tmpdir(), 'mb-blob-'));
+    const yamlPath = join(dir, 'icon.yml');
+    await writeFile(
+      yamlPath,
+      [
+        '---',
+        `ID: "${MEDIA_ITEM_ID}"`,
+        `Parent: "${ITEM_PARENT_ID}"`,
+        `Template: "${IMG_TPL_ID}"`,
+        'Path: /sitecore/media library/Project/test/icon',
+        'SharedFields:',
+        `- ID: "${BLOB_FIELD_ID}"`,
+        '  Hint: Blob',
+        `  Value: "${b64}"`,
+        'Languages:',
+        '- Language: en',
+        '  Fields: []',
+        '  Versions:',
+        '  - Version: 1',
+        '    Fields: []',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    try {
+      const tplItems = buildTemplate({
+        templateId: IMG_TPL_ID,
+        templateName: 'Image',
+        fields: [{ id: BLOB_FIELD_ID, name: 'Blob', type: 'attachment', shared: true }],
+      });
+      // In-memory item has NO blob field (as it appears after cache-stripping).
+      const strippedItem = makeItem({
+        id: MEDIA_ITEM_ID,
+        parent: ITEM_PARENT_ID,
+        template: IMG_TPL_ID,
+        path: '/sitecore/media library/Project/test/icon',
+        sharedFields: [],
+        languages: [{ language: 'en', fields: [], versions: [{ version: 1, fields: [] }] }],
+      });
+      const engine = Object.create(Engine.prototype) as Engine;
+      const tree = new ItemTree();
+      for (const t of tplItems) tree.addItem(t, `/fake/${t.id}.yml`);
+      tree.addItem(strippedItem, yamlPath); // real path so the fault-read resolves
+      (engine as unknown as { tree: ItemTree }).tree = tree;
+      (engine as unknown as { registry: Registry | null }).registry = null;
+      (engine as unknown as { options: { rootDir: string } }).options = { rootDir: '/fake' };
+
+      const node = engine.getItemById(MEDIA_ITEM_ID)!;
+      // Precondition: the blob really is absent from the in-memory copy.
+      expect(readSharedFieldOnItem(node.item, BLOB_FIELD_ID)).toBeUndefined();
+
+      const blobs = await collectItemBlobs(engine, node.item, node.filePath);
+      expect(blobs).toHaveLength(1);
+      expect(Array.from(blobs[0].bytes)).toEqual(Array.from(bytes));
+      expect(blobs[0].blobGuid).toBe(deriveBlobGuid(MEDIA_ITEM_ID, BLOB_FIELD_ID));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
