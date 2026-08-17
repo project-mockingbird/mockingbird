@@ -20,44 +20,47 @@
 //     value byte; the parser does `streamReader.ReadToEnd()` so any trailing
 //     newline would become part of the stored value.
 //   - No XML wrapping. The body is the raw value of the metadata field.
-//   - Empty / undefined fields are skipped. Sitecore Desktop emits an empty
-//     `sc_readme.txt` (0 bytes) for an unset Readme; the parser tolerates
-//     either presence or absence. Mockingbird v1 omits empty fields.
+//   - Every recognized `MetadataView` key is emitted, empty where unset.
+//     Real Sitecore writes the full set (the sample CM package shipped all
+//     ten, populated only on `sc_name`); an unset field becomes a 0-byte
+//     file (e.g. `sc_readme.txt`), which the parser reads back as "".
 //
 // Recognized keys per `MetadataView` (PackageName, Author, Version,
 // Revision, License, Comment, Readme, Publisher, PostStep, PackageID).
-// Phase 2 v1 emits only the six fields exposed on `PackageMetadata`:
-// name, author, version, comment, publisher, license. The other four
-// (revision, readme, poststep, packageid) are not on the type and are
-// not emitted; they can be added later by extending PackageMetadata.
+// `PackageMetadata` exposes six of them (name, author, version, comment,
+// publisher, license); the other four (revision, readme, poststep, packageid)
+// have no corpus-observed value and are emitted as empty placeholders.
 
 import type { PackageMetadata } from './types.js';
 
 /**
  * Build the per-field metadata zip entries for a package.
  *
- * Returns a map of zip-entry-key -> UTF-8 body bytes. Each key is
- * `metadata/sc_<lower-name>.txt`. Empty / undefined values are skipped
- * entirely.
+ * Returns a map of zip-entry-key -> UTF-8 body bytes, one per recognized
+ * `MetadataView` key (`metadata/sc_<lower-name>.txt`). Fields with no value
+ * are emitted as 0-byte placeholders to match real Sitecore output.
  */
 export function metadataEntries(meta: PackageMetadata): Record<string, Uint8Array> {
   const out: Record<string, Uint8Array> = {};
   const encoder = new TextEncoder();
 
-  // Field order is not load-bearing - the install-side EntrySorter resorts
-  // entries before applying. Listed alphabetically by zip key for
-  // diff-friendliness.
-  const fields: Array<[string, string | undefined]> = [
-    ['metadata/sc_author.txt', meta.author],
-    ['metadata/sc_comment.txt', meta.comment],
-    ['metadata/sc_license.txt', meta.license],
-    ['metadata/sc_name.txt', meta.name],
-    ['metadata/sc_publisher.txt', meta.publisher],
-    ['metadata/sc_version.txt', meta.version],
+  // All ten recognized keys, populated from PackageMetadata where available.
+  // Order is not load-bearing (the install-side EntrySorter resorts before
+  // applying); listed alphabetically by zip key for diff-friendliness.
+  const fields: Array<[string, string]> = [
+    ['metadata/sc_author.txt', meta.author ?? ''],
+    ['metadata/sc_comment.txt', meta.comment ?? ''],
+    ['metadata/sc_license.txt', meta.license ?? ''],
+    ['metadata/sc_name.txt', meta.name ?? ''],
+    ['metadata/sc_packageid.txt', ''],
+    ['metadata/sc_poststep.txt', ''],
+    ['metadata/sc_publisher.txt', meta.publisher ?? ''],
+    ['metadata/sc_readme.txt', ''],
+    ['metadata/sc_revision.txt', ''],
+    ['metadata/sc_version.txt', meta.version ?? ''],
   ];
 
   for (const [key, value] of fields) {
-    if (value === undefined || value === '') continue;
     out[key] = encoder.encode(value);
   }
 
