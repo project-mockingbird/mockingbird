@@ -82,6 +82,16 @@ describe('environments store', () => {
     expect(env.clientId).toBe('cid');
   });
 
+  it('normalizes a pasted cmHost URL by stripping the scheme and trailing slash', async () => {
+    await upsertEnvironment({ id: 'e1', name: 'Acme', cmHost: 'https://acme.example/' }, { clientId: 'cid', clientSecret: 'shh' }, defsPath);
+
+    const tracked = JSON.parse(await readFile(defsPath, 'utf-8'));
+    expect(tracked.environments[0].cmHost).toBe('acme.example');
+
+    const list = await listEnvironments(defsPath);
+    expect(list.find((e) => e.id === 'e1')?.cmHost).toBe('acme.example');
+  });
+
   it('a def-only env with no creds reports hasSecret false', async () => {
     await upsertEnvironment({ id: 'e2', name: 'X', cmHost: 'h' }, { clientId: '', clientSecret: '' }, defsPath);
 

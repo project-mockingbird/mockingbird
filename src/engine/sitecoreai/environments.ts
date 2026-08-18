@@ -66,10 +66,15 @@ export async function getResolvedEnvironment(id: string, path = resolveEnvDefsPa
   return { id: def.id, name: def.name, cmHost: def.cmHost, clientId: secret.clientId, clientSecret: resolveSecret(id, secret) };
 }
 
+function normalizeCmHost(cmHost: string): string {
+  return cmHost.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+}
+
 export async function upsertEnvironment(def: EnvironmentDef, secret: EnvironmentSecret, path = resolveEnvDefsPath()): Promise<void> {
+  const normalizedDef: EnvironmentDef = { ...def, cmHost: normalizeCmHost(def.cmHost) };
   const [defs, secrets] = await Promise.all([readDefs(path), readSecrets(path)]);
-  const i = defs.environments.findIndex((d) => d.id === def.id);
-  if (i >= 0) defs.environments[i] = def; else defs.environments.push(def);
+  const i = defs.environments.findIndex((d) => d.id === normalizedDef.id);
+  if (i >= 0) defs.environments[i] = normalizedDef; else defs.environments.push(normalizedDef);
 
   const existing = secrets.secrets[def.id];
   const mergedClientId = secret.clientId || existing?.clientId || '';

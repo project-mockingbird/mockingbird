@@ -21,6 +21,19 @@ export async function toSerializeItemData(engine: Engine, item: ScsItem): Promis
     return { fieldId: f.id, value: f.value, nameHint: f.hint };
   };
 
+  // The index cache strips the Blob (attachment) field from cached items, so on a
+  // warm-cache restart the Blob field is not in item.sharedFields even though
+  // collectItemBlobs still finds the on-disk blob. Append a synthetic shared field
+  // for any collected blob not already covered by mapField, so media survives the
+  // warm-cache path instead of being created on the target with an empty attachment.
+  const shared = item.sharedFields.map(mapField);
+  const present = new Set(shared.map((f) => f.fieldId.toLowerCase()));
+  for (const b of blobs) {
+    if (!present.has(b.fieldId.toLowerCase())) {
+      shared.push({ fieldId: b.fieldId, value: Buffer.from(b.bytes).toString('base64'), blobId: b.blobGuid, nameHint: '' });
+    }
+  }
+
   return {
     id: item.id,
     parentId: item.parent,
@@ -28,7 +41,7 @@ export async function toSerializeItemData(engine: Engine, item: ScsItem): Promis
     name: resolveItemName(item),
     branchId: item.branchId ?? ALL_ZERO_GUID,
     templateId: item.template,
-    sharedFields: item.sharedFields.map(mapField),
+    sharedFields: shared,
     unversionedFields: item.languages.map((l) => ({ language: l.language, fields: l.fields.map(mapField) })),
     versions: item.languages.flatMap((l) => l.versions.map((v) => ({ language: l.language, version: v.version, fields: v.fields.map(mapField) }))),
   };

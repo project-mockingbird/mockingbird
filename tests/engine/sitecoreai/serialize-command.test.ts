@@ -48,6 +48,18 @@ describe('toSerializeItemData', () => {
     expect(bf.blobId).toBe('blob-guid-1');
   });
 
+  it('injects a blob field on the warm-cache path where sharedFields does not carry it', async () => {
+    (collectItemBlobs as any).mockResolvedValueOnce([
+      { fieldId: 'blob-field', blobGuid: 'blob-guid-1', bytes: new Uint8Array([1, 2, 3]) },
+    ]);
+    // Simulates the warm-cache index, which strips the Blob field from sharedFields.
+    const warmCacheItem: ScsItem = { ...item, sharedFields: [] };
+    const data = await toSerializeItemData(engine, warmCacheItem);
+    expect(data.sharedFields).toEqual([
+      { fieldId: 'blob-field', value: Buffer.from([1, 2, 3]).toString('base64'), blobId: 'blob-guid-1', nameHint: '' },
+    ]);
+  });
+
   it('preserves an explicit branchId when present', async () => {
     const data = await toSerializeItemData(engine, { ...item, branchId: 'branch-9' });
     expect(data.branchId).toBe('branch-9');
