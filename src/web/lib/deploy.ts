@@ -1,3 +1,5 @@
+import { readErrorMessage } from './http';
+
 export interface DeploySource {
   id: string; rootItemId: string; rootItemPath: string; rootItemName: string;
   scope: 'itemAndDescendants' | 'itemAndChildren' | 'descendantsOnly' | 'childrenOnly';
@@ -24,7 +26,7 @@ export async function previewDeploy(envId: string, sources: DeploySource[], stra
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ envId, sources, strategy }),
   });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Preview failed (${res.status})`);
+  if (!res.ok) throw new Error(await readErrorMessage(res, `Preview failed (${res.status})`));
   return res.json();
 }
 
