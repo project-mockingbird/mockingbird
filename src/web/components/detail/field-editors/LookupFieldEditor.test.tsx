@@ -84,10 +84,31 @@ describe('LookupFieldEditor Droptree variant', () => {
         onChange={() => {}}
       />
     );
-    // useLookupSource was called with the effective default source.
-    expect(hookMocks.useLookupSource).toHaveBeenCalledWith('/sitecore', undefined);
+    // useLookupSource was called with the effective default source + kind.
+    expect(hookMocks.useLookupSource).toHaveBeenCalledWith('/sitecore', undefined, 'Droptree');
     // No "no Source" fallback message - the picker renders.
     expect(screen.queryByText(/no Source/i)).not.toBeInTheDocument();
+  });
+
+  it('passes kind=Droplink to useLookupSource so the source resolves with flat-select semantics', () => {
+    hookMocks.useLookupSource.mockClear();
+    wrap(
+      <LookupFieldEditor
+        kind="Droplink"
+        fieldId="abc"
+        label="Active Widget"
+        value=""
+        fieldSource="query:$site/*[@@name='Data']"
+        contextItemId="ctx-1"
+        editing
+        onChange={() => {}}
+      />
+    );
+    expect(hookMocks.useLookupSource).toHaveBeenCalledWith(
+      "query:$site/*[@@name='Data']",
+      'ctx-1',
+      'Droplink',
+    );
   });
 
   it('still falls back to raw text for Droplink/Droplist with empty fieldSource', () => {

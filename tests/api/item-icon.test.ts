@@ -52,7 +52,8 @@ describe('POST /api/items/:id/icon', () => {
     await mkdir(resolve(iconRoot, 'Office/32x32'), { recursive: true });
     await writeFile(resolve(iconRoot, 'Office/32x32/folder.png'), PNG_1x1);
     process.env.MOCKINGBIRD_ICON_ROOT = iconRoot;
-    process.env.MOCKINGBIRD_ICONS = '1';
+    // No MOCKINGBIRD_ICONS switch - setIcon works whenever a sprite set is baked.
+    delete process.env.MOCKINGBIRD_ICONS;
 
     // Ad-hoc registry (mirrors tests/api/routes/tree-insertable.test.ts): one
     // root item id-matches the fixture's real serialized templates root (so
@@ -133,10 +134,15 @@ describe('POST /api/items/:id/icon', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('404s when the switch is off', async () => {
-    process.env.MOCKINGBIRD_ICONS = '0';
-    const target = findBySource(await tree(), 'serialized');
-    const res = await app.inject({ method: 'POST', url: `/api/items/${target!.id}/icon`, payload: { icon: 'Office/32x32/folder.png' } });
-    expect(res.statusCode).toBe(404);
+  it('404s when no sprite set is baked', async () => {
+    const saved = process.env.MOCKINGBIRD_ICON_ROOT;
+    process.env.MOCKINGBIRD_ICON_ROOT = resolve(tempDir, 'no-icons-here');
+    try {
+      const target = findBySource(await tree(), 'serialized');
+      const res = await app.inject({ method: 'POST', url: `/api/items/${target!.id}/icon`, payload: { icon: 'Office/32x32/folder.png' } });
+      expect(res.statusCode).toBe(404);
+    } finally {
+      process.env.MOCKINGBIRD_ICON_ROOT = saved!;
+    }
   });
 });

@@ -72,25 +72,27 @@ describe('GET /api/icon/*', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('status reports iconsEnabled false when the switch is off', async () => {
+  it('status reports iconsEnabled true whenever a sprite set is baked (no switch required)', async () => {
+    // The MOCKINGBIRD_ICONS switch was removed; icons are on whenever a baked
+    // set is present. Prove the flag has no bearing by clearing it.
     const saved = process.env.MOCKINGBIRD_ICONS;
     delete process.env.MOCKINGBIRD_ICONS;
-    try {
-      const res = await app.inject({ method: 'GET', url: '/api/status' });
-      expect(res.json().iconsEnabled).toBe(false);
-    } finally {
-      if (saved === undefined) delete process.env.MOCKINGBIRD_ICONS; else process.env.MOCKINGBIRD_ICONS = saved;
-    }
-  });
-
-  it('status reports iconsEnabled true when the switch is on and icons are baked', async () => {
-    const saved = process.env.MOCKINGBIRD_ICONS;
-    process.env.MOCKINGBIRD_ICONS = '1';
     try {
       const res = await app.inject({ method: 'GET', url: '/api/status' });
       expect(res.json().iconsEnabled).toBe(true);
     } finally {
       if (saved === undefined) delete process.env.MOCKINGBIRD_ICONS; else process.env.MOCKINGBIRD_ICONS = saved;
+    }
+  });
+
+  it('status reports iconsEnabled false when no sprite set is baked', async () => {
+    const saved = process.env.MOCKINGBIRD_ICON_ROOT;
+    process.env.MOCKINGBIRD_ICON_ROOT = resolve(tempDir, 'no-icons-here');
+    try {
+      const res = await app.inject({ method: 'GET', url: '/api/status' });
+      expect(res.json().iconsEnabled).toBe(false);
+    } finally {
+      process.env.MOCKINGBIRD_ICON_ROOT = saved!;
     }
   });
 });
@@ -112,7 +114,9 @@ describe('icon listing endpoints', () => {
       await writeFile(resolve(iconRoot, rel), PNG_1x1);
     }
     process.env.MOCKINGBIRD_ICON_ROOT = iconRoot;
-    process.env.MOCKINGBIRD_ICONS = '1';
+    // Deliberately do NOT set MOCKINGBIRD_ICONS - the listing endpoints must
+    // work whenever a sprite set is baked, with no switch.
+    delete process.env.MOCKINGBIRD_ICONS;
     const result = await createServer({ rootDir: tempDir });
     app = result.app;
     await result.engine.readiness.ready();
@@ -156,11 +160,16 @@ describe('icon listing endpoints', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('404s the listing endpoints when the switch is off', async () => {
-    process.env.MOCKINGBIRD_ICONS = '0';
-    const a = await app.inject({ method: 'GET', url: '/api/icons/categories' });
-    const b = await app.inject({ method: 'GET', url: '/api/icons?category=Office' });
-    expect(a.statusCode).toBe(404);
-    expect(b.statusCode).toBe(404);
+  it('404s the listing endpoints when no sprite set is baked', async () => {
+    const saved = process.env.MOCKINGBIRD_ICON_ROOT;
+    process.env.MOCKINGBIRD_ICON_ROOT = resolve(tempDir, 'no-icons-here');
+    try {
+      const a = await app.inject({ method: 'GET', url: '/api/icons/categories' });
+      const b = await app.inject({ method: 'GET', url: '/api/icons?category=Office' });
+      expect(a.statusCode).toBe(404);
+      expect(b.statusCode).toBe(404);
+    } finally {
+      process.env.MOCKINGBIRD_ICON_ROOT = saved!;
+    }
   });
 });

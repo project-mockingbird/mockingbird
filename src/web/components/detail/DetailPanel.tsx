@@ -15,6 +15,7 @@ import { mdiFileOutline } from '@mdi/js';
 import { toast } from 'sonner';
 import { TemplateEditor, type BuilderChanges, type TemplateBuilderHandle } from './TemplateEditor';
 import { applyBuilderStructuralChanges, applyBuilderFieldPropEdits } from '@/lib/builder-save';
+import { saveInvalidationKeys } from '@/lib/save-invalidation';
 import { RenderingsFieldEditor } from './field-editors/renderings';
 import { QuickInfo } from './QuickInfo';
 import { VersionTrimmer } from './VersionTrimmer';
@@ -136,20 +137,21 @@ export function DetailPanel({ selectedId, onNavigate }: DetailPanelProps) {
       }
       return null;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       toast.success('Saved');
       setEditedFields({});
       setBuilderChanges(null);
       builderRef.current?.reset();
-      queryClient.invalidateQueries({ queryKey: ['item', selectedId] });
-      queryClient.invalidateQueries({ queryKey: ['template-schema', selectedId] });
-      queryClient.invalidateQueries({ queryKey: ['tree'] });
-      queryClient.invalidateQueries({ queryKey: ['unused-datasources', selectedId] });
-      // Layout-derived queries depend on __Final Renderings; refresh them so a
-      // just-added rendering's discovered child placeholders (e.g. a Container's
-      // container-N) appear after Save without a manual reload.
-      queryClient.invalidateQueries({ queryKey: ['composed-layout'] });
-      queryClient.invalidateQueries({ queryKey: ['placeholder-paths'] });
+      // A structural / field-property edit (new section/field, or a field's
+      // Type/Source/Shared/Unversioned change) alters the schema for every item
+      // built on this template, not just the edited item - so invalidate the
+      // whole template-schema family. See saveInvalidationKeys.
+      const s = variables.structural;
+      const hadStructuralChange = s !== null &&
+        (s.fieldUpdates.size > 0 || s.newFields.length > 0 || s.newSections.length > 0);
+      for (const queryKey of saveInvalidationKeys(selectedId ?? '', hadStructuralChange)) {
+        queryClient.invalidateQueries({ queryKey });
+      }
     },
     onError: (err) => {
       toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);

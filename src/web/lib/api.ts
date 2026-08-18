@@ -54,9 +54,12 @@ export const api = {
     request<{ items: DescendantItem[] }>(
       `/api/items/descendants?path=${encodeURIComponent(path)}`,
     ),
-  getLookupSource: (source: string, contextId?: string) => {
+  getLookupSource: (source: string, contextId?: string, kind?: string) => {
     const qs = new URLSearchParams({ source });
     if (contextId) qs.set('contextId', contextId);
+    // kind drives the flat-select (matched-node) vs tree-rooted (child-descent)
+    // semantics for `query:` sources on the server.
+    if (kind) qs.set('kind', kind);
     return request<LookupSourceItem[]>(`/api/lookup-source?${qs.toString()}`);
   },
   getDatabases: () =>

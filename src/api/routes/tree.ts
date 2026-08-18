@@ -7,6 +7,7 @@ import {
   readFieldWithSvFallback,
   readFieldViaStandardValuesCascade,
 } from '../../engine/layout/item-fields.js';
+import { resolveDisplayIcon, readTemplateIcon } from '../../engine/item-appearance.js';
 import { resolveComparer, parseSitecoreDate } from '../../engine/sorting/index.js';
 import type { ItemSortKey } from '../../engine/sorting/types.js';
 import { toHostPath } from '../host-path.js';
@@ -256,7 +257,9 @@ function buildRegistryNode(item: RegistryItem, engine: Engine, maxDepth: number,
   const displayNameValue = readReg(FIELD_IDS.displayName);
   const createdValue = readReg(FIELD_IDS.created);
   const updatedValue = readReg(FIELD_IDS.updated);
-  const iconValue = readReg(FIELD_IDS.icon);
+  // Icon: item's own __Icon, falling back to the template item's __Icon
+  // (Sitecore ItemAppearance.Icon -> TemplateItem.Icon).
+  const iconValue = readReg(FIELD_IDS.icon) ?? readTemplateIcon(engine, item.template, 'en');
 
   const node: TreeNodeResponse = {
     id: item.id,
@@ -294,7 +297,9 @@ function buildSerializedSubtree(node: ItemNode, engine: Engine, maxDepth: number
   const displayNameValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.displayName, 'en');
   const createdValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.created, 'en');
   const updatedValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.updated, 'en');
-  const iconValue = readFieldWithSvFallback(engine, node.item, FIELD_IDS.icon, 'en');
+  // Icon: item's own __Icon, falling back to the template item's __Icon
+  // (Sitecore ItemAppearance.Icon -> TemplateItem.Icon).
+  const iconValue = resolveDisplayIcon(engine, node.item, 'en');
 
   const result: TreeNodeResponse = {
     id: node.item.id,

@@ -34,12 +34,12 @@ export function useAncestors(id: string | null) {
   });
 }
 
-export function useLookupSource(source: string, contextId: string | undefined) {
+export function useLookupSource(source: string, contextId: string | undefined, kind?: string) {
   const ready = useEngineReady();
   const trimmed = source.trim();
   return useQuery({
-    queryKey: ['lookup-source', trimmed, contextId ?? null],
-    queryFn: () => api.getLookupSource(trimmed, contextId),
+    queryKey: ['lookup-source', trimmed, contextId ?? null, kind ?? null],
+    queryFn: () => api.getLookupSource(trimmed, contextId, kind),
     enabled: ready && trimmed !== '',
     retry: false,
     staleTime: 30_000,
