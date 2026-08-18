@@ -2,6 +2,15 @@ import { useState } from 'react';
 import { Power, RotateCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Floating power button (bottom-right, always visible) that re-indexes the
@@ -19,18 +28,22 @@ import { api } from '@/lib/api';
 export function RestartButton() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmClearCache, setConfirmClearCache] = useState(false);
 
   async function restart(clearCache: boolean) {
     setOpen(false);
     if (busy) return;
-    if (
-      clearCache &&
-      !window.confirm(
-        'Clear the index cache and rebuild from scratch? This runs a full cold re-index and can take a minute.',
-      )
-    ) {
+    // A cold rebuild wipes the cache and can take a minute, so gate it behind an
+    // in-app confirm dialog (replaces the native window.confirm()).
+    if (clearCache) {
+      setConfirmClearCache(true);
       return;
     }
+    await doReindex(false);
+  }
+
+  async function doReindex(clearCache: boolean) {
+    if (busy) return;
     setBusy(true);
     try {
       await api.reindex(clearCache);
@@ -40,6 +53,7 @@ export function RestartButton() {
       window.location.reload();
     } catch (err) {
       setBusy(false);
+      setConfirmClearCache(false);
       toast.error(`Restart failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -88,6 +102,42 @@ export function RestartButton() {
       >
         <Power className="h-5 w-5" />
       </button>
+
+      <Dialog
+        open={confirmClearCache}
+        onOpenChange={(o) => {
+          if (!o && !busy) setConfirmClearCache(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear cache and rebuild?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm">
+            This clears the index cache and rebuilds from scratch. It runs a full
+            cold re-index and can take a minute.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmClearCache(false)}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+            <Button
+              colorScheme="danger"
+              size="sm"
+              onClick={() => doReindex(true)}
+              disabled={busy}
+            >
+              {busy && <Spinner className="size-3 mr-1" variant="primary" />}
+              {busy ? 'Rebuilding...' : 'Clear Cache and Restart'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

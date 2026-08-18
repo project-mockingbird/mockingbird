@@ -89,6 +89,7 @@ const SPLASH_HTML = `<!doctype html>
   .logo { width: 76px; height: 76px; display: inline-block; animation: pulse 1.7s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { transform: scale(1); opacity: .85 } 50% { transform: scale(1.09); opacity: 1 } }
   h1 { font-size: 20px; font-weight: 600; margin: 20px 0 6px; letter-spacing: .2px; }
+  .label { color: #cbd2da; font-size: 14px; font-weight: 500; margin-bottom: 3px; min-height: 0; }
   .sub { color: #9aa2ab; font-size: 13px; min-height: 18px; font-variant-numeric: tabular-nums; }
   .sub.err { color: #f87171; }
   .bar { margin-top: 18px; height: 6px; border-radius: 999px; background: #1c2128; overflow: hidden; }
@@ -102,12 +103,14 @@ const SPLASH_HTML = `<!doctype html>
   <div class="card">
     <img class="logo" width="76" height="76" alt="Mockingbird" src="${MOCKINGBIRD_LOGO_DATA_URI}">
     <h1>Starting Mockingbird...</h1>
+    <div class="label" id="label"></div>
     <div class="sub" id="sub">Warming up</div>
     <div class="bar indeterminate" id="bar"><div class="fill" id="fill"></div></div>
   </div>
 <script>
 (function () {
   var sub = document.getElementById('sub');
+  var label = document.getElementById('label');
   var bar = document.getElementById('bar');
   var fill = document.getElementById('fill');
   function fmt(n) { try { return (n || 0).toLocaleString(); } catch (e) { return String(n || 0); } }
@@ -120,6 +123,7 @@ const SPLASH_HTML = `<!doctype html>
         if (s.state === 'ready' || s.state === 'no-project') { location.reload(); return; }
         if (s.state === 'error') {
           bar.className = 'bar hidden';
+          label.textContent = '';
           sub.className = 'sub err';
           sub.textContent = 'Startup failed: ' + (s.error || 'unknown error');
           return;
@@ -129,8 +133,12 @@ const SPLASH_HTML = `<!doctype html>
           var pct = Math.min(100, Math.floor((p.scanned / p.total) * 100));
           bar.className = 'bar';
           fill.style.width = pct + '%';
-          sub.textContent = 'Indexing ' + fmt(p.scanned) + ' / ' + fmt(p.total) + '  (' + pct + '%)';
+          // Layer name when a multi-layer workspace is scanning one layer at a
+          // time; generic fallback on the single-root path (no layer name).
+          label.textContent = p.layer ? 'Indexing ' + p.layer : 'Indexing content...';
+          sub.textContent = fmt(p.scanned) + ' / ' + fmt(p.total) + '  (' + pct + '%)';
         } else {
+          label.textContent = '';
           sub.textContent = 'Warming up';
         }
         schedule();
