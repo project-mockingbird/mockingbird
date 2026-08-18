@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { Engine } from '../../src/engine/index.js';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import { tmpdir } from 'os';
-import { resolve, join } from 'path';
+import { resolve, join, dirname } from 'path';
 
 const registryFixture = resolve(__dirname, '../../data/registry.json.gz');
 const FOLDER_TEMPLATE_ID = '0437fee2-44c9-46a6-abe9-28858d9fee8c';
@@ -17,6 +17,25 @@ Parent: "{${parent.toUpperCase()}}"
 Template: "{${FOLDER_TEMPLATE_ID.toUpperCase()}}"
 Path: ${path}
 `;
+}
+
+const SOURCE_FIELD_ID = '1eb8ae32-e190-44a6-968d-ed904c794ebf';
+
+function yamlWithSource(id: string, parent: string, path: string, source: string): string {
+  return `---
+ID: "{${id.toUpperCase()}}"
+Parent: "{${parent.toUpperCase()}}"
+Template: "{${FOLDER_TEMPLATE_ID.toUpperCase()}}"
+Path: ${path}
+SharedFields:
+- ID: "${SOURCE_FIELD_ID}"
+  Hint: Source
+  Value: "${source}"
+`;
+}
+
+function readSource(e: Engine, id: string): string | undefined {
+  return e.getItemById(id)?.item.sharedFields.find(f => f.id.toLowerCase() === SOURCE_FIELD_ID)?.value;
 }
 
 function moduleJson(namespace: string): string {
@@ -102,5 +121,68 @@ describe('multi-layer warm start self-heals an item created after the last cold 
     // Refresh, and carry the content-layer provenance.
     expect(engine.getItemById(NEW_ID)).toBeDefined();
     expect(engine.getItemProvenance(NEW_ID)?.winnerLayer).toBe('content');
+  });
+
+  it('heals an EDITED item in-session when its per-layer cache is stale', async () => {
+    // Mirrors the real bug: a field value (Source) changed on disk while the
+    // cache still held the old value; the boot loads the stale cache and the
+    // add-only reconcile skips the (unchanged-id) item, so it stayed stale
+    // for the whole session. Force full signature verify so the staleness is
+    // actually detected (the 30s skip-window would otherwise trust the cache).
+    const saved = process.env.MOCKINGBIRD_CACHE_VERIFY_SKIP_SECONDS;
+    process.env.MOCKINGBIRD_CACHE_VERIFY_SKIP_SECONDS = '0';
+    try {
+      const ws = buildWorkspace();
+      root = ws.root;
+      // Z carries a Source field at cold-scan time.
+      writeFileSync(
+        join(ws.content, 'serialization', 'items', 'Z.yml'),
+        yamlWithSource(Z_ID, '00000000-0000-0000-0000-000000000000', '/sitecore/content/test/Z', 'query:old'),
+      );
+
+      const a = await open(ws);
+      expect(readSource(a, Z_ID)).toBe('query:old');
+      await a.close(); // flush per-layer cache writes (Source=query:old)
+
+      // Edit the Source on disk - the cache is now stale for this item.
+      writeFileSync(
+        join(ws.content, 'serialization', 'items', 'Z.yml'),
+        yamlWithSource(Z_ID, '00000000-0000-0000-0000-000000000000', '/sitecore/content/test/Z', 'query:new-with-slash-star/*'),
+      );
+
+      // Warm open: per-layer cache hit (stale). The reconcile must heal the edit.
+      engine = await open(ws);
+      await engine.awaitReconcile();
+
+      expect(readSource(engine, Z_ID)).toBe('query:new-with-slash-star/*');
+    } finally {
+      if (saved === undefined) delete process.env.MOCKINGBIRD_CACHE_VERIFY_SKIP_SECONDS;
+      else process.env.MOCKINGBIRD_CACHE_VERIFY_SKIP_SECONDS = saved;
+    }
+  });
+
+  it('a mutation invalidates the on-disk index caches so the next boot cannot serve stale', async () => {
+    const ws = buildWorkspace();
+    root = ws.root;
+    writeFileSync(
+      join(ws.content, 'serialization', 'items', 'Z.yml'),
+      yamlWithSource(Z_ID, '00000000-0000-0000-0000-000000000000', '/sitecore/content/test/Z', 'query:old'),
+    );
+
+    const a = await open(ws);
+    await a.close(); // flush the background per-layer cache writes
+
+    const cacheDir = dirname(ws.cachePath);
+    const isCache = (f: string): boolean => /^index.*\.json\.gz$/.test(f);
+    expect(readdirSync(cacheDir).filter(isCache).length).toBeGreaterThan(0);
+
+    // Reopen (populates _layers), let the warm-start reconcile settle, then edit
+    // a field through the engine - the mutation must drop the on-disk caches.
+    engine = await open(ws);
+    await engine.awaitReconcile();
+    const plan = await engine.planUpdateFields(Z_ID, { [SOURCE_FIELD_ID]: 'query:mutated' }, 'en', 1);
+    await engine.applyPlan(plan);
+
+    expect(readdirSync(cacheDir).filter(isCache)).toEqual([]);
   });
 });

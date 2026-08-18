@@ -72,9 +72,14 @@ async function getManifest(root: string): Promise<Map<string, string>> {
   return m;
 }
 
-/** True when the icon switch is on AND a non-empty icon set is baked. */
+/**
+ * True when a non-empty icon set is baked. The feature is always on when the
+ * sprite set is present - there is no opt-in switch. (The former
+ * `MOCKINGBIRD_ICONS` env flag was removed: the icon data ships in every image
+ * and the feature is released, so gating it behind a flag only caused the
+ * picker to silently 404 in deployments that didn't set it.)
+ */
 export async function iconsEnabled(): Promise<boolean> {
-  if (process.env.MOCKINGBIRD_ICONS !== '1') return false;
   const m = await getManifest(iconRoot());
   return m.size > 0;
 }

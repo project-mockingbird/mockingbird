@@ -37,7 +37,7 @@ export interface EngineStatus {
   speStartedAt?: number | null;
   speReadyAt?: number | null;
   taco?: boolean;
-  /** True when MOCKINGBIRD_ICONS is on and a sprite set is baked. */
+  /** True when a sprite set is baked (icons are always on when present). */
   iconsEnabled?: boolean;
 }
 

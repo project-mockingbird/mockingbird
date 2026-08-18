@@ -57,12 +57,31 @@ export interface LookupSourceResult {
   reason?: string;
 }
 
+export interface ResolveLookupOptions {
+  /**
+   * When true, a `query:` source returns the nodes the XPath MATCHES rather
+   * than descending into their children. This mirrors the Sitecore kernel's
+   * `getLookupSourceItems` -> `ProcessQuerySource` (decompiled 10.4): a
+   * `query:` source runs `Axes.SelectItems(query)` and returns the matched
+   * items verbatim, whereas only the plain-path `ProcessDefaultSource` appends
+   * `/*` to return children.
+   *
+   * The flat-select lookup controls (Droplink, Droplist) resolve through
+   * `LookupSources.GetItems`, so they get the matched-node semantics. The
+   * tree-rooted controls (Treelist, Droptree) root a datasource tree and show
+   * its descendants, which mockingbird approximates by descending into the
+   * matched node's children - so they leave this false (the default).
+   */
+  flatSelect?: boolean;
+}
+
 // ---- public entry ---------------------------------------------------------
 
 export function resolveLookupSource(
   source: string | undefined | null,
   contextItemId: string | undefined,
   engine: Engine,
+  opts: ResolveLookupOptions = {},
 ): LookupSourceResult {
   const trimmed = (source ?? '').trim();
   if (trimmed === '') return { items: [], resolved: true };
@@ -86,7 +105,7 @@ export function resolveLookupSource(
   }
 
   if (trimmed.toLowerCase().startsWith('query:')) {
-    return resolveQuery(trimmed.slice(6), contextItemId, engine);
+    return resolveQuery(trimmed.slice(6), contextItemId, engine, opts);
   }
 
   // datasource= / databasename= URL-encoded params (case-insensitive).
@@ -99,7 +118,7 @@ export function resolveLookupSource(
     (slashIdx < 0 || eqIdx < slashIdx) &&
     (pipeIdx < 0 || eqIdx < pipeIdx);
   if (looksLikeParams) {
-    return resolveParameterised(trimmed, contextItemId, engine);
+    return resolveParameterised(trimmed, contextItemId, engine, opts);
   }
 
   return resolvePipePaths(trimmed, contextItemId, engine);
@@ -138,12 +157,51 @@ function resolvePipePaths(
   return { items: sortLookupItems(items, engine), resolved: true };
 }
 
+// ---- form: matched-path nodes (flat-select bare-path query) --------------
+
+/**
+ * Resolve pipe-separated paths to the NODES AT those paths (not their
+ * children). Mirrors the flat-select branch of Sitecore's `ProcessQuerySource`
+ * for a bare-path `query:` source, where `Axes.SelectItems(path)` returns the
+ * single item at the path. Contrast `resolvePipePaths`, which returns children
+ * (the plain-path `ProcessDefaultSource` / tree-rooted behavior).
+ */
+function resolveMatchedPaths(
+  s: string,
+  contextItemId: string | undefined,
+  engine: Engine,
+): LookupSourceResult {
+  const segments = s.split('|').map(p => p.trim()).filter(Boolean);
+  if (segments.length === 0) return { items: [], resolved: true };
+
+  const items: LookupSourceItem[] = [];
+  const seenIds = new Set<string>();
+  for (const seg of segments) {
+    const expanded = expandTokens(seg, contextItemId, engine);
+    if (expanded === null) {
+      return {
+        items: [],
+        resolved: false,
+        reason: `unsupported tokens in source segment: ${seg}`,
+      };
+    }
+    const node = lookupUnifiedItemByPath(engine, expanded);
+    if (!node) continue;
+    const id = getId(node).toLowerCase();
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
+    items.push(toLookupItem(node, engine));
+  }
+  return { items: sortLookupItems(items, engine), resolved: true };
+}
+
 // ---- form: parameter-encoded sources -------------------------------------
 
 function resolveParameterised(
   s: string,
   contextItemId: string | undefined,
   engine: Engine,
+  opts: ResolveLookupOptions,
 ): LookupSourceResult {
   const params = parseParams(s);
   const ds = params.datasource;
@@ -164,7 +222,7 @@ function resolveParameterised(
   // params are filtering hints we currently ignore - phase-1 returns whatever
   // the datasource resolves to.
   if (ds.toLowerCase().startsWith('query:')) {
-    return resolveQuery(ds.slice(6), contextItemId, engine);
+    return resolveQuery(ds.slice(6), contextItemId, engine, opts);
   }
 
   // Datasource may be a path or a (braced) GUID.
@@ -201,18 +259,25 @@ function resolveQuery(
   q: string,
   contextItemId: string | undefined,
   engine: Engine,
+  opts: ResolveLookupOptions,
 ): LookupSourceResult {
   const trimmed = q.trim();
 
   // Bare path query: `query:$partialDesigns`, `query:/sitecore/templates/Project/X`.
   // Starts with `/` or an SXA `$token`, no XPath syntax (no `//`, `*`, `[`).
-  // Sitecore's `ProcessQuerySource` ultimately enumerates the path's children
-  // for the picker; `resolvePipePaths` does exactly that for a single path.
   // The leading-char gate excludes `query:fast:...` and other non-path query
   // forms so they still fall through to the unsupported-syntax error below.
   const looksLikeBarePath = (trimmed.startsWith('/') || trimmed.startsWith('$'))
     && !/\/\/|\*|\[/.test(trimmed);
   if (looksLikeBarePath) {
+    // Kernel behavior split: a `query:` source runs `Axes.SelectItems(path)`,
+    // which returns the node AT the path (matched node) - that's what the
+    // flat-select controls get. The tree-rooted controls approximate a
+    // datasource-rooted tree by enumerating the path's children, which is what
+    // `resolvePipePaths` does for a single path.
+    if (opts.flatSelect) {
+      return resolveMatchedPaths(trimmed, contextItemId, engine);
+    }
     return resolvePipePaths(trimmed, contextItemId, engine);
   }
 
@@ -252,7 +317,7 @@ function resolveQuery(
 
   // Pattern 2: <basePath>/*[@@name='X']/*[@@templatename='Y']/...
   //   (multi-segment child-axis walk; SXA Tag Treelist convention)
-  const childAxisResult = resolveChildAxisQuery(trimmed, contextItemId, engine);
+  const childAxisResult = resolveChildAxisQuery(trimmed, contextItemId, engine, opts);
   if (childAxisResult.resolved || childAxisResult.reason?.startsWith('path not found') ||
       childAxisResult.reason?.startsWith('unsupported tokens')) {
     return childAxisResult;
@@ -273,8 +338,8 @@ function resolveQuery(
  * children of the current node where the item name equals X (case-insensitive).
  */
 export interface ChildAxisStep {
-  kind: 'name' | 'templatename';
-  value: string; // lower-cased
+  kind: 'name' | 'templatename' | 'all';
+  value: string; // lower-cased; '' for the wildcard 'all' step
 }
 
 /**
@@ -323,6 +388,15 @@ export function parseChildAxisQuery(
       pos += predMatch[0].length;
       continue;
     }
+    // Wildcard step: a bare `*` (Sitecore Query "all children") - only when the
+    // `*` stands alone (end of string or followed by the next `/` separator).
+    // `*[...]` is handled by predicateRegex above; `*foo` falls through to the
+    // literal-segment guard and is rejected.
+    if (tail === '*' || tail.startsWith('*/')) {
+      steps.push({ kind: 'all', value: '' });
+      pos += 1;
+      continue;
+    }
     // Literal name segment: read up to next /, treat as @@name='<segment>'.
     const nextSlash = tail.indexOf('/');
     const segment = nextSlash < 0 ? tail : tail.slice(0, nextSlash);
@@ -340,6 +414,7 @@ function resolveChildAxisQuery(
   q: string,
   contextItemId: string | undefined,
   engine: Engine,
+  opts: ResolveLookupOptions,
 ): LookupSourceResult {
   const parsed = parseChildAxisQuery(q.trim());
   if (!parsed) {
@@ -360,21 +435,40 @@ function resolveChildAxisQuery(
     return { items: [], resolved: false, reason: `path not found: ${expanded}` };
   }
 
-  // Walk each step: filter children by predicate.
+  // Walk each step: filter children by predicate (or take all for the `*`
+  // wildcard step).
   let level: UnifiedItem[] = [baseNode];
   for (const step of parsed.steps) {
     const next: UnifiedItem[] = [];
     for (const node of level) {
       for (const child of getMergedChildren(node, engine)) {
         const matches =
-          step.kind === 'name'
-            ? getName(child).toLowerCase() === step.value
-            : getTemplateName(child, engine).toLowerCase() === step.value;
+          step.kind === 'all'
+            ? true
+            : step.kind === 'name'
+              ? getName(child).toLowerCase() === step.value
+              : getTemplateName(child, engine).toLowerCase() === step.value;
         if (matches) next.push(child);
       }
     }
     level = next;
     if (level.length === 0) break;
+  }
+
+  // Flat-select controls (Droplink/Droplist) get Sitecore's `ProcessQuerySource`
+  // semantics: the query's MATCHED nodes are the options, no child descent.
+  // (A source that targets a folder correctly surfaces just that folder, which
+  // is why such a source shows "Value not in the selection list" in real CM.)
+  if (opts.flatSelect) {
+    const matched: LookupSourceItem[] = [];
+    const seen = new Set<string>();
+    for (const node of level) {
+      const id = getId(node).toLowerCase();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      matched.push(toLookupItem(node, engine));
+    }
+    return { items: sortLookupItems(matched, engine), resolved: true };
   }
 
   // Two conventions live in the content tree and Sitecore handles both:

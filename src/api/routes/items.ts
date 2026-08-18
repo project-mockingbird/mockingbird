@@ -652,6 +652,20 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
     const baseSchema = getTemplateSchema(itemTemplate, engine);
     const schema = enrichSchemaWithStoredFields(baseSchema, storedFieldIds, engine);
 
+    // Display ordering: order every section's fields the way the content tree
+    // orders the section's field-item children (its `__Subitems Sorting`
+    // comparer). Clone into new section/field arrays so the cached canonical
+    // `getTemplateSchema` order (load-bearing for GraphQL/layout/package) is
+    // never mutated. Without this, content-item detail panes showed fields in
+    // raw child-discovery order, which for equal-sortorder fields diverged from
+    // the tree (surfaced as a reversed field list). The Builder already sorts
+    // its own sections below; this extends the same fix to the Content /
+    // Standard tabs and to content items.
+    const displaySchema = {
+      ...schema,
+      sections: schema.sections.map(s => ({ ...s, fields: sortFieldsLikeTree(engine, s.id, s.fields) })),
+    };
+
     // For template items, include the template's own sections for the builder view.
     // Registry-only template items still get their own sections via the same path.
     if (classifyItem(itemTemplate) === 'template') {
@@ -659,10 +673,10 @@ export function registerItemRoutes(app: FastifyInstance, engine: Engine): void {
       const builderSections = ownSchema.sections
         .filter(s => s.sourceTemplateId === id)
         .map(s => ({ ...s, fields: sortFieldsLikeTree(engine, s.id, s.fields) }));
-      return { ...schema, builderSections };
+      return { ...displaySchema, builderSections };
     }
 
-    return schema;
+    return displaySchema;
   });
 
   app.get('/api/items/:itemId/placeholder-paths', async (request, reply) => {

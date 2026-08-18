@@ -37,7 +37,7 @@ interface LookupFieldEditorProps {
 export function LookupFieldEditor({ kind, fieldId, label, value, fieldSource, contextItemId, editing, onChange, onNavigate }: LookupFieldEditorProps) {
   const trimmedSource = fieldSource.trim();
   const effectiveSource = trimmedSource === '' && kind === 'Droptree' ? '/sitecore' : fieldSource;
-  const { data: items, isLoading, error } = useLookupSource(effectiveSource, contextItemId);
+  const { data: items, isLoading, error } = useLookupSource(effectiveSource, contextItemId, kind);
   const storesGuid = kind === 'Droplink' || kind === 'Droptree';
   const trimmedValue = value && storesGuid ? normaliseGuid(value) : '';
   const itemsList = items ?? [];

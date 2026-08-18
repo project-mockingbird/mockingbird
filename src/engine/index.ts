@@ -18,6 +18,7 @@ import {
   RENDERING_TEMPLATE_ID,
   STANDARD_TEMPLATE_ID,
   FIELD_IDS,
+  BLOB_FIELD_ID,
   classifyItem,
 } from './constants.js';
 import type { EngineOptions, ItemNode, ItemProvenance, ModuleConfig, ScsItem, ValidationResult } from './types.js';
@@ -53,6 +54,37 @@ function deriveCachePath(basePath: string | undefined, workspaceKey: string): st
     return `${basePath.slice(0, dotIdx)}-${hash}${basePath.slice(dotIdx)}`;
   }
   return `${basePath.slice(0, lastDot)}-${hash}.json.gz`;
+}
+
+/**
+ * Stable content key for an ScsItem, used by the warm-start edit-heal to tell
+ * whether a re-parsed file drifted from the cached copy. The `Blob` field is
+ * excluded because the index cache strips it (it's re-read from YAML on
+ * demand), so a cached media item legitimately lacks it - comparing it would
+ * flag every media item as "changed".
+ */
+function canonicalItemKey(item: ScsItem): string {
+  const fields = (fs: Array<{ id: string; value: string }>): string =>
+    fs.filter((f) => f.id !== BLOB_FIELD_ID)
+      .map((f) => `${f.id.toLowerCase()}=${f.value}`)
+      .sort()
+      .join('|');
+  const langs = (item.languages ?? [])
+    .map((l) => {
+      const uf = fields(l.fields ?? []);
+      const vers = (l.versions ?? [])
+        .map((v) => `${v.version}#${fields(v.fields ?? [])}`)
+        .sort()
+        .join('~');
+      return `${l.language}[${uf}][${vers}]`;
+    })
+    .sort()
+    .join('||');
+  return `${item.parent}|${item.template}|${item.path}|${fields(item.sharedFields)}|${langs}`;
+}
+
+function sameSerializedItem(a: ScsItem, b: ScsItem): boolean {
+  return canonicalItemKey(a) === canonicalItemKey(b);
 }
 
 export class Engine {
@@ -646,7 +678,12 @@ export class Engine {
 
   async applyPlan(plan: MutationPlan): Promise<void> {
     const { applyPlan } = await import('./apply-plan.js');
-    return applyPlan(this, plan);
+    await applyPlan(this, plan);
+    // A write makes any on-disk index cache stale. The layered boot reads
+    // per-layer caches that close() doesn't rewrite, so drop them here; the
+    // next start cold-rebuilds fresh (and a graceful shutdown re-caches via
+    // close()). Best-effort - never fail the mutation on a cache-cleanup error.
+    await this.invalidateIndexCache().catch(() => {});
   }
 
   async planCreateItem(args: import('./plan-create-item.js').CreateItemArgs) {
@@ -1262,7 +1299,13 @@ export class Engine {
     // the warm-start self-heal below. Each carries the set of file paths the
     // cache actually contained, so the reconcile can spot what disk has that
     // the cache missed.
-    const cacheHitLayers: Array<{ name: string; layerRoot: string; cachedPaths: Set<string> }> = [];
+    const cacheHitLayers: Array<{
+      name: string;
+      layerRoot: string;
+      layerCachePath: string;
+      cachedPaths: Set<string>;
+      verifyPromise: Promise<boolean>;
+    }> = [];
 
     for (const layer of layers) {
       const layerRoot = dirname(layer.sitecoreJsonPath);
@@ -1281,16 +1324,14 @@ export class Engine {
           cacheHitLayers.push({
             name: layer.name,
             layerRoot,
+            layerCachePath,
             cachedPaths: new Set(partialTree.getAllNodes().map((n) => n.filePath.toLowerCase())),
+            verifyPromise: cached.verifyPromise,
           });
-          // Fire-and-forget signature verify; delete stale cache so the next
-          // open of this layer re-scans cold (catches edits + host-side
-          // deletes). Adds are healed in-session by the reconcile below.
-          void cached.verifyPromise.then(async (match) => {
-            if (!match) {
-              await deleteStaleCache(layerCachePath);
-            }
-          });
+          // The signature verify + stale-cache handling now happens inside
+          // `_reconcileCacheHitLayers`, which awaits `verifyPromise` and, on a
+          // mismatch, heals in-session EDITS from disk (not just adds) before
+          // deleting the stale cache so the next open re-scans cold.
         }
       }
 
@@ -1389,7 +1430,13 @@ export class Engine {
    * re-run (next warm start, if the cache wasn't deleted) is safe.
    */
   private async _reconcileCacheHitLayers(
-    layers: Array<{ name: string; layerRoot: string; cachedPaths: Set<string> }>,
+    layers: Array<{
+      name: string;
+      layerRoot: string;
+      layerCachePath: string;
+      cachedPaths: Set<string>;
+      verifyPromise: Promise<boolean>;
+    }>,
   ): Promise<void> {
     for (const layer of layers) {
       if (this._closed) return;
@@ -1423,7 +1470,76 @@ export class Engine {
         this.tree.rebuildChildrenIndex();
         console.error(`  [index] warm-start reconcile(${layer.name}): +${added} item(s) from disk`);
       }
+
+      // Await the (background) signature check. When the cache is stale, the
+      // add-only pass above cannot heal EDITS - an item whose file was already
+      // in the cache is skipped - so re-parse the layer's on-disk files and
+      // update any whose serialized content drifted from the cached copy. Then
+      // delete the stale cache so the NEXT open re-scans cold.
+      const match = await layer.verifyPromise.catch(() => true);
+      if (!match && !this._closed) {
+        await this._healLayerEdits(layer, onDisk);
+        await deleteStaleCache(layer.layerCachePath);
+      }
     }
+  }
+
+  /**
+   * In-session EDIT self-heal for a stale cache-hit layer. Re-parses the
+   * layer's on-disk files the cache already knew about and re-adds any whose
+   * serialized content changed - the "field value edited on disk while the
+   * cache held the old value" case the add-only reconcile can't cover.
+   *
+   * Only heals the item this file currently OWNS in the merged tree (the live
+   * node's `filePath` matches this file): an edit to a lower-precedence copy
+   * must not override the winning layer. Deletes are still left to the
+   * cache-delete-for-next-boot path and manual Refresh.
+   */
+  private async _healLayerEdits(
+    layer: { name: string; cachedPaths: Set<string> },
+    onDisk: FileTarget[],
+  ): Promise<void> {
+    let healed = 0;
+    for (const target of onDisk) {
+      if (this._closed) return;
+      if (!layer.cachedPaths.has(target.absolutePath.toLowerCase())) continue; // adds handled above
+      let item: ScsItem;
+      try {
+        item = await parseItem(target.absolutePath);
+      } catch {
+        continue;
+      }
+      const existing = this.tree.getById(item.id);
+      if (!existing) continue;
+      if (existing.filePath.toLowerCase() !== target.absolutePath.toLowerCase()) continue;
+      if (sameSerializedItem(existing.item, item)) continue;
+      this.tree.addItem(item, target.absolutePath, target.namespace);
+      this.options.onItemChange?.({ type: 'changed', itemId: item.id, itemPath: item.path });
+      healed++;
+    }
+    if (healed > 0) {
+      this.tree.rebuildChildrenIndex();
+      console.error(`  [index] warm-start reconcile(${layer.name}): healed ${healed} edited item(s) from disk`);
+    }
+  }
+
+  /**
+   * Delete every on-disk index-cache file for this workspace (the base path
+   * plus each layer's derived `index-<hash>.json.gz`). Called after a mutation:
+   * a write makes the cache stale for a subsequent boot, and the layered load
+   * reads per-layer caches that `close()` doesn't rewrite, so the only safe
+   * thing is to drop them and let the next start cold-rebuild + re-cache.
+   * Best-effort; a graceful shutdown still re-caches via `close()`.
+   */
+  async invalidateIndexCache(): Promise<void> {
+    const base = this.options.indexCachePath;
+    if (!base) return;
+    const paths = new Set<string>([base]);
+    for (const layer of this._layers) {
+      const p = deriveCachePath(base, layer.sitecoreJsonPath);
+      if (p) paths.add(p);
+    }
+    await Promise.all([...paths].map((p) => rm(p, { force: true }).catch(() => {})));
   }
 
   /**
