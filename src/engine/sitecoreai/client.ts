@@ -49,8 +49,20 @@ export function createSitecoreAiClient(env: ResolvedEnvironment, deps: ClientDep
     async executeSerializationCommands(commands: ItemCommand[]): Promise<ExecResult> {
       const json = await post(managementUrl(env.cmHost), { query: EXEC_MUTATION, variables: { commands } });
       if (json.errors?.length) return { ok: false, errors: json.errors.map((e) => e.message), messages: [] };
-      const results = (json.data?.executeSerializationCommands ?? []) as { messages?: { text: string }[] }[];
+      const results = (json.data?.executeSerializationCommands ?? []) as { name?: string; success?: boolean; messages?: { text: string }[] }[];
       const messages = results.flatMap((r) => (r.messages ?? []).map((m) => m.text));
+
+      // Check if any result has success === false
+      const failedResults = results.filter((r) => r.success === false);
+      if (failedResults.length > 0) {
+        const errors = failedResults.flatMap((r) =>
+          (r.messages ?? []).length > 0
+            ? (r.messages ?? []).map((m) => m.text)
+            : ['command failed']
+        );
+        return { ok: false, errors, messages };
+      }
+
       return { ok: true, errors: [], messages }; // empty array == success (no messages at minimumLogLevel)
     },
   };
