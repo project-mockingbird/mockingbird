@@ -77,3 +77,6 @@ config.mockingbird
 # Consumer repos that commit config.mockingbird should add this line to
 # their own .gitignore.
 config.mockingbird.local
+
+# Environment config store - secrets gitignored, defs tracked.
+config.mockingbird.environments.local
