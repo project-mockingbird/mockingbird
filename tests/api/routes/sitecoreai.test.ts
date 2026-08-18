@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 
 vi.mock('../../../src/engine/sitecoreai/environments.js', () => ({
@@ -19,7 +19,7 @@ vi.mock('../../../src/engine/sitecoreai/install.js', () => ({
 }));
 
 import { registerSitecoreAiRoutes } from '../../../src/api/routes/sitecoreai.js';
-import { upsertEnvironment } from '../../../src/engine/sitecoreai/environments.js';
+import { upsertEnvironment, deleteEnvironment, getResolvedEnvironment } from '../../../src/engine/sitecoreai/environments.js';
 
 async function makeApp() {
   const app = Fastify();
@@ -62,5 +62,33 @@ describe('sitecoreai routes', () => {
     expect(res.statusCode).toBe(200);
     const lines = res.body.trim().split('\n').map((l) => JSON.parse(l));
     expect(lines.at(-1).kind).toBe('done');
+  });
+
+  it('deletes an environment', async () => {
+    const app = await makeApp();
+    const res = await app.inject({ method: 'DELETE', url: '/api/sitecoreai/environments/e1' });
+    expect(res.statusCode).toBe(204);
+    expect(deleteEnvironment).toHaveBeenCalled();
+  });
+
+  it('tests a connection successfully', async () => {
+    const app = await makeApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sitecoreai/environments/e1/test' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+  });
+
+  it('returns 400 when the test-connection probe fails', async () => {
+    vi.mocked(getResolvedEnvironment).mockRejectedValueOnce(new Error('bad creds'));
+    const app = await makeApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sitecoreai/environments/e1/test' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('bad creds');
+  });
+
+  it('rejects a PUT missing a required field', async () => {
+    const app = await makeApp();
+    const res = await app.inject({ method: 'PUT', url: '/api/sitecoreai/environments/e1', payload: { cmHost: 'h', clientId: 'c' } });
+    expect(res.statusCode).toBe(400);
   });
 });
