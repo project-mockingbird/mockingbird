@@ -76,6 +76,7 @@ import { containingFolder } from '@/lib/folder-path';
 import { pickNeighborAfterDelete } from '@/lib/delete-neighbor';
 import { reorderState, computeReorderedIds, reorderByDrop, type ReorderOp } from '@/lib/reorder';
 import { useReorderSiblings } from '@/hooks/useReorderSiblings';
+import { deployStore } from '@/state/deployStore';
 import { toast } from 'sonner';
 
 // ---- type-to-icon map (mirrors old TreeNode.tsx TYPE_ICONS) ----
@@ -733,6 +734,13 @@ function ContentTreeNode({
   const openAddToPackage = () => { setPackageDialogMode('cart'); setPackageDialogOpen(true); };
   const openDownloadTree = () => { setPackageDialogMode('download'); setPackageDialogOpen(true); };
 
+  // Deploy-to-SitecoreAI scope picker. Reuses AddToPackageDialog in 'deploy'
+  // mode to collect the source name + scope, then hands the resulting
+  // DeploySource to deployStore.openDeploy, which opens the DeployDialog
+  // hosted once in App.tsx.
+  const [deployPickerOpen, setDeployPickerOpen] = useState(false);
+  const [deploySourceItem, setDeploySourceItem] = useState<{ id: string; path: string; name: string } | null>(null);
+
   const [addRootDialogOpen, setAddRootDialogOpen] = useState(false);
 
   const iconPath = nodeIconPath(node);
@@ -1052,6 +1060,11 @@ function ContentTreeNode({
               <ContextMenuItem onSelect={openDownloadTree}>
                 Download Tree
               </ContextMenuItem>
+              <ContextMenuItem
+                onSelect={() => { setDeploySourceItem({ id: node.id, path: node.path, name: node.name }); setDeployPickerOpen(true); }}
+              >
+                Deploy to SitecoreAI...
+              </ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
 
@@ -1272,6 +1285,16 @@ function ContentTreeNode({
           mode={packageDialogMode}
           onDownloadSuccess={(filename) => toast.success(`Downloaded ${filename}`)}
           onDownloadError={(message) => toast.error(message)}
+        />
+      )}
+
+      {deploySourceItem && (
+        <AddToPackageDialog
+          item={deploySourceItem}
+          open={deployPickerOpen}
+          onOpenChange={setDeployPickerOpen}
+          mode="deploy"
+          onDeploy={(src) => deployStore.openDeploy([src])}
         />
       )}
 
