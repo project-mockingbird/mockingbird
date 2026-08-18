@@ -32,8 +32,10 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
     listEnvs().then((e) => { setEnvs(e); if (e[0]) setEnvId(e[0].id); }).catch((err) => setError(String(err)));
   }, [open]);
 
+  const resetPlanState = () => { setPlan(null); setProgress(null); setError(''); };
+
   const onPreview = async () => {
-    setBusy(true); setError(''); setProgress(null);
+    setBusy(true); setError(''); setProgress(null); setPlan(null);
     try { setPlan(await previewDeploy(envId, sources, strategy)); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -48,7 +50,11 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
       const final = await runDeploy(envId, sources, strategy, setProgress, ac.signal);
       setProgress(final);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        setProgress({ kind: 'error', completed: 0, total: 0, message: 'Cancelled' });
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally { setBusy(false); abortRef.current = null; }
   };
 
@@ -61,13 +67,13 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
             <Label className="mb-1 block">Target environment</Label>
             {envs.length === 0
               ? <p className="text-sm text-amber-600">No environments configured. <button className="underline" onClick={onManageEnvironments}>Manage environments</button></p>
-              : <select className="w-full border rounded px-2 py-1 text-sm" value={envId} onChange={(e) => setEnvId(e.target.value)} disabled={busy}>
+              : <select className="w-full border rounded px-2 py-1 text-sm" value={envId} onChange={(e) => { setEnvId(e.target.value); resetPlanState(); }} disabled={busy}>
                   {envs.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>}
           </div>
           <div>
             <Label className="mb-1 block">Conflict strategy</Label>
-            <RadioGroup value={strategy} onValueChange={setStrategy} disabled={busy}>
+            <RadioGroup value={strategy} onValueChange={(v) => { setStrategy(v); resetPlanState(); }} disabled={busy}>
               {STRATEGIES.map((s) => (
                 <div key={s.value} className="flex items-center space-x-2">
                   <RadioGroupItem value={s.value} id={`strat-${s.value}`} />
@@ -97,6 +103,7 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <DialogFooter>
+          {busy && <Button variant="outline" size="sm" onClick={() => abortRef.current?.abort()}>Cancel</Button>}
           <Button size="sm" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Close</Button>
           <Button size="sm" variant="outline" onClick={onPreview} disabled={!envId || busy}>Preview</Button>
           <Button size="sm" onClick={onDeploy} disabled={!canDeploy}>{busy && <Spinner className="size-3 mr-1" variant="primary" />}Deploy</Button>
