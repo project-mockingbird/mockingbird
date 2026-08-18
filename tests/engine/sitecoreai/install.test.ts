@@ -64,4 +64,12 @@ describe('executeInstall', () => {
     expect(final.message).toMatch(/cancel/i);
     expect(client.executeSerializationCommands).not.toHaveBeenCalled();
   });
+
+  it('splits into multiple batches when the byte budget is tiny', async () => {
+    const client = fakeClient();
+    const final = await executeInstall(engine, sources, 'skip', client, { byteBudget: 1 });
+    expect(client.executeSerializationCommands).toHaveBeenCalledTimes(2); // one batch per item
+    expect(final.kind).toBe('done');
+    expect(final.completed).toBe(2);
+  });
 });

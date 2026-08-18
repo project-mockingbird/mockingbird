@@ -46,7 +46,7 @@ export async function executeInstall(
   const batches: ItemCommand[][] = [];
   let cur: ItemCommand[] = []; let curBytes = 0;
   for (const c of commands) {
-    const size = c.data.length;
+    const size = Buffer.byteLength(c.data, 'utf8');
     if (cur.length > 0 && curBytes + size > budget) { batches.push(cur); cur = []; curBytes = 0; }
     cur.push(c); curBytes += size;
     if (curBytes > budget) { batches.push(cur); cur = []; curBytes = 0; } // solo oversized
