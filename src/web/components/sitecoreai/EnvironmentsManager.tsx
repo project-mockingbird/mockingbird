@@ -15,9 +15,10 @@ export function EnvironmentsManager({ open, onOpenChange }: { open: boolean; onO
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', cmHost: '', clientId: '', clientSecret: '' });
   const [status, setStatus] = useState<string>('');
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   const refresh = async () => { try { setEnvs(await listEnvs()); } catch (e) { setStatus(String(e)); } };
-  useEffect(() => { if (open) { refresh(); setEditingId(null); setStatus(''); } }, [open]);
+  useEffect(() => { if (open) { refresh(); setEditingId(null); setStatus(''); setConfirmingDeleteId(null); } }, [open]);
 
   const startNew = () => { setEditingId(randomId()); setForm({ name: '', cmHost: '', clientId: '', clientSecret: '' }); };
   const startEdit = (e: EnvEntry) => { setEditingId(e.id); setForm({ name: e.name, cmHost: e.cmHost, clientId: '', clientSecret: '' }); };
@@ -28,7 +29,10 @@ export function EnvironmentsManager({ open, onOpenChange }: { open: boolean; onO
     try { await saveEnv(editingId, form); setEditingId(null); await refresh(); setStatus('Saved.'); }
     catch (e) { setStatus(e instanceof Error ? e.message : String(e)); }
   };
-  const onDelete = async (id: string) => { try { await deleteEnv(id); await refresh(); } catch (e) { setStatus(String(e)); } };
+  const onDelete = async (id: string) => {
+    try { await deleteEnv(id); await refresh(); setConfirmingDeleteId(null); }
+    catch (e) { setStatus(String(e)); }
+  };
   const onTest = async (id: string) => {
     setStatus('Testing...');
     try { await testEnv(id); setStatus('Connection OK.'); }
@@ -47,7 +51,13 @@ export function EnvironmentsManager({ open, onOpenChange }: { open: boolean; onO
                 <span className="flex gap-1">
                   <Button size="sm" variant="outline" onClick={() => onTest(e.id)}>Test</Button>
                   <Button size="sm" variant="outline" onClick={() => startEdit(e)}>Edit</Button>
-                  <Button size="sm" variant="outline" onClick={() => onDelete(e.id)}>Remove</Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => (confirmingDeleteId === e.id ? onDelete(e.id) : setConfirmingDeleteId(e.id))}
+                  >
+                    {confirmingDeleteId === e.id ? 'Confirm?' : 'Remove'}
+                  </Button>
                 </span>
               </li>
             ))}
@@ -57,8 +67,11 @@ export function EnvironmentsManager({ open, onOpenChange }: { open: boolean; onO
             <div className="space-y-2 border-t pt-2">
               <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>CM host</Label><Input value={form.cmHost} placeholder="xmc-acme-dev.sitecorecloud.io" onChange={(e) => setForm({ ...form, cmHost: e.target.value })} /></div>
-              <div><Label>Client ID</Label><Input value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })} /></div>
-              <div><Label>Client secret</Label><Input type="password" value={form.clientSecret} onChange={(e) => setForm({ ...form, clientSecret: e.target.value })} /></div>
+              {envs.find((e) => e.id === editingId)?.hasSecret && (
+                <p className="text-xs text-muted-foreground">Credentials stored - leave the credential fields blank to keep them.</p>
+              )}
+              <div><Label>Client ID</Label><Input value={form.clientId} placeholder="leave blank to keep current" onChange={(e) => setForm({ ...form, clientId: e.target.value })} /></div>
+              <div><Label>Client secret</Label><Input type="password" value={form.clientSecret} placeholder="leave blank to keep current" onChange={(e) => setForm({ ...form, clientSecret: e.target.value })} /></div>
               <div className="flex gap-2"><Button size="sm" onClick={onSave}>Save</Button><Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button></div>
             </div>
           )}

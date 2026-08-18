@@ -18,8 +18,8 @@ export function registerSitecoreAiRoutes(app: FastifyInstance, engine: Engine): 
   app.put('/api/sitecoreai/environments/:id', async (request, reply) => {
     const id = (request.params as { id: string }).id;
     const b = request.body as { name?: string; cmHost?: string; clientId?: string; clientSecret?: string; secretEnv?: string };
-    if (!b?.name || !b.cmHost || !b.clientId) return reply.status(400).send({ error: 'name, cmHost, clientId are required' });
-    await upsertEnvironment({ id, name: b.name, cmHost: b.cmHost }, { clientId: b.clientId, clientSecret: b.clientSecret, secretEnv: b.secretEnv });
+    if (!b?.name || !b.cmHost) return reply.status(400).send({ error: 'name, cmHost are required' });
+    await upsertEnvironment({ id, name: b.name, cmHost: b.cmHost }, { clientId: b.clientId ?? '', clientSecret: b.clientSecret, secretEnv: b.secretEnv });
     return reply.status(204).send();
   });
 

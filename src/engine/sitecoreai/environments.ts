@@ -41,7 +41,10 @@ async function readSecrets(path: string): Promise<SecretsFile> {
 
 export async function listEnvironments(path = resolveEnvDefsPath()): Promise<EnvironmentListEntry[]> {
   const [defs, secrets] = await Promise.all([readDefs(path), readSecrets(path)]);
-  return defs.environments.map((d) => ({ id: d.id, name: d.name, cmHost: d.cmHost, hasSecret: !!secrets.secrets[d.id] }));
+  return defs.environments.map((d) => {
+    const s = secrets.secrets[d.id];
+    return { id: d.id, name: d.name, cmHost: d.cmHost, hasSecret: !!(s && s.clientId && (s.clientSecret || s.secretEnv)) };
+  });
 }
 
 function resolveSecret(id: string, secret: EnvironmentSecret): string {
@@ -67,7 +70,22 @@ export async function upsertEnvironment(def: EnvironmentDef, secret: Environment
   const [defs, secrets] = await Promise.all([readDefs(path), readSecrets(path)]);
   const i = defs.environments.findIndex((d) => d.id === def.id);
   if (i >= 0) defs.environments[i] = def; else defs.environments.push(def);
-  secrets.secrets[def.id] = secret;
+
+  const existing = secrets.secrets[def.id];
+  const mergedClientId = secret.clientId || existing?.clientId || '';
+  const material = secret.clientSecret
+    ? { clientSecret: secret.clientSecret }
+    : secret.secretEnv
+      ? { secretEnv: secret.secretEnv }
+      : { clientSecret: existing?.clientSecret, secretEnv: existing?.secretEnv };
+  const merged: EnvironmentSecret = { clientId: mergedClientId, ...material };
+
+  if (!merged.clientId && !merged.clientSecret && !merged.secretEnv) {
+    delete secrets.secrets[def.id];
+  } else {
+    secrets.secrets[def.id] = merged;
+  }
+
   await atomicWrite(path, defs);
   await atomicWrite(localPath(path), secrets);
 }

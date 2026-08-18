@@ -58,4 +58,36 @@ describe('environments store', () => {
     const local = JSON.parse(await readFile(`${defsPath}.local`, 'utf-8'));
     expect(local.secrets.e1).toBeUndefined();
   });
+
+  it('upsert preserves the existing secret when the patch omits credentials', async () => {
+    await upsertEnvironment({ id: 'e1', name: 'Acme DEV', cmHost: 'h' }, { clientId: 'cid', clientSecret: 'shh' }, defsPath);
+    await upsertEnvironment({ id: 'e1', name: 'Acme DEV Renamed', cmHost: 'h' }, { clientId: '', clientSecret: '' }, defsPath);
+
+    const tracked = JSON.parse(await readFile(defsPath, 'utf-8'));
+    expect(tracked.environments[0]).toMatchObject({ id: 'e1', name: 'Acme DEV Renamed', cmHost: 'h' });
+
+    const env = await getResolvedEnvironment('e1', defsPath);
+    expect(env).toMatchObject({ clientId: 'cid', clientSecret: 'shh' });
+
+    const list = await listEnvironments(defsPath);
+    expect(list).toEqual([{ id: 'e1', name: 'Acme DEV Renamed', cmHost: 'h', hasSecret: true }]);
+  });
+
+  it('upsert replaces the secret when a new one is provided', async () => {
+    await upsertEnvironment({ id: 'e1', name: 'A', cmHost: 'h' }, { clientId: 'cid', clientSecret: 'old' }, defsPath);
+    await upsertEnvironment({ id: 'e1', name: 'A', cmHost: 'h' }, { clientId: '', clientSecret: 'new' }, defsPath);
+
+    const env = await getResolvedEnvironment('e1', defsPath);
+    expect(env.clientSecret).toBe('new');
+    expect(env.clientId).toBe('cid');
+  });
+
+  it('a def-only env with no creds reports hasSecret false', async () => {
+    await upsertEnvironment({ id: 'e2', name: 'X', cmHost: 'h' }, { clientId: '', clientSecret: '' }, defsPath);
+
+    const list = await listEnvironments(defsPath);
+    expect(list.find((e) => e.id === 'e2')).toMatchObject({ hasSecret: false });
+
+    await expect(getResolvedEnvironment('e2', defsPath)).rejects.toThrow();
+  });
 });
