@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildInstallPlan } from '../../../src/engine/sitecoreai/planner.js';
 import type { ScsItem } from '../../../src/engine/types.js';
+import { ALL_ZERO_GUID } from '../../../src/engine/sitecoreai/types.js';
 
 function mk(id: string, path: string, template: string): ScsItem {
   return { id, parent: 'p', template, path, sharedFields: [], languages: [] };
@@ -39,5 +40,20 @@ describe('buildInstallPlan', () => {
     const plan = await buildInstallPlan(items, 'skip', probes(new Set(), new Set(['meta-tpl'])));
     // 'tpl' is in the payload, so item 'a' is not blocked on it.
     expect(plan.blockingErrors).toEqual([]);
+  });
+
+  it('blocks when branchId is missing on target and not in payload', async () => {
+    const item = { ...mk('a', '/x/a', 'tpl'), branchId: 'missing-branch' };
+    const plan = await buildInstallPlan([item], 'skip', probes(new Set(), new Set(['tpl'])));
+    expect(plan.blockingErrors).toHaveLength(1);
+    expect(plan.blockingErrors[0]).toMatchObject({ itemId: 'a', reason: expect.stringContaining('missing-branch') });
+    expect(plan.steps[0].action).toBe('skip');
+  });
+
+  it('does not check branchId when it is ALL_ZERO_GUID', async () => {
+    const item = { ...mk('a', '/x/a', 'tpl'), branchId: ALL_ZERO_GUID };
+    const plan = await buildInstallPlan([item], 'skip', probes(new Set(), new Set(['tpl'])));
+    expect(plan.blockingErrors).toEqual([]);
+    expect(plan.steps[0].action).toBe('create');
   });
 });
