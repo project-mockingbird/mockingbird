@@ -45,7 +45,10 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
     finally { setBusy(false); setPreviewing(false); }
   };
 
-  const canDeploy = !!plan && plan.blockingErrors.length === 0 && !busy;
+  // Preview is optional: Deploy is allowed whenever an environment is selected
+  // and we are idle. If a preview WAS run and surfaced blocking errors, block
+  // Deploy; otherwise the server-side planner still enforces the same check.
+  const canDeploy = !!envId && !busy && !(plan && plan.blockingErrors.length > 0);
 
   const onDeploy = async () => {
     setBusy(true); setError(''); setProgress(null);
@@ -124,8 +127,17 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
             </div>
           )}
           {progress && (
-            <div className="text-sm">
-              {progress.kind === 'progress' && <p className="flex items-center gap-2"><Spinner className="size-3" /> {progress.message} ({progress.completed}/{progress.total})</p>}
+            <div className="space-y-1 text-sm">
+              {progress.kind === 'progress' && (
+                <>
+                  <p className="flex items-center gap-2 text-muted-foreground"><Spinner className="size-3" /> {progress.message}</p>
+                  {progress.total > 0 && (
+                    <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                      <div className="h-full bg-primary transition-all" style={{ width: `${Math.round((progress.completed / progress.total) * 100)}%` }} />
+                    </div>
+                  )}
+                </>
+              )}
               {progress.kind === 'done' && <p className="text-emerald-600">Done. {progress.message}</p>}
               {progress.kind === 'error' && <p className="text-red-600">{progress.message}</p>}
             </div>

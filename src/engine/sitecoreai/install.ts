@@ -21,10 +21,13 @@ export async function executeInstall(
   engine: Engine, sources: CartSource[], strategy: ConflictStrategy, client: SitecoreAiClient, opts: ExecuteOptions = {},
 ): Promise<InstallProgress> {
   const budget = opts.byteBudget ?? DEFAULT_BYTE_BUDGET;
-  const { items } = collectSources(engine, sources);
-  const plan = await buildInstallPlan(items, strategy, client);
-
   const emit = (p: InstallProgress): InstallProgress => { opts.onProgress?.(p); return p; };
+  const { items } = collectSources(engine, sources);
+  // Stream the planning phase (the slow part - one probe per item) so the UI
+  // shows an "Evaluating X of N" bar before the write phase, even when the user
+  // deployed without running a preview first.
+  const plan = await buildInstallPlan(items, strategy, client, (completed, total) =>
+    emit({ kind: 'progress', completed, total, message: `Evaluating ${completed} of ${total} items` }));
 
   if (plan.blockingErrors.length > 0) {
     return emit({ kind: 'error', completed: 0, total: 0, message: `Blocked: ${plan.blockingErrors.length} item(s) reference missing templates`, errors: plan.blockingErrors.map((b) => ({ itemId: b.itemId, reason: b.reason })) });
@@ -63,8 +66,8 @@ export async function executeInstall(
       return emit({ kind: 'error', completed, total, message: res.errors.join('; ') || 'Install failed', errors: res.errors.map((e) => ({ itemId: '', reason: e })) });
     }
     completed += batch.length;
-    emit({ kind: 'progress', completed, total, message: `Installed ${completed}/${total}` });
+    emit({ kind: 'progress', completed, total, message: `Installing ${completed} of ${total} items` });
   }
 
-  return emit({ kind: 'done', completed, total, message: `Installed ${completed} item(s)` });
+  return emit({ kind: 'done', completed, total, message: `Installed ${completed} of ${total} item(s)` });
 }
