@@ -25,11 +25,12 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<DeployProgress | null>(null);
   const [error, setError] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setPlan(null); setProgress(null); setError(''); setBusy(false);
+    setPlan(null); setProgress(null); setError(''); setBusy(false); setShowDetails(false);
     listEnvs().then((e) => { setEnvs(e); if (e[0]) setEnvId(e[0].id); }).catch((err) => setError(String(err)));
   }, [open]);
 
@@ -88,7 +89,25 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
           </div>
           {plan && (
             <div className="text-sm space-y-1">
-              <p>Plan: {formatPlanSummary(plan)}</p>
+              <p className="flex items-center gap-2">
+                <span>Plan: {formatPlanSummary(plan)}</span>
+                {plan.steps.length > 0 && (
+                  <button type="button" className="underline text-muted-foreground" onClick={() => setShowDetails((v) => !v)}>
+                    {showDetails ? 'Hide details' : 'Details'}
+                  </button>
+                )}
+              </p>
+              {showDetails && plan.steps.length > 0 && (
+                <ul className="max-h-48 overflow-auto rounded border divide-y text-xs">
+                  {plan.steps.map((s) => (
+                    <li key={s.itemId} className="flex items-center gap-2 px-2 py-1">
+                      <span className={`w-14 shrink-0 font-medium ${s.action === 'create' ? 'text-emerald-600' : s.action === 'update' ? 'text-amber-600' : 'text-muted-foreground'}`}>{s.action}</span>
+                      <span className="truncate" title={s.path}>{s.path}</span>
+                      <span className="ml-auto shrink-0 text-muted-foreground">{s.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {plan.blockingErrors.length > 0 && (
                 <div className="text-red-600">
                   <p>{plan.blockingErrors.length} blocking issue(s):</p>
