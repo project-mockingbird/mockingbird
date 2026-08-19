@@ -47,7 +47,7 @@ export function EnvironmentsManager({ open, onOpenChange }: { open: boolean; onO
           <ul className="space-y-1">
             {envs.map((e) => (
               <li key={e.id} className="flex items-center justify-between text-sm border rounded px-2 py-1">
-                <span>{e.name} <span className="text-muted-foreground">({e.cmHost})</span>{!e.hasSecret && <span className="text-amber-600"> - no secret</span>}</span>
+                <span>{e.name}{!e.hasSecret && <span className="text-amber-600"> - no secret</span>}</span>
                 <span className="flex gap-1">
                   <Button size="sm" variant="outline" onClick={() => onTest(e.id)}>Test</Button>
                   <Button size="sm" variant="outline" onClick={() => startEdit(e)}>Edit</Button>
