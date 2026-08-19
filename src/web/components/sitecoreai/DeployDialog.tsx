@@ -34,10 +34,10 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
     listEnvs().then((e) => { setEnvs(e); if (e[0]) setEnvId(e[0].id); }).catch((err) => setError(String(err)));
   }, [open]);
 
-  const resetPlanState = () => { setPlan(null); setProgress(null); setError(''); };
+  const resetPlanState = () => { setPlan(null); setProgress(null); setError(''); setShowDetails(false); };
 
   const onPreview = async () => {
-    setBusy(true); setError(''); setProgress(null); setPlan(null);
+    setBusy(true); setError(''); setProgress(null); setPlan(null); setShowDetails(false);
     try { setPlan(await previewDeploy(envId, sources, strategy)); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
@@ -61,6 +61,7 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => { if (!busy) onOpenChange(o); }}>
       <DialogContent>
         <DialogHeader><DialogTitle>Deploy to SitecoreAI</DialogTitle></DialogHeader>
@@ -92,22 +93,11 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
               <p className="flex items-center gap-2">
                 <span>Plan: {formatPlanSummary(plan)}</span>
                 {plan.steps.length > 0 && (
-                  <button type="button" className="underline text-muted-foreground" onClick={() => setShowDetails((v) => !v)}>
-                    {showDetails ? 'Hide details' : 'Details'}
+                  <button type="button" className="underline text-muted-foreground" onClick={() => setShowDetails(true)}>
+                    Details
                   </button>
                 )}
               </p>
-              {showDetails && plan.steps.length > 0 && (
-                <ul className="max-h-48 overflow-auto rounded border divide-y text-xs">
-                  {plan.steps.map((s) => (
-                    <li key={s.itemId} className="flex items-center gap-2 px-2 py-1">
-                      <span className={`w-14 shrink-0 font-medium ${s.action === 'create' ? 'text-emerald-600' : s.action === 'update' ? 'text-amber-600' : 'text-muted-foreground'}`}>{s.action}</span>
-                      <span className="truncate" title={s.path}>{s.path}</span>
-                      <span className="ml-auto shrink-0 text-muted-foreground">{s.reason}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
               {plan.blockingErrors.length > 0 && (
                 <div className="text-red-600">
                   <p>{plan.blockingErrors.length} blocking issue(s):</p>
@@ -133,5 +123,24 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {plan && (
+      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Deploy plan ({plan.steps.length} item{plan.steps.length === 1 ? '' : 's'})</DialogTitle></DialogHeader>
+          <div className="max-h-[60vh] overflow-auto rounded border divide-y text-xs">
+            {plan.steps.map((s) => (
+              <div key={s.itemId} className="flex items-center gap-2 px-2 py-1">
+                <span className={`w-14 shrink-0 font-medium ${s.action === 'create' ? 'text-emerald-600' : s.action === 'update' ? 'text-amber-600' : 'text-muted-foreground'}`}>{s.action}</span>
+                <span className="truncate" title={s.path}>{s.path}</span>
+                <span className="ml-auto shrink-0 text-muted-foreground">{s.reason}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter><Button size="sm" variant="outline" onClick={() => setShowDetails(false)}>Close</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 }
