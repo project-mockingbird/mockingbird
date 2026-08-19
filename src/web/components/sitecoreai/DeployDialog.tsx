@@ -26,21 +26,22 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
   const [progress, setProgress] = useState<DeployProgress | null>(null);
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setPlan(null); setProgress(null); setError(''); setBusy(false); setShowDetails(false);
+    setPlan(null); setProgress(null); setError(''); setBusy(false); setShowDetails(false); setPreviewing(false);
     listEnvs().then((e) => { setEnvs(e); if (e[0]) setEnvId(e[0].id); }).catch((err) => setError(String(err)));
   }, [open]);
 
   const resetPlanState = () => { setPlan(null); setProgress(null); setError(''); setShowDetails(false); };
 
   const onPreview = async () => {
-    setBusy(true); setError(''); setProgress(null); setPlan(null); setShowDetails(false);
+    setBusy(true); setPreviewing(true); setError(''); setProgress(null); setPlan(null); setShowDetails(false);
     try { setPlan(await previewDeploy(envId, sources, strategy)); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setPreviewing(false); }
   };
 
   const canDeploy = !!plan && plan.blockingErrors.length === 0 && !busy;
@@ -88,6 +89,9 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
               ))}
             </RadioGroup>
           </div>
+          {previewing && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3" /> Previewing plan...</p>
+          )}
           {plan && (
             <div className="text-sm space-y-1">
               <p className="flex items-center gap-2">
@@ -116,10 +120,10 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <DialogFooter>
-          {busy && <Button variant="outline" size="sm" onClick={() => abortRef.current?.abort()}>Cancel</Button>}
+          {busy && !previewing && <Button variant="outline" size="sm" onClick={() => abortRef.current?.abort()}>Cancel</Button>}
           <Button size="sm" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Close</Button>
-          <Button size="sm" variant="outline" onClick={onPreview} disabled={!envId || busy}>Preview</Button>
-          <Button size="sm" onClick={onDeploy} disabled={!canDeploy}>{busy && <Spinner className="size-3 mr-1" variant="primary" />}Deploy</Button>
+          <Button size="sm" variant="outline" onClick={onPreview} disabled={!envId || busy}>{previewing && <Spinner className="size-3 mr-1" />}{previewing ? 'Previewing...' : 'Preview'}</Button>
+          <Button size="sm" onClick={onDeploy} disabled={!canDeploy}>{busy && !previewing && <Spinner className="size-3 mr-1" variant="primary" />}Deploy</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
