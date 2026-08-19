@@ -15,19 +15,41 @@ export interface DeployProgress {
   kind: 'progress' | 'done' | 'error'; completed: number; total: number;
   message?: string; errors?: { itemId: string; reason: string }[];
 }
+export interface PreviewProgress { completed: number; total: number; }
 
 export function formatPlanSummary(plan: DeployPlan): string {
   const { create, update, skip } = plan.summary;
   return `${create} create, ${update} update, ${skip} skip`;
 }
 
-export async function previewDeploy(envId: string, sources: DeploySource[], strategy: string): Promise<DeployPlan> {
+export async function previewDeploy(
+  envId: string, sources: DeploySource[], strategy: string,
+  onProgress?: (p: PreviewProgress) => void,
+): Promise<DeployPlan> {
   const res = await fetch('/api/sitecoreai/install/preview', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ envId, sources, strategy }),
   });
-  if (!res.ok) throw new Error(await readErrorMessage(res, `Preview failed (${res.status})`));
-  return res.json();
+  if (!res.ok || !res.body) throw new Error(await readErrorMessage(res, `Preview failed (${res.status})`));
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = ''; let plan: DeployPlan | null = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const evt = JSON.parse(line) as { kind: string; completed?: number; total?: number; plan?: DeployPlan; message?: string };
+      if (evt.kind === 'progress') onProgress?.({ completed: evt.completed ?? 0, total: evt.total ?? 0 });
+      else if (evt.kind === 'plan' && evt.plan) plan = evt.plan;
+      else if (evt.kind === 'error') throw new Error(evt.message ?? 'Preview failed');
+    }
+  }
+  if (!plan) throw new Error('Preview returned no plan');
+  return plan;
 }
 
 export async function runDeploy(

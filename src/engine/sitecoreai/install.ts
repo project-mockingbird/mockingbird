@@ -2,7 +2,7 @@ import type { Engine } from '../index.js';
 import { collectSources } from '../package/collect.js';
 import type { CartSource } from '../package/types.js';
 import type { SitecoreAiClient } from './client.js';
-import { buildInstallPlan } from './planner.js';
+import { buildInstallPlan, type PlannerProgress } from './planner.js';
 import { toSerializeItemData } from './serialize-command.js';
 import type { ConflictStrategy, InstallPlan, InstallProgress, ItemCommand } from './types.js';
 
@@ -11,10 +11,10 @@ export const DEFAULT_BYTE_BUDGET = 6 * 1024 * 1024;
 export interface ExecuteOptions { signal?: AbortSignal; onProgress?: (p: InstallProgress) => void; byteBudget?: number; }
 
 export async function previewInstall(
-  engine: Engine, sources: CartSource[], strategy: ConflictStrategy, client: SitecoreAiClient,
+  engine: Engine, sources: CartSource[], strategy: ConflictStrategy, client: SitecoreAiClient, onProgress?: PlannerProgress,
 ): Promise<InstallPlan> {
   const { items } = collectSources(engine, sources);
-  return buildInstallPlan(items, strategy, client);
+  return buildInstallPlan(items, strategy, client, onProgress);
 }
 
 export async function executeInstall(

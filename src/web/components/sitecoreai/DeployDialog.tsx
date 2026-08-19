@@ -27,19 +27,20 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
   const [error, setError] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [previewProgress, setPreviewProgress] = useState<{ completed: number; total: number } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setPlan(null); setProgress(null); setError(''); setBusy(false); setShowDetails(false); setPreviewing(false);
+    setPlan(null); setProgress(null); setError(''); setBusy(false); setShowDetails(false); setPreviewing(false); setPreviewProgress(null);
     listEnvs().then((e) => { setEnvs(e); if (e[0]) setEnvId(e[0].id); }).catch((err) => setError(String(err)));
   }, [open]);
 
-  const resetPlanState = () => { setPlan(null); setProgress(null); setError(''); setShowDetails(false); };
+  const resetPlanState = () => { setPlan(null); setProgress(null); setError(''); setShowDetails(false); setPreviewProgress(null); };
 
   const onPreview = async () => {
-    setBusy(true); setPreviewing(true); setError(''); setProgress(null); setPlan(null); setShowDetails(false);
-    try { setPlan(await previewDeploy(envId, sources, strategy)); }
+    setBusy(true); setPreviewing(true); setError(''); setProgress(null); setPlan(null); setShowDetails(false); setPreviewProgress(null);
+    try { setPlan(await previewDeploy(envId, sources, strategy, setPreviewProgress)); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); setPreviewing(false); }
   };
@@ -90,7 +91,19 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
             </RadioGroup>
           </div>
           {previewing && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="size-3" /> Previewing plan...</p>
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2">
+                <Spinner className="size-3" />
+                {previewProgress && previewProgress.total > 0
+                  ? `Evaluating ${previewProgress.completed} of ${previewProgress.total} items`
+                  : 'Previewing plan...'}
+              </p>
+              {previewProgress && previewProgress.total > 0 && (
+                <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                  <div className="h-full bg-primary transition-all" style={{ width: `${Math.round((previewProgress.completed / previewProgress.total) * 100)}%` }} />
+                </div>
+              )}
+            </div>
           )}
           {plan && (
             <div className="text-sm space-y-1">

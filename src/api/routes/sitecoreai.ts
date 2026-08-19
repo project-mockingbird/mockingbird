@@ -42,12 +42,23 @@ export function registerSitecoreAiRoutes(app: FastifyInstance, engine: Engine): 
   app.post('/api/sitecoreai/install/preview', async (request, reply) => {
     const b = request.body as InstallBody;
     if (!b?.envId || !isConflictStrategy(b.strategy)) return reply.status(400).send({ error: 'envId and a valid strategy are required' });
+
+    // Stream NDJSON: per-item `progress` events while the planner probes each
+    // item, then a terminal `plan` event (or `error`). Lets the UI show a real
+    // "evaluating X of N" progress bar instead of an indeterminate spinner.
+    reply.hijack();
+    reply.raw.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' });
+    const write = (o: unknown) => reply.raw.write(JSON.stringify(o) + '\n');
+
     try {
       const env = await getResolvedEnvironment(b.envId);
       const client = createSitecoreAiClient(env);
-      return await previewInstall(engine, b.sources ?? [], b.strategy, client);
+      const plan = await previewInstall(engine, b.sources ?? [], b.strategy, client, (completed, total) => write({ kind: 'progress', completed, total }));
+      write({ kind: 'plan', plan });
     } catch (e) {
-      return reply.status(400).send({ error: e instanceof Error ? e.message : String(e) });
+      write({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      reply.raw.end();
     }
   });
 

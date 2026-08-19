@@ -6,14 +6,20 @@ export interface PlannerProbes {
   templateExists(templateId: string): Promise<boolean>;
 }
 
+/** Called after each item is evaluated, so callers can show preview progress. */
+export type PlannerProgress = (completed: number, total: number) => void;
+
 export async function buildInstallPlan(
-  items: ScsItem[], strategy: ConflictStrategy, probes: PlannerProbes,
+  items: ScsItem[], strategy: ConflictStrategy, probes: PlannerProbes, onProgress?: PlannerProgress,
 ): Promise<InstallPlan> {
   const payloadIds = new Set(items.map((i) => i.id.toLowerCase()));
   const steps: PlanStep[] = [];
   const blockingErrors: InstallPlan['blockingErrors'] = [];
   const warnings: InstallPlan['warnings'] = [];
   const summary = { create: 0, update: 0, skip: 0 };
+  const total = items.length;
+  let completed = 0;
+  onProgress?.(0, total);
 
   // Cache template probes so N items on one template do not probe N times.
   const templateCache = new Map<string, boolean>();
@@ -38,6 +44,8 @@ export async function buildInstallPlan(
       blockingErrors.push({ itemId: item.id, path: item.path, reason: `references template(s) not present on target or in payload: ${missing.join(', ')}` });
       steps.push({ itemId: item.id, path: item.path, name, action: 'skip', reason: 'blocked' });
       summary.skip++;
+      completed++;
+      onProgress?.(completed, total);
       continue;
     }
 
@@ -49,6 +57,8 @@ export async function buildInstallPlan(
     else { action = 'skip'; reason = 'exists; kept'; summary.skip++; }
 
     steps.push({ itemId: item.id, path: item.path, name, action, reason });
+    completed++;
+    onProgress?.(completed, total);
   }
 
   return { steps, blockingErrors, warnings, summary };

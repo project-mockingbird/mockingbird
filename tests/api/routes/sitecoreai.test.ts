@@ -11,7 +11,10 @@ vi.mock('../../../src/engine/sitecoreai/client.js', () => ({
   createSitecoreAiClient: () => ({ itemExists: async () => true, templateExists: async () => true, executeSerializationCommands: async () => ({ ok: true, errors: [], messages: [] }) }),
 }));
 vi.mock('../../../src/engine/sitecoreai/install.js', () => ({
-  previewInstall: async () => ({ steps: [], blockingErrors: [], warnings: [], summary: { create: 1, update: 0, skip: 0 } }),
+  previewInstall: async (_e: unknown, _s: unknown, _st: unknown, _c: unknown, onProgress?: (c: number, t: number) => void) => {
+    onProgress?.(1, 1);
+    return { steps: [], blockingErrors: [], warnings: [], summary: { create: 1, update: 0, skip: 0 } };
+  },
   executeInstall: async (_e: unknown, _s: unknown, _st: unknown, _c: unknown, opts: any) => {
     opts?.onProgress?.({ kind: 'progress', completed: 1, total: 1, message: 'Installed 1/1' });
     return opts?.onProgress?.({ kind: 'done', completed: 1, total: 1 }) ?? { kind: 'done', completed: 1, total: 1 };
@@ -43,11 +46,14 @@ describe('sitecoreai routes', () => {
     expect(upsertEnvironment).toHaveBeenCalled();
   });
 
-  it('previews an install', async () => {
+  it('previews an install (streams progress then a plan)', async () => {
     const app = await makeApp();
     const res = await app.inject({ method: 'POST', url: '/api/sitecoreai/install/preview', payload: { envId: 'e1', sources: [], strategy: 'skip' } });
     expect(res.statusCode).toBe(200);
-    expect(res.json().summary).toEqual({ create: 1, update: 0, skip: 0 });
+    const lines = res.body.trim().split('\n').map((l) => JSON.parse(l));
+    expect(lines.some((e) => e.kind === 'progress')).toBe(true);
+    const planEvt = lines.find((e) => e.kind === 'plan');
+    expect(planEvt?.plan.summary).toEqual({ create: 1, update: 0, skip: 0 });
   });
 
   it('rejects an invalid strategy', async () => {
