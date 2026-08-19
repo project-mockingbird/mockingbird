@@ -13,8 +13,12 @@ export const authoringUrl = (cmHost: string) => `https://${cmHost}/sitecore/api/
 export const managementUrl = (cmHost: string) => `https://${cmHost}/sitecore/api/management`;
 
 const ITEM_QUERY = `query($id: ID!) { item(where: { itemId: $id, database: "master" }) { itemId } }`;
+// Kept minimal to what our ok/failure logic needs. `minimumLogLevel` (enum
+// SerializationResultLogLevel) and the result `messages` subfields are omitted:
+// live SitecoreAI rejected the guessed `WARN` value and the `messages { text }`
+// selection, and we only rely on per-command `success`.
 const EXEC_MUTATION = `mutation($commands: [ItemCommand!]!) {
-  executeSerializationCommands(commands: $commands, minimumLogLevel: WARN) { name success messages { text } }
+  executeSerializationCommands(commands: $commands) { name success }
 }`;
 
 export function createSitecoreAiClient(env: ResolvedEnvironment, deps: ClientDeps = {}): SitecoreAiClient {
