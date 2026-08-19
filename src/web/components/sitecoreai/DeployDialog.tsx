@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listEnvs, type EnvEntry } from '@/lib/environmentsApi';
 import { previewDeploy, runDeploy, formatPlanSummary, type DeployPlan, type DeployProgress, type DeploySource } from '@/lib/deploy';
 
@@ -67,9 +68,12 @@ export function DeployDialog({ open, onOpenChange, sources, onManageEnvironments
             <Label className="mb-1 block">Target environment</Label>
             {envs.length === 0
               ? <p className="text-sm text-amber-600">No environments configured. <button className="underline" onClick={onManageEnvironments}>Manage environments</button></p>
-              : <select className="w-full border rounded px-2 py-1 text-sm" value={envId} onChange={(e) => { setEnvId(e.target.value); resetPlanState(); }} disabled={busy}>
-                  {envs.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>}
+              : <Select value={envId} onValueChange={(v) => { setEnvId(v); resetPlanState(); }} disabled={busy}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select an environment" /></SelectTrigger>
+                  <SelectContent>
+                    {envs.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>}
           </div>
           <div>
             <Label className="mb-1 block">Conflict strategy</Label>
