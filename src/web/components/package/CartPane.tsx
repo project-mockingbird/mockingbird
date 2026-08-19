@@ -27,6 +27,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { CartSourceRow } from './CartSourceRow';
 import { usePackageCart } from '@/state/usePackageCart';
+import { deployStore } from '@/state/deployStore';
 
 const PANE_OPEN_STORAGE_KEY = 'mockingbird.packageCartPane.open';
 
@@ -97,8 +98,16 @@ export function CartPane({ open, onOpenChange, onCheckout }: CartPaneProps) {
           )}
         </div>
 
-        <div className="border-t p-4">
+        <div className="border-t p-4 space-y-2">
           <Button
+            className="w-full"
+            disabled={sources.length === 0}
+            onClick={() => { deployStore.openDeploy(sources); onOpenChange(false); }}
+          >
+            Deploy to SitecoreAI
+          </Button>
+          <Button
+            variant="outline"
             className="w-full"
             disabled={sources.length === 0}
             onClick={onCheckout}
