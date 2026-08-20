@@ -74,3 +74,15 @@ export type ItemUpdateOp =
   | { kind: 'removeVersion'; language: string; version: number }
   | { kind: 'updateField'; fieldId: string; value: string; blobId?: string; language?: string; version?: number }
   | { kind: 'resetField'; fieldId: string; language?: string; version?: number };
+
+// --- snapshots (diff input) ---
+export interface SnapshotField { fieldId: string; value: string; blobId?: string; }
+export interface SnapshotLanguageFields { language: string; fields: SnapshotField[]; }
+export interface SnapshotVersionFields { language: string; version: number; fields: SnapshotField[]; }
+export interface ItemSnapshot {
+  id?: string;          // present for target reads; used to verify id match
+  templateId: string;
+  sharedFields: SnapshotField[];
+  unversionedFields: SnapshotLanguageFields[];
+  versions: SnapshotVersionFields[];
+}
