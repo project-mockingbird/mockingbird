@@ -89,7 +89,7 @@ export function diffItem(source: ItemSnapshot, target: ItemSnapshot): ItemUpdate
     const tv = targetByKey.get(vkey(sv.language, sv.version));
     const sFields = keep(sv.fields);
     if (!tv) {
-      if (sv.fields.length === 0) {
+      if (sFields.length === 0) {
         ops.push({ kind: 'addVersion', language: sv.language, version: sv.version });
       } else {
         ops.push(...fieldOps(sFields, [], sv.language, sv.version));

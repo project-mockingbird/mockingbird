@@ -119,11 +119,11 @@ describe('diffItem', () => {
     expect(diffItem(source, target)).toEqual([]);
   });
 
-  it('excludes statistics fields from versioned fields', () => {
+  it('stats-only source-only version emits empty ADD_VERSION (stats excluded, version treated as empty)', () => {
     const UPDATED = 'd9cf14b1-fa16-4ba6-9288-e8a174d4d522';
     const source = base({ versions: [{ language: 'en', version: 1, fields: [{ fieldId: UPDATED, value: 'ts-new' }] }] });
     const target = base();
-    expect(diffItem(source, target)).toEqual([]);
+    expect(diffItem(source, target)).toEqual([{ kind: 'addVersion', language: 'en', version: 1 }]);
   });
 
   it('excludes statistics fields from unversioned fields', () => {
