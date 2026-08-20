@@ -66,3 +66,11 @@ export interface InstallProgress {
 }
 
 export const ALL_ZERO_GUID = '00000000-0000-0000-0000-000000000000';
+
+// --- faithful UPDATE (overwrite) ---
+export type ItemUpdateOp =
+  | { kind: 'changeTemplate'; templateId: string }
+  | { kind: 'addVersion'; language: string; version: number }
+  | { kind: 'removeVersion'; language: string; version: number }
+  | { kind: 'updateField'; fieldId: string; value: string; blobId?: string; language?: string; version?: number }
+  | { kind: 'resetField'; fieldId: string; language?: string; version?: number };
