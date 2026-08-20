@@ -24,7 +24,6 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { usePackageCart } from '@/state/usePackageCart';
 import { downloadPackage } from '@/lib/downloadPackage';
-import { deployStore } from '@/state/deployStore';
 
 const CLEAR_ON_SUCCESS_KEY = 'mockingbird.packageClearCartOnSuccess';
 
@@ -183,14 +182,6 @@ export function CheckoutDialog({ open, onOpenChange, onSuccess, onError }: Check
           )}
         </div>
         <DialogFooter>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={generating || sources.length === 0}
-            onClick={() => { deployStore.openDeploy(sources); onOpenChange(false); }}
-          >
-            Deploy to SitecoreAI...
-          </Button>
           <Button
             variant="outline"
             size="sm"
