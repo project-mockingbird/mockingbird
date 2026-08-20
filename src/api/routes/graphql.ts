@@ -42,6 +42,7 @@ import {
   routeBaseForSite,
   type SiteDefinition,
 } from '../../engine/sites/index.js';
+import { validateComplexity, readComplexityConfig } from '../graphql/complexity.js';
 
 /** Mercurius per-request context injected into all resolvers. */
 interface MercuriusContext {
@@ -1218,19 +1219,15 @@ export async function registerGraphQLRoutes(
   // Fastify accepts it at runtime. This is a long-standing type-ergonomic
   // mismatch between the two packages. The runtime contract is honored by
   // Fastify's register() implementation, which adapts sync plugins.
-  // queryDepth caps the depth of any single incoming query. The recursive
-  // `children` field can otherwise be nested arbitrarily deep by an
-  // unauthenticated localhost caller and pin the event loop. The default
-  // (20) covers the typical deeply-nested navigation queries head apps ship,
-  // which nests `children -> results -> ... on Type` four times deep
-  // (~17-18 levels with inline fragments counted). Tune via env if a
-  // deeper query is genuinely needed.
-  const queryDepth = Number(process.env.MOCKINGBIRD_GRAPHQL_QUERY_DEPTH ?? 20);
-
+  //
+  // Query gating is Sitecore-faithful, not Mercurius's native queryDepth: a
+  // preValidation hook (registered just after this call) runs the ported
+  // graphql-dotnet complexity analyzer, so Mockingbird rejects the same
+  // over-complex / over-nested queries a stock XM Cloud would - and with
+  // Sitecore's own error message.
   // @ts-expect-error - Mercurius plugin type / FastifyPluginAsync mismatch
   await app.register(mercurius, {
     schema: BASE_SCHEMA,
-    queryDepth,
     resolvers: {
       JSON: GraphQLJSON,
       Long: GraphQLLong,
@@ -1598,6 +1595,17 @@ export async function registerGraphQLRoutes(
     },
     context: (request) => buildResolverContext(request),
     path: '/api/graphql',
+  });
+
+  // Sitecore-faithful query-complexity gate. Sitecore.Services.GraphQL runs
+  // graphql-dotnet's ComplexityAnalyzer as a validation step; we mirror it in a
+  // preValidation hook so an over-complex or over-nested query is rejected with
+  // Sitecore's own message before it executes. maxComplexity / maxDepth /
+  // fieldImpact default to the stock XM Cloud values, overridable via env
+  // (MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY / _MAX_DEPTH / _FIELD_IMPACT).
+  const complexityConfig = readComplexityConfig();
+  app.graphql.addHook('preValidation', async (_schema, document) => {
+    validateComplexity(document, complexityConfig);
   });
 
   // Dynamic schema generation. Runs at most once per process lifetime, gated

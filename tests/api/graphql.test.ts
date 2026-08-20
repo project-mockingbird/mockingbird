@@ -408,8 +408,29 @@ const SITE_TREE_FIXTURES: ScsItem[] = [
 
 describe('GraphQL site queries (Content SDK)', () => {
   let siteApp: FastifyInstance;
-  beforeAll(async () => { siteApp = await createTestApp(SITE_TREE_FIXTURES); });
-  afterAll(async () => { await siteApp.close(); });
+  // Some of these are production-scale navigation queries (deeply nested
+  // `children` connections, ~38 composite-field selections) that exceed the
+  // stock Sitecore limits (maxComplexity 10000 / maxDepth 15) by design - the
+  // Sitecore-faithful complexity guard is exercised on its own in
+  // graphql-complexity*.test.ts. Raise both ceilings here to the same values a
+  // real head-app deployment patches in (2000000 / 40), so these tests exercise
+  // schema validation and resolvers rather than tripping the guard.
+  const prevMaxComplexity = process.env.MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY;
+  const prevMaxDepth = process.env.MOCKINGBIRD_GRAPHQL_MAX_DEPTH;
+  const restore = (key: string, prev: string | undefined) => {
+    if (prev === undefined) delete process.env[key];
+    else process.env[key] = prev;
+  };
+  beforeAll(async () => {
+    process.env.MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY = '2000000';
+    process.env.MOCKINGBIRD_GRAPHQL_MAX_DEPTH = '40';
+    siteApp = await createTestApp(SITE_TREE_FIXTURES);
+  });
+  afterAll(async () => {
+    await siteApp.close();
+    restore('MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY', prevMaxComplexity);
+    restore('MOCKINGBIRD_GRAPHQL_MAX_DEPTH', prevMaxDepth);
+  });
 
   it('RedirectsQuery returns entries parsed from UrlMapping', async () => {
     const response = await siteApp.inject({

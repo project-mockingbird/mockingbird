@@ -295,14 +295,17 @@ services:
   mockingbird:
     environment:
       MOCKINGBIRD_ALLOWED_ORIGINS: http://localhost:3000
-      MOCKINGBIRD_GRAPHQL_QUERY_DEPTH: 30
+      MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY: 2000000
+      MOCKINGBIRD_GRAPHQL_MAX_DEPTH: 40
 ```
 
 | Variable | Purpose | Default |
 |---|---|---|
 | `MOCKINGBIRD_ALLOWED_ORIGINS` | Comma-separated origins (scheme://host[:port]) allowed for cross-origin `/api/*` requests. Empty = same-origin only. | *(empty)* |
 | `MOCKINGBIRD_WS_ALLOWED_ORIGINS` | Same shape, for WebSocket upgrades on `/ws`. | *(empty)* |
-| `MOCKINGBIRD_GRAPHQL_QUERY_DEPTH` | Max GraphQL query depth before mercurius rejects. | `20` |
+| `MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY` | Max GraphQL query complexity before it's rejected, scored with Sitecore's own graphql-dotnet metric. Defaults to the stock XM Cloud value. | `10000` |
+| `MOCKINGBIRD_GRAPHQL_MAX_DEPTH` | Max number of composite (object-selecting) fields in a query - Sitecore's `maxDepth`, which counts composite fields across the query, not tree nesting. Defaults to the stock XM Cloud value. | `15` |
+| `MOCKINGBIRD_GRAPHQL_FIELD_IMPACT` | Assumed fan-out per list field in the complexity score. Must be greater than 1. | `2` |
 | `MOCKINGBIRD_SPE_SESSION_TTL_MIN` | Per-session TTL for PowerShell scripting sessions, in minutes. | `30` |
 | `MOCKINGBIRD_SPE_MAX_SESSIONS` | Concurrent PowerShell session cap; beyond this, new sessions return 429. | `8` |
 
@@ -325,7 +328,7 @@ These are pinned values inside the compose `environment:` block; not configurabl
 
 **Browser fetches to `/api/*` blocked with CORS errors.** Mockingbird defaults to same-origin only. If your head app's dev server is on a different origin (e.g. head app on `:3000`, Mockingbird on `:3333`), add the head-app origin to `MOCKINGBIRD_ALLOWED_ORIGINS`. Server-side fetches (Next.js route handlers, `getStaticProps`, build-time queries) bypass the browser CORS check and are unaffected.
 
-**`GraphQL query too deep` errors on a real client query.** Default cap is depth 20, which covers the typical `children -> results -> ... on Type` four-times-deep navigation pattern. Raise via `MOCKINGBIRD_GRAPHQL_QUERY_DEPTH` if a deeper query is genuinely needed.
+**`Query is too complex to execute` / `Query is too nested to execute` on a real client query.** Mockingbird gates GraphQL queries with the same complexity metric a stock XM Cloud uses (Sitecore's graphql-dotnet analyzer), defaulting to the stock limits (`maxComplexity` 10000, `maxDepth` 15, `fieldImpact` 2). A production-scale navigation query can exceed these - exactly as it would on an unpatched XM Cloud. Raise `MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY` and/or `MOCKINGBIRD_GRAPHQL_MAX_DEPTH` to match the values your target environment is patched to (many XM Cloud solutions patch these to `2000000` / `40`).
 
 **`/api/status` reports `cacheStale: true`.** The post-ready signature verifier detected the served-from-cache tree drifted from on-disk YAML. The cache file has already been deleted, so a container restart will rebuild against current disk state. The in-memory tree continues to serve the stale snapshot for the rest of the session.
 
