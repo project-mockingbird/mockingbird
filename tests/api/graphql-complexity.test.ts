@@ -61,12 +61,24 @@ describe('analyzeComplexity (graphql-dotnet 2.4.0 port)', () => {
     expect(r.totalQueryDepth).toBe(1);
   });
 
-  it('flattens inline fragments transparently (same impact level)', () => {
-    // Equivalent to `{ item { id name } }`: item=2; id,name leaves=2 each
+  it('does NOT traverse a selection set of only inline fragments (graphql-dotnet 2.4.0 quirk)', () => {
+    // graphql-dotnet 2.4.0's ComplexityAnalyzer does not treat an inline
+    // fragment as a "qualifying child", so `item`'s selection set (only the
+    // inline fragment) is a dead end: traversal stops at `item`. So this is
+    // NOT equivalent to `{ item { id name } }` (which scores 8) - it scores 2.
+    // Reference graphql-dotnet 2.4.0: complexity 2 (avg 2) / 3 (avg 3), depth 1.
     const doc = parse('{ item { ... on Item { id name } } }');
-    const r = analyzeComplexity(doc, 2);
-    expect(r.complexity).toBe(6);
-    expect(r.totalQueryDepth).toBe(1);
+    expect(analyzeComplexity(doc, 2)).toMatchObject({ complexity: 2, totalQueryDepth: 1 });
+    expect(analyzeComplexity(doc, 3)).toMatchObject({ complexity: 3, totalQueryDepth: 1 });
+  });
+
+  it('DOES traverse an inline fragment when a direct field is its sibling', () => {
+    // The selection set `{ id, ... on Item { name job } }` qualifies (has the
+    // direct field `id`), so its inline fragment IS recursed at the same impact.
+    // Reference graphql-dotnet 2.4.0: complexity 8 (avg 2) / 12 (avg 3), depth 1.
+    const doc = parse('{ item { id, ... on Item { name job } } }');
+    expect(analyzeComplexity(doc, 2)).toMatchObject({ complexity: 8, totalQueryDepth: 1 });
+    expect(analyzeComplexity(doc, 3)).toMatchObject({ complexity: 12, totalQueryDepth: 1 });
   });
 
   it('scores a named fragment spread from its precomputed complexity', () => {
@@ -83,6 +95,57 @@ describe('analyzeComplexity (graphql-dotnet 2.4.0 port)', () => {
     const doc = parse('{ item { id } }');
     expect(() => analyzeComplexity(doc, 1)).toThrow();
     expect(() => analyzeComplexity(doc, 0.5)).toThrow();
+  });
+});
+
+// These expected numbers are NOT hand-derived - they were produced by running
+// the ACTUAL graphql-dotnet 2.4.0 ComplexityAnalyzer.Analyze (the assembly
+// Sitecore.Services.GraphQL pins) on each query and reading ComplexityResult.
+// A real head-app navigation query is almost entirely `results { ... on T {} }`
+// inline fragments, so graphql-dotnet scores it LOW (it stops at each inline-
+// fragment-only selection set) - which is why real Sitecore accepts it. Deep
+// *direct*-field nesting is what actually accumulates complexity.
+describe('analyzeComplexity conformance vs real graphql-dotnet 2.4.0', () => {
+  const MODULAR_NAV = `query ModularNavigation($datasource: String!, $language: String!) {
+    modularNavigation: item(path: $datasource, language: $language) {
+      rootItems:children(includeTemplateIDs:["{91B46589-67ED-45A3-8804-1563A7E39F4E}"]) {
+        results { ... on RootMenuItem {
+          id, menuItemText { value }, menuItemLink { jsonValue }, menuIcon { jsonValue },
+          hideInSitemap { boolValue }, hideInMainMenu { boolValue },
+          columns:children(includeTemplateIDs:["{AEDDB611-901F-4DC3-8F88-3596DC7B5DB3}"]) {
+            results { ... on MenuColumn { id,
+              elements:children(includeTemplateIDs:["{19E9E732-A61E-40A1-B63A-BF46787828B8}"]) {
+                results { id, template { id, name },
+                  ... on MenuLinkList {
+                    menuItemText { value }, menuItemLink { jsonValue },
+                    menuItemTags { targetItems { ...on MenuLinkTag { menuLinkTagText { value } } } },
+                    links: children(includeTemplateIDs:["{C792B58A-DB19-408F-9D55-09A28C89C00A}"]) {
+                      results { ...on MenuLink { id, menuItemText { value } } }
+                    }
+                  }
+                }
+              }
+            } }
+          }
+        } }
+      }
+    }
+  }`;
+
+  it('scores a production inline-fragment navigation query LOW (matches real Sitecore)', () => {
+    // Reference graphql-dotnet 2.4.0: complexity 14 (avg 2) / 39 (avg 3), depth 3.
+    // This is the ModularNavigation query the consumer's site renders; it must
+    // pass even the stock 10000 limit - and far under a patched 2,000,000.
+    const doc = parse(MODULAR_NAV);
+    expect(analyzeComplexity(doc, 2)).toMatchObject({ complexity: 14, totalQueryDepth: 3 });
+    expect(analyzeComplexity(doc, 3)).toMatchObject({ complexity: 39, totalQueryDepth: 3 });
+  });
+
+  it('scores deep DIRECT-field nesting geometrically (this is what trips the limit)', () => {
+    // Reference graphql-dotnet 2.4.0: complexity 94 (avg 2) / 606 (avg 3), depth 5.
+    const doc = parse('{ item { children { results { children { results { id } } } } } }');
+    expect(analyzeComplexity(doc, 2)).toMatchObject({ complexity: 94, totalQueryDepth: 5 });
+    expect(analyzeComplexity(doc, 3)).toMatchObject({ complexity: 606, totalQueryDepth: 5 });
   });
 });
 

@@ -71,15 +71,16 @@ describe('GraphQL complexity guard (Sitecore graphql-dotnet metric)', () => {
   afterAll(async () => { await app.close(); });
 
   it('rejects an over-complex deeply-nested query with the Sitecore message', async () => {
-    // Each `children { results { ... } }` pair adds two composite fields; the
-    // complexity score grows geometrically with fieldImpact, so 20 pairs blow
-    // past the stock maxComplexity (10000) long before execution. Complexity is
-    // checked before depth, so the "too complex" message wins.
+    // Deep DIRECT-field nesting (no inline fragments - those are a dead end for
+    // graphql-dotnet's analyzer). Each `children { results { ... } }` pair adds
+    // two composite fields and the score grows geometrically with fieldImpact,
+    // so 20 pairs blow past the stock maxComplexity (10000) before execution.
+    // Complexity is checked before depth, so the "too complex" message wins.
     let inner = 'id';
     for (let i = 0; i < 20; i++) {
       inner = `children { results { ${inner} } }`;
     }
-    const query = `query Deep { item(path: "/sitecore/content/site/Home", language: "en") { ... on Item { ${inner} } } }`;
+    const query = `query Deep { item(path: "/sitecore/content/site/Home", language: "en") { ${inner} } }`;
 
     const response = await app.inject({
       method: 'POST',

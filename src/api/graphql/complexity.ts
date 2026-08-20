@@ -6,7 +6,9 @@
 // Mercurius already parses, so a query Mockingbird accepts/rejects matches what
 // a stock XM Cloud would. Decompiled from
 // ~/.nuget/packages/graphql/2.4.0/lib/netstandard2.0/GraphQL.dll
-// (ComplexityAnalyzer.Analyze / .Validate / GetImpactFromArgs).
+// (ComplexityAnalyzer.Analyze / .Validate / GetImpactFromArgs) and validated by
+// running the real assembly (see tests/api/graphql-complexity.test.ts, whose
+// expected numbers were produced by the actual ComplexityAnalyzer).
 //
 // The recurrence (avgImpact == fieldImpact, must be > 1):
 //   - a composite field records `endNodeImpact` and increments the depth count;
@@ -17,17 +19,27 @@
 //   - the endNode impact of a field with an arg impact is
 //     `argImpact / avgImpact * subSelectionImpact`.
 //
-// Two Sitecore quirks are reproduced deliberately: (1) `totalQueryDepth` counts
-// every composite (object-selecting) field across the whole query plus each
-// spread fragment's own composite-field count - it is NOT the maximum tree
-// nesting depth; (2) a fragment definition's own precomputed complexity ignores
-// any fragment spreads nested inside it.
+// Three graphql-dotnet 2.4.0 quirks are reproduced deliberately, because being
+// faithful means matching its accept/reject decision exactly:
+//   1. `totalQueryDepth` counts every composite (object-selecting) field across
+//      the whole query plus each spread fragment's own composite-field count -
+//      it is NOT the maximum tree nesting depth.
+//   2. INLINE FRAGMENTS are not "qualifying children": a selection set whose
+//      selections are ALL inline fragments halts traversal (its contents are
+//      not counted). An inline fragment IS traversed only when it sits beside a
+//      direct field (or fragment spread) in the same selection set. This is why
+//      a real head-app navigation query - almost entirely `results { ... on T
+//      {} }` - scores low on real Sitecore and is accepted.
+//   3. A fragment definition's own precomputed complexity ignores fragment
+//      spreads nested inside it.
 
 import { Kind } from 'graphql';
 import type {
   DocumentNode,
   FieldNode,
-  SelectionNode,
+  FragmentSpreadNode,
+  InlineFragmentNode,
+  SelectionSetNode,
 } from 'graphql';
 
 export interface ComplexityConfig {
@@ -93,6 +105,49 @@ function record(sink: Sink, fieldName: string, impact: number): void {
   }
 }
 
+function guard(sink: Sink): void {
+  if (sink.loopCounter++ > MAX_RECURSION) {
+    throw new Error('Query is too complex to validate.');
+  }
+}
+
+/**
+ * Whether a selection set is a "qualifying child" in graphql-dotnet's sense:
+ * it must contain a direct Field (or, on the main pass, a FragmentSpread).
+ * Inline fragments alone do NOT qualify - that is quirk #2.
+ */
+function selectionSetQualifies(ss: SelectionSetNode, handleSpreads: boolean): boolean {
+  return ss.selections.some(
+    (s) => s.kind === Kind.FIELD || (handleSpreads && s.kind === Kind.FRAGMENT_SPREAD),
+  );
+}
+
+function visitSelectionSet(
+  sink: Sink,
+  ss: SelectionSetNode,
+  avgImpact: number,
+  subSelectionImpact: number,
+  endNodeImpact: number,
+  fragments: Map<string, FragmentComplexity>,
+  handleSpreads: boolean,
+): void {
+  guard(sink);
+  if (!selectionSetQualifies(ss, handleSpreads)) return; // only inline fragments (or empty) -> dead end
+  for (const sel of ss.selections) {
+    switch (sel.kind) {
+      case Kind.FIELD:
+        visitField(sink, sel, avgImpact, subSelectionImpact, endNodeImpact, fragments, handleSpreads);
+        break;
+      case Kind.INLINE_FRAGMENT:
+        visitInlineFragment(sink, sel, avgImpact, subSelectionImpact, endNodeImpact, fragments, handleSpreads);
+        break;
+      case Kind.FRAGMENT_SPREAD:
+        if (handleSpreads) visitFragmentSpread(sink, sel, avgImpact, subSelectionImpact, fragments);
+        break;
+    }
+  }
+}
+
 function visitField(
   sink: Sink,
   field: FieldNode,
@@ -102,54 +157,51 @@ function visitField(
   fragments: Map<string, FragmentComplexity>,
   handleSpreads: boolean,
 ): void {
-  const selections = field.selectionSet?.selections;
-  if (selections && selections.length > 0) {
+  guard(sink);
+  const ss = field.selectionSet;
+  // A field is composite iff it has a non-empty selection set (of ANY selection
+  // kind - even one that will itself turn out to be a dead end).
+  if (ss && ss.selections.length > 0) {
     sink.depth++;
     const argImpact = impactFromArgs(field);
     const thisEndNode = argImpact !== null ? (argImpact / avgImpact) * subSelectionImpact : subSelectionImpact;
     record(sink, field.name.value, thisEndNode);
     const nextSubSelection = subSelectionImpact * (argImpact !== null ? argImpact : avgImpact);
-    for (const sel of selections) {
-      visitSelection(sink, sel, avgImpact, nextSubSelection, thisEndNode, fragments, handleSpreads);
-    }
+    visitSelectionSet(sink, ss, avgImpact, nextSubSelection, thisEndNode, fragments, handleSpreads);
   } else {
     // Leaf field: records the endNode impact inherited from its parent.
     record(sink, field.name.value, endNodeImpact);
   }
 }
 
-function visitSelection(
+function visitInlineFragment(
   sink: Sink,
-  sel: SelectionNode,
+  frag: InlineFragmentNode,
   avgImpact: number,
   subSelectionImpact: number,
   endNodeImpact: number,
   fragments: Map<string, FragmentComplexity>,
   handleSpreads: boolean,
 ): void {
-  if (sink.loopCounter++ > MAX_RECURSION) {
-    throw new Error('Query is too complex to validate.');
+  guard(sink);
+  // Not a Field: graphql-dotnet recurses into its selection set with the SAME
+  // impacts (reached only when this inline fragment sits beside a direct field).
+  if (frag.selectionSet) {
+    visitSelectionSet(sink, frag.selectionSet, avgImpact, subSelectionImpact, endNodeImpact, fragments, handleSpreads);
   }
-  switch (sel.kind) {
-    case Kind.FIELD:
-      visitField(sink, sel, avgImpact, subSelectionImpact, endNodeImpact, fragments, handleSpreads);
-      break;
-    case Kind.INLINE_FRAGMENT:
-      // Not a Field: graphql-dotnet recurses into it with the SAME impacts, so
-      // inline-fragment fields count as if selected directly on the parent.
-      for (const s of sel.selectionSet.selections) {
-        visitSelection(sink, s, avgImpact, subSelectionImpact, endNodeImpact, fragments, handleSpreads);
-      }
-      break;
-    case Kind.FRAGMENT_SPREAD: {
-      if (!handleSpreads) break; // fragment-definition pass ignores nested spreads
-      const frag = fragments.get(sel.name.value);
-      if (!frag) break; // undefined fragment; a validation rule reports it
-      record(sink, sel.name.value, (subSelectionImpact / avgImpact) * frag.complexity);
-      sink.depth += frag.depth;
-      break;
-    }
-  }
+}
+
+function visitFragmentSpread(
+  sink: Sink,
+  spread: FragmentSpreadNode,
+  avgImpact: number,
+  subSelectionImpact: number,
+  fragments: Map<string, FragmentComplexity>,
+): void {
+  const frag = fragments.get(spread.name.value);
+  if (!frag) return; // undefined fragment; a validation rule reports it
+  record(sink, spread.name.value, (subSelectionImpact / avgImpact) * frag.complexity);
+  sink.depth += frag.depth;
 }
 
 /**
@@ -164,26 +216,22 @@ export function analyzeComplexity(document: DocumentNode, fieldImpact: number): 
   const avgImpact = fieldImpact;
 
   // Phase 1: precompute each fragment definition's complexity + depth. The
-  // fragment pass ignores nested fragment spreads (graphql-dotnet quirk), so
-  // definition order does not matter.
+  // fragment pass ignores nested fragment spreads (quirk #3), so definition
+  // order does not matter.
   const fragments = new Map<string, FragmentComplexity>();
   for (const def of document.definitions) {
     if (def.kind !== Kind.FRAGMENT_DEFINITION) continue;
     const sink: Sink = { complexity: 0, depth: 0, highest: null, loopCounter: 0 };
-    for (const sel of def.selectionSet.selections) {
-      visitSelection(sink, sel, avgImpact, avgImpact, 1.0, fragments, false);
-    }
+    visitSelectionSet(sink, def.selectionSet, avgImpact, avgImpact, 1.0, fragments, false);
     fragments.set(def.name.value, { complexity: sink.complexity, depth: sink.depth });
   }
 
-  // Phase 2: main pass over operations, starting with subSelectionImpact =
+  // Phase 2: main pass over operations, seeded with subSelectionImpact =
   // avgImpact and endNodeImpact = 1.0 (TreeIterator's seed).
   const sink: Sink = { complexity: 0, depth: 0, highest: null, loopCounter: 0 };
   for (const def of document.definitions) {
     if (def.kind !== Kind.OPERATION_DEFINITION) continue;
-    for (const sel of def.selectionSet.selections) {
-      visitSelection(sink, sel, avgImpact, avgImpact, 1.0, fragments, true);
-    }
+    visitSelectionSet(sink, def.selectionSet, avgImpact, avgImpact, 1.0, fragments, true);
   }
 
   return {
