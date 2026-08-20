@@ -43,7 +43,7 @@ describe('SitecoreAiClient', () => {
   });
 
   it('executeSerializationCommands fails when a result has success === false', async () => {
-    const fetch = vi.fn(async () => gql({ executeSerializationCommands: [{ name: 'x', success: false, messages: [{ text: 'nope' }] }] }));
+    const fetch = vi.fn(async () => gql({ executeSerializationCommands: [{ name: 'x', success: false, messages: [{ logLevel: 'ERROR', message: 'nope' }] }] }));
     const c = createSitecoreAiClient(env, { fetch: fetch as unknown as typeof globalThis.fetch, tokenProvider });
     const cmd: ItemCommand = { itemID: 'i', parentID: 'p', database: 'master', command: 'CREATE', data: '{}' };
     const r = await c.executeSerializationCommands([cmd]);
@@ -62,5 +62,29 @@ describe('SitecoreAiClient', () => {
     expect(r.ok).toBe(true);
     expect(tp.getToken).toHaveBeenCalledWith(true); // forced re-mint on retry
     expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('readItem maps a serialize response to an ItemSnapshot', async () => {
+    const serialized = {
+      id: 'item-1', parentId: 'p', path: '/x', templateId: 'tpl',
+      sharedFields: [{ fieldId: 's1', value: 'sv' }],
+      unversionedFields: [{ language: 'en', fields: [{ fieldId: 'u1', value: 'uv' }] }],
+      versions: [{ language: 'en', versionNumber: 1, fields: [{ fieldId: 'v1', value: 'vv', blobId: 'b1' }] }],
+    };
+    const fetch = vi.fn(async () => gql({ serialize: [{ data: serialized }] }));
+    const c = createSitecoreAiClient(env, { fetch: fetch as unknown as typeof globalThis.fetch, tokenProvider });
+    const snap = await c.readItem('/x');
+    expect(snap).toEqual({
+      id: 'item-1', templateId: 'tpl',
+      sharedFields: [{ fieldId: 's1', value: 'sv' }],
+      unversionedFields: [{ language: 'en', fields: [{ fieldId: 'u1', value: 'uv' }] }],
+      versions: [{ language: 'en', version: 1, fields: [{ fieldId: 'v1', value: 'vv', blobId: 'b1' }] }],
+    });
+  });
+
+  it('readItem returns null when serialize returns no item', async () => {
+    const fetch = vi.fn(async () => gql({ serialize: [] }));
+    const c = createSitecoreAiClient(env, { fetch: fetch as unknown as typeof globalThis.fetch, tokenProvider });
+    expect(await c.readItem('/nope')).toBeNull();
   });
 });
