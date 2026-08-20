@@ -11,8 +11,8 @@ const EXCLUDED_FIELD_IDS = new Set(
     'b1e16562-f3f9-4ddd-84ca-6e099950ecc0', // __Last run
     FIELD_IDS.revision,                      // __Revision
     '52807595-0f8f-4b20-8d2a-cb71d28c6103', // __Owner
-    'd9cf14b1-fa16-4ba6-9288-e8a174d4d522', // __Updated
-    'badd9cf9-53e0-4d0c-bcc0-2d784c282f6a', // __Updated by
+    FIELD_IDS.updated,                       // __Updated
+    FIELD_IDS.updatedBy,                     // __Updated by
     '001dd393-96c5-490b-924a-b0f25cd9efd8', // __Lock
   ].map(normalizeId),
 );
@@ -89,12 +89,10 @@ export function diffItem(source: ItemSnapshot, target: ItemSnapshot): ItemUpdate
     const tv = targetByKey.get(vkey(sv.language, sv.version));
     const sFields = keep(sv.fields);
     if (!tv) {
-      if (sFields.length === 0) {
+      if (sv.fields.length === 0) {
         ops.push({ kind: 'addVersion', language: sv.language, version: sv.version });
       } else {
-        for (const f of sFields) {
-          ops.push({ kind: 'updateField', fieldId: f.fieldId, value: f.value, blobId: f.blobId, language: sv.language, version: sv.version });
-        }
+        ops.push(...fieldOps(sFields, [], sv.language, sv.version));
       }
     } else {
       ops.push(...fieldOps(sFields, keep(tv.fields), sv.language, sv.version));

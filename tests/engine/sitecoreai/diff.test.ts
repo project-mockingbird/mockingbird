@@ -83,4 +83,65 @@ describe('diffItem', () => {
     const target = base({ sharedFields: [{ fieldId: '{abc}', value: 'v' }] });
     expect(diffItem(source, target)).toEqual([]);
   });
+
+  it('excludes __Revision from shared fields', () => {
+    const REVISION = '8cdc337e-a112-42fb-bbb4-4143751e123f';
+    const source = base({ sharedFields: [{ fieldId: REVISION, value: 'rev-new' }] });
+    const target = base({ sharedFields: [{ fieldId: REVISION, value: 'rev-old' }] });
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('excludes __Updated by from shared fields', () => {
+    const UPDATED_BY = 'badd9cf9-53e0-4d0c-bcc0-2d784c282f6a';
+    const source = base({ sharedFields: [{ fieldId: UPDATED_BY, value: 'user-new' }] });
+    const target = base({ sharedFields: [{ fieldId: UPDATED_BY, value: 'user-old' }] });
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('excludes __Owner from shared fields', () => {
+    const OWNER = '52807595-0f8f-4b20-8d2a-cb71d28c6103';
+    const source = base({ sharedFields: [{ fieldId: OWNER, value: 'owner-new' }] });
+    const target = base({ sharedFields: [{ fieldId: OWNER, value: 'owner-old' }] });
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('excludes __Lock from shared fields', () => {
+    const LOCK = '001dd393-96c5-490b-924a-b0f25cd9efd8';
+    const source = base({ sharedFields: [{ fieldId: LOCK, value: 'lock-new' }] });
+    const target = base({ sharedFields: [{ fieldId: LOCK, value: 'lock-old' }] });
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('excludes __Last run from shared fields', () => {
+    const LAST_RUN = 'b1e16562-f3f9-4ddd-84ca-6e099950ecc0';
+    const source = base({ sharedFields: [{ fieldId: LAST_RUN, value: 'time-new' }] });
+    const target = base({ sharedFields: [{ fieldId: LAST_RUN, value: 'time-old' }] });
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('excludes statistics fields from versioned fields', () => {
+    const UPDATED = 'd9cf14b1-fa16-4ba6-9288-e8a174d4d522';
+    const source = base({ versions: [{ language: 'en', version: 1, fields: [{ fieldId: UPDATED, value: 'ts-new' }] }] });
+    const target = base();
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('excludes statistics fields from unversioned fields', () => {
+    const UPDATED = 'd9cf14b1-fa16-4ba6-9288-e8a174d4d522';
+    const source = base({ unversionedFields: [{ language: 'en', fields: [{ fieldId: UPDATED, value: 'ts-new' }] }] });
+    const target = base();
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('template case- and braces-insensitive: no changeTemplate for same id', () => {
+    const source = base({ templateId: 'ABC' });
+    const target = base({ templateId: '{abc}' });
+    expect(diffItem(source, target)).toEqual([]);
+  });
+
+  it('template empty-string vs zero-guid no-op', () => {
+    const source = base({ templateId: '' });
+    const target = base({ templateId: '00000000-0000-0000-0000-000000000000' });
+    expect(diffItem(source, target)).toEqual([]);
+  });
 });
