@@ -3,6 +3,12 @@ export type ReadinessStateName = 'initializing' | 'ready' | 'error' | 'no-projec
 export interface IndexProgress {
   scanned: number;
   total: number;
+  /**
+   * Name of the layer currently being indexed, when a multi-layer workspace is
+   * scanning one layer at a time (see Engine.openWorkspace). Undefined on the
+   * single-root path, where the splash falls back to a generic "content" label.
+   */
+  layer?: string;
 }
 
 export class ReadinessState {
@@ -30,9 +36,9 @@ export class ReadinessState {
     });
   }
 
-  markProgress(scanned: number, total: number): void {
+  markProgress(scanned: number, total: number, layer?: string): void {
     if (this.state !== 'initializing') return;
-    this.progress = { scanned, total };
+    this.progress = { scanned, total, layer };
   }
 
   markReady(): void {

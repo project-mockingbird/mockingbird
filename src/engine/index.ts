@@ -1320,7 +1320,7 @@ export class Engine {
         const cached = await loadCachedTree(layerCacheRoots, layerCachePath);
         if (cached) {
           partialTree = cached.tree;
-          this.readiness.markProgress(cached.entryCount, cached.entryCount);
+          this.readiness.markProgress(cached.entryCount, cached.entryCount, layer.name);
           cacheHitLayers.push({
             name: layer.name,
             layerRoot,
@@ -1340,7 +1340,7 @@ export class Engine {
         scanStats = new Map();
         partialTree = await scanDirectory(layerRoot, {
           label: `scan:${layer.name}`,
-          onProgress: (scanned, total) => this.readiness.markProgress(scanned, total),
+          onProgress: (scanned, total) => this.readiness.markProgress(scanned, total, layer.name),
           statCollector: scanStats,
         });
         // Background cache write so multi-layer open isn't blocked on gzip.
