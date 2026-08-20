@@ -37,6 +37,7 @@ A few worth calling out:
 - **SXA Headless scaffolding.** Right-click `/sitecore/content` -> Insert -> Headless Site Collection to scaffold a tenant with the standard cross-cutting folder structure under each Project root (Templates, Media, Placeholder Settings, Renderings, Settings, Branches). Right-click a tenant -> Insert -> Headless Site to scaffold a site with JSSSettings, Site Definition, and StartItem auto-wired. The mechanism is a faithful TypeScript port of Sitecore's SPE scaffolding scripts (Add-JSSTenant + New-JSSSite + the Invoke-* action pipeline); curated definition items ship in the registry so the dialog is functional on a fresh install, and authors can extend the catalogue by adding Definition Items to their content tree.
 - **Image Media Picker dialog.** Pick an image from the site's media library (site-scoped via `query:$siteMedia`) with a filterable tree picker, thumbnail preview, alt text, dimensions (Keep Aspect Ratio with auto-recompute), and spacing fields. Round-trips to the same XML attribute set Sitecore persists.
 - **Sitecore Package Builder.** Right-click any item in the tree to add a single item, a subtree, or a path-rooted predicate to the package cart. The cart panel summarizes sources and total item count; checkout produces a Sitecore-installable `.zip` in the standard Sitecore-3.x package format (`installer/version` + `metadata` + `items/master/` + `properties`). Drop the zip into the Package Installer on a real CM and the items land.
+- **Deploy to SitecoreAI.** Push content (items and media) from a Mockingbird workspace to a live SitecoreAI (XM Cloud) environment, preserving item GUIDs. Add a target environment via the Header (SitecoreAI Environments icon) with the Environment host name from SitecoreAI Deploy (host only, no https://, e.g. `xmc-acme-dev.sitecorecloud.io`), Client ID, and Client secret; Test validates the connection. Deploy from the content tree (right-click > Packaging > Deploy to SitecoreAI) or from the package cart (Generate Package dialog > Deploy to SitecoreAI button). Choose a conflict strategy (Skip existing / Keep existing / Overwrite - the last is experimental pending live validation) and preview the plan (N create / N update / N skip, plus any blocking errors) before deploying. Progress streams live; cancel at any time. Environment definitions (name and host) are shared in `config.mockingbird`; credentials are stored locally per-developer in `config.mockingbird.environments.local` (gitignored).
 - **REST API.** CRUD over items, validation, schema introspection, template-schema lookups, and descendants by path.
 - **CLI.** `mockingbird init / validate / tree / info / create / move / delete` for scriptable one-shot operations.
 - **PowerShell scripting.** In-browser ISE at `/scripts` with Monaco + xterm. The `Mockingbird` PowerShell module is auto-imported and exposes a familiar set of cmdlets (`Get-Item`, `Set-ItemField`, `New-Item`, `Find-Item -Where { ... }`, `Get-ItemTemplate`, `Get-ItemReference`, etc.) backed by a `master:` PSDrive. Dry-run by default; flip `-Apply` to commit.
@@ -61,7 +62,7 @@ MOCKINGBIRD_WORKSPACE=C:/projects   # Windows
 MOCKINGBIRD_WORKSPACE=~/code         # macOS / Linux
 ```
 
-> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, set `MOCKINGBIRD_IMAGE=projectmockingbird/mockingbird:0.15.0` in `.env` so a Hub republish doesn't move the floor.
+> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, set `MOCKINGBIRD_IMAGE=projectmockingbird/mockingbird:0.16.0` in `.env` so a Hub republish doesn't move the floor.
 
 ## Project registry: `config.mockingbird`
 
@@ -144,7 +145,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 ## Best Practices
 
-- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:0.15.0` at the time of writing).
+- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:0.16.0` at the time of writing).
 - **Commit serialized YAML alongside the code that depends on it.** Author items in Mockingbird, let the file watcher emit clean YAML, and PR the YAML alongside the React / Next.js changes that consume it. Reviewers see the item changes in the diff.
 - **One `sitecore.json` per layer.** Each layer points at one `sitecore.json` and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. A project is a stack of layers - common shapes are one layer (single repo) or two (e.g. a tenant template layer + a content layer) - merged at open time via SCS `allowedPushOperations` strength (CreateOnly < CreateAndUpdate < CreateUpdateAndDelete).
 - **Treat the cache as disposable.** `.mockingbird/cache/index-*.json.gz` are derived artifacts; they rebuild from your YAML on the next boot. Safe to delete at any time, gitignored by default, safe to skip backing up.
@@ -279,7 +280,7 @@ The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mock
 | Variable | Purpose | Default |
 |---|---|---|
 | `MOCKINGBIRD_WORKSPACE` | Host path bound to `/workspaces` in the container. The first-run wizard's folder browser navigates this mount so you can pick `sitecore.json` files as project layers. | `./` |
-| `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:0.15.0`) in shared environments. | `projectmockingbird/mockingbird:latest` |
+| `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:0.16.0`) in shared environments. | `projectmockingbird/mockingbird:latest` |
 | `MOCKINGBIRD_PORT` | Host port mockingbird binds (loopback-only). Container always listens on 3333 internally. | `3333` |
 | `MOCKINGBIRD_HOST` | Container's internal listener address. `0.0.0.0` so Docker's port-NAT can forward; almost never needs changing. | `0.0.0.0` |
 | `COMPOSE_PROJECT_NAME` | Override the docker container name. | `mockingbird` |
@@ -294,14 +295,17 @@ services:
   mockingbird:
     environment:
       MOCKINGBIRD_ALLOWED_ORIGINS: http://localhost:3000
-      MOCKINGBIRD_GRAPHQL_QUERY_DEPTH: 30
+      MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY: 2000000
+      MOCKINGBIRD_GRAPHQL_MAX_DEPTH: 40
 ```
 
 | Variable | Purpose | Default |
 |---|---|---|
 | `MOCKINGBIRD_ALLOWED_ORIGINS` | Comma-separated origins (scheme://host[:port]) allowed for cross-origin `/api/*` requests. Empty = same-origin only. | *(empty)* |
 | `MOCKINGBIRD_WS_ALLOWED_ORIGINS` | Same shape, for WebSocket upgrades on `/ws`. | *(empty)* |
-| `MOCKINGBIRD_GRAPHQL_QUERY_DEPTH` | Max GraphQL query depth before mercurius rejects. | `20` |
+| `MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY` | Max GraphQL query complexity before it's rejected, scored with Sitecore's own graphql-dotnet metric. Defaults to the stock XM Cloud value. | `10000` |
+| `MOCKINGBIRD_GRAPHQL_MAX_DEPTH` | Max number of composite (object-selecting) fields in a query - Sitecore's `maxDepth`, which counts composite fields across the query, not tree nesting. Defaults to the stock XM Cloud value. | `15` |
+| `MOCKINGBIRD_GRAPHQL_FIELD_IMPACT` | Assumed fan-out per list field in the complexity score. Must be greater than 1. | `2` |
 | `MOCKINGBIRD_SPE_SESSION_TTL_MIN` | Per-session TTL for PowerShell scripting sessions, in minutes. | `30` |
 | `MOCKINGBIRD_SPE_MAX_SESSIONS` | Concurrent PowerShell session cap; beyond this, new sessions return 429. | `8` |
 
@@ -324,13 +328,13 @@ These are pinned values inside the compose `environment:` block; not configurabl
 
 **Browser fetches to `/api/*` blocked with CORS errors.** Mockingbird defaults to same-origin only. If your head app's dev server is on a different origin (e.g. head app on `:3000`, Mockingbird on `:3333`), add the head-app origin to `MOCKINGBIRD_ALLOWED_ORIGINS`. Server-side fetches (Next.js route handlers, `getStaticProps`, build-time queries) bypass the browser CORS check and are unaffected.
 
-**`GraphQL query too deep` errors on a real client query.** Default cap is depth 20, which covers the typical `children -> results -> ... on Type` four-times-deep navigation pattern. Raise via `MOCKINGBIRD_GRAPHQL_QUERY_DEPTH` if a deeper query is genuinely needed.
+**`Query is too complex to execute` / `Query is too nested to execute` on a real client query.** Mockingbird gates GraphQL queries with the same complexity metric a stock XM Cloud uses (Sitecore's graphql-dotnet analyzer), defaulting to the stock limits (`maxComplexity` 10000, `maxDepth` 15, `fieldImpact` 2). A production-scale navigation query can exceed these - exactly as it would on an unpatched XM Cloud. Raise `MOCKINGBIRD_GRAPHQL_MAX_COMPLEXITY` and/or `MOCKINGBIRD_GRAPHQL_MAX_DEPTH` to match the values your target environment is patched to (many XM Cloud solutions patch these to `2000000` / `40`).
 
 **`/api/status` reports `cacheStale: true`.** The post-ready signature verifier detected the served-from-cache tree drifted from on-disk YAML. The cache file has already been deleted, so a container restart will rebuild against current disk state. The in-memory tree continues to serve the stale snapshot for the rest of the session.
 
 **Container starts but `EADDRINUSE` on the port.** Another process is bound to the host-side `MOCKINGBIRD_PORT`. Check `netstat -ano | findstr :3333` (Windows) or `lsof -i :3333` (Linux/Mac) and stop the other process or change `MOCKINGBIRD_PORT` in `.env`.
 
-**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:0.15.0`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
+**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:0.16.0`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
 
 **Docker build fails on `chown -R node:node /app`.** Almost always a slow bind-mount or a previous `npm install` that ran as root and left files the `node` user can't traverse. Clear the build cache (`docker builder prune`) and retry; if the problem persists, check that no `.dockerignore`-excluded path is being COPYed into stage 2.
 

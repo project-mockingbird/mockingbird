@@ -2,9 +2,10 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/lib/icon';
-import { mdiCogOutline } from '@mdi/js';
+import { mdiCogOutline, mdiCloudUploadOutline } from '@mdi/js';
 import { SettingsDialog } from '@/settings/SettingsDialog';
 import { CartIcon } from '@/components/package/CartIcon';
+import { deployStore } from '@/state/deployStore';
 
 interface HeaderProps {
   validationErrorCount: number;
@@ -28,6 +29,15 @@ export function Header({ validationErrorCount, onValidationClick, onCartToggle }
           </Button>
         )}
         <CartIcon onToggle={onCartToggle} />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="SitecoreAI Environments"
+          className="[&_svg]:!size-6"
+          onClick={() => deployStore.openEnvManager()}
+        >
+          <Icon path={mdiCloudUploadOutline} />
+        </Button>
         <SettingsDialog
           trigger={
             <Button variant="ghost" size="icon" aria-label="Settings" className="[&_svg]:!size-6">

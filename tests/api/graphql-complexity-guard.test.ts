@@ -65,16 +65,16 @@ async function createTestApp(): Promise<FastifyInstance> {
   return app;
 }
 
-describe('GraphQL queryDepth guard', () => {
+describe('GraphQL complexity guard (Sitecore graphql-dotnet metric)', () => {
   let app: FastifyInstance;
   beforeAll(async () => { app = await createTestApp(); });
   afterAll(async () => { await app.close(); });
 
-  it('rejects an excessively deeply-nested children query', async () => {
-    // The schema exposes children as `Item.children: ItemSearchResults`
-    // with `results: [Item!]`, so each "real" level of recursion adds 2
-    // selection-set depth steps. 20 nested children/results pairs comfortably
-    // exceed the queryDepth=15 default.
+  it('rejects an over-complex deeply-nested query with the Sitecore message', async () => {
+    // Each `children { results { ... } }` pair adds two composite fields; the
+    // complexity score grows geometrically with fieldImpact, so 20 pairs blow
+    // past the stock maxComplexity (10000) long before execution. Complexity is
+    // checked before depth, so the "too complex" message wins.
     let inner = 'id';
     for (let i = 0; i < 20; i++) {
       inner = `children { results { ${inner} } }`;
@@ -89,10 +89,10 @@ describe('GraphQL queryDepth guard', () => {
     const body = response.json();
     expect(body.errors).toBeDefined();
     expect(body.errors.length).toBeGreaterThan(0);
-    expect(JSON.stringify(body.errors).toLowerCase()).toMatch(/depth/);
+    expect(JSON.stringify(body.errors)).toMatch(/too complex to execute/);
   });
 
-  it('accepts a shallow children query', async () => {
+  it('accepts a shallow query under the complexity limit', async () => {
     const query = `query Shallow { item(path: "/sitecore/content/site/Home", language: "en") { ... on Item { id } } }`;
     const response = await app.inject({
       method: 'POST',

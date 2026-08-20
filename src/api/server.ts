@@ -198,6 +198,9 @@ export async function createServer(opts: ServerOptions): Promise<{ app: FastifyI
   const { registerPackageRoutes } = await import('./routes/package.js');
   registerPackageRoutes(app, engine);
 
+  const { registerSitecoreAiRoutes } = await import('./routes/sitecoreai.js');
+  registerSitecoreAiRoutes(app, engine);
+
   const { registerRenderingsRoutes } = await import('./routes/renderings.js');
   registerRenderingsRoutes(app, engine);
 

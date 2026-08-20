@@ -10,6 +10,10 @@
 //   - 'cart' (default): submit appends a CartSource to packageCartStore.
 //   - 'download':       submit calls downloadPackage with one source and the
 //                       Source Name doubles as the package metadata.name.
+//   - 'deploy':         submit calls onDeploy with a single DeploySource-
+//                       shaped object instead of touching the cart or
+//                       triggering a download; the caller (ContentTree) opens
+//                       DeployDialog with it via deployStore.
 
 import { useState, useEffect } from 'react';
 import {
@@ -33,7 +37,7 @@ const SCOPE_OPTIONS: ReadonlyArray<{ value: CartSourceScope; label: string }> = 
   { value: 'childrenOnly',       label: 'Children only' },
 ];
 
-export type AddToPackageMode = 'cart' | 'download';
+export type AddToPackageMode = 'cart' | 'download' | 'deploy';
 
 export interface AddToPackageDialogProps {
   item: { id: string; path: string; name: string };
@@ -42,6 +46,10 @@ export interface AddToPackageDialogProps {
   mode?: AddToPackageMode;
   onDownloadSuccess?: (filename: string) => void;
   onDownloadError?: (message: string) => void;
+  onDeploy?: (source: {
+    id: string; rootItemId: string; rootItemPath: string; rootItemName: string;
+    scope: CartSourceScope; database: 'master';
+  }) => void;
 }
 
 export function AddToPackageDialog({
@@ -51,6 +59,7 @@ export function AddToPackageDialog({
   mode = 'cart',
   onDownloadSuccess,
   onDownloadError,
+  onDeploy,
 }: AddToPackageDialogProps) {
   const [sourceName, setSourceName] = useState(item.name);
   const [scope, setScope] = useState<CartSourceScope>('itemAndDescendants');
@@ -67,11 +76,17 @@ export function AddToPackageDialog({
   }, [open, item.name]);
 
   const isCart = mode === 'cart';
-  const title = isCart ? `Add "${item.name}" to Package` : `Download "${item.name}"`;
-  const submitLabel = isCart ? 'Add to Package' : 'Download';
+  const title = mode === 'deploy' ? `Deploy "${item.name}"` : isCart ? `Add "${item.name}" to Package` : `Download "${item.name}"`;
+  const submitLabel = mode === 'deploy' ? 'Continue' : isCart ? 'Add to Package' : 'Download';
 
   const onSubmit = async () => {
     const trimmed = sourceName.trim() || item.name;
+
+    if (mode === 'deploy') {
+      onDeploy?.({ id: 'deploy', rootItemId: item.id, rootItemPath: item.path, rootItemName: trimmed, scope, database: 'master' });
+      onOpenChange(false);
+      return;
+    }
 
     if (isCart) {
       packageCartStore.addSource({

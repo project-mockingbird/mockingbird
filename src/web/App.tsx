@@ -28,6 +28,10 @@ import { useProjectsStore } from '@/state/projectsStore';
 import { ProjectsStoreHydrator } from '@/state/projectsStoreHydrator';
 import { useConfirmDiscardWorkspace } from '@/components/workspace/useConfirmDiscardWorkspace';
 import { ConfirmDiscardWorkspaceDialog } from '@/components/workspace/ConfirmDiscardWorkspaceDialog';
+import { DeployDialog } from '@/components/sitecoreai/DeployDialog';
+import { EnvironmentsManager } from '@/components/sitecoreai/EnvironmentsManager';
+import { deployStore } from '@/state/deployStore';
+import { useDeployStore } from '@/state/useDeployStore';
 import { toast } from 'sonner';
 
 // IsePage pulls Monaco (~3.5 MB) and xterm into its dependency tree. Loading
@@ -257,6 +261,11 @@ export function App() {
         defaultOptions: { queries: { staleTime: 10_000, refetchOnWindowFocus: false } },
       }),
   );
+  // Deploy-to-SitecoreAI dialogs are hosted once here so both the tree's
+  // context-menu action and the checkout dialog's "Deploy" button - which
+  // live under unrelated parents (ContentTree vs CartPane) - can open the
+  // same dialog via the transient deployStore instead of duplicating it.
+  const deploy = useDeployStore();
 
   return (
     <ThemeProvider attribute="class" defaultTheme="dark">
@@ -265,6 +274,16 @@ export function App() {
           <WebSocketConnection />
           <Routes />
           <Toaster />
+          <DeployDialog
+            open={deploy.deployOpen}
+            onOpenChange={(o) => { if (!o) deployStore.closeDeploy(); }}
+            sources={deploy.sources}
+            onManageEnvironments={() => { deployStore.closeDeploy(); deployStore.openEnvManager(); }}
+          />
+          <EnvironmentsManager
+            open={deploy.envManagerOpen}
+            onOpenChange={(o) => { if (!o) deployStore.closeEnvManager(); }}
+          />
         </QueryClientProvider>
       </SettingsProvider>
     </ThemeProvider>

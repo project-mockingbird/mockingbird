@@ -77,3 +77,9 @@ config.mockingbird
 # Consumer repos that commit config.mockingbird should add this line to
 # their own .gitignore.
 config.mockingbird.local
+
+# Environment config store. Secrets (.local) are always gitignored. The defs
+# file is meant to be committed in user projects, but - like config.mockingbird
+# above - is kept untracked here since this repo is its own dev/smoke workspace.
+config.mockingbird.environments
+config.mockingbird.environments.local
