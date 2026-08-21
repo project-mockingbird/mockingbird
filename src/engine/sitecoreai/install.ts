@@ -1,9 +1,10 @@
 import type { Engine } from '../index.js';
 import { collectSources } from '../package/collect.js';
 import type { CartSource } from '../package/types.js';
+import type { ScsItem } from '../types.js';
 import type { SitecoreAiClient } from './client.js';
 import { buildInstallPlan, type PlannerProgress } from './planner.js';
-import { toSerializeItemData } from './serialize-command.js';
+import { toSerializeItemData, toUpdateCommandData } from './serialize-command.js';
 import type { ConflictStrategy, InstallPlan, InstallProgress, ItemCommand } from './types.js';
 
 export const DEFAULT_BYTE_BUDGET = 6 * 1024 * 1024;
@@ -14,7 +15,8 @@ export async function previewInstall(
   engine: Engine, sources: CartSource[], strategy: ConflictStrategy, client: SitecoreAiClient, onProgress?: PlannerProgress,
 ): Promise<InstallPlan> {
   const { items } = collectSources(engine, sources);
-  return buildInstallPlan(items, strategy, client, onProgress);
+  const buildSourceSnapshot = (it: ScsItem) => toSerializeItemData(engine, it);
+  return buildInstallPlan(items, strategy, client, buildSourceSnapshot, onProgress);
 }
 
 export async function executeInstall(
@@ -23,10 +25,11 @@ export async function executeInstall(
   const budget = opts.byteBudget ?? DEFAULT_BYTE_BUDGET;
   const emit = (p: InstallProgress): InstallProgress => { opts.onProgress?.(p); return p; };
   const { items } = collectSources(engine, sources);
+  const buildSourceSnapshot = (it: ScsItem) => toSerializeItemData(engine, it);
   // Stream the planning phase (the slow part - one probe per item) so the UI
   // shows an "Evaluating X of N" bar before the write phase, even when the user
   // deployed without running a preview first.
-  const plan = await buildInstallPlan(items, strategy, client, (completed, total) =>
+  const plan = await buildInstallPlan(items, strategy, client, buildSourceSnapshot, (completed, total) =>
     emit({ kind: 'progress', completed, total, message: `Evaluating ${completed} of ${total} items` }));
 
   if (plan.blockingErrors.length > 0) {
@@ -41,8 +44,12 @@ export async function executeInstall(
   const commands: ItemCommand[] = [];
   for (const step of actionable) {
     const item = byId.get(step.itemId)!;
-    const data = await toSerializeItemData(engine, item);
-    commands.push({ itemID: item.id, parentID: item.parent, database: 'master', command: step.action === 'create' ? 'CREATE' : 'UPDATE', data: JSON.stringify(data) });
+    if (step.action === 'create') {
+      const data = await toSerializeItemData(engine, item);
+      commands.push({ itemID: item.id, parentID: item.parent, database: 'master', command: 'CREATE', data: JSON.stringify(data) });
+    } else {
+      commands.push({ itemID: item.id, parentID: item.parent, database: 'master', command: 'UPDATE', data: toUpdateCommandData(step.ops ?? []) });
+    }
   }
 
   // Byte-aware batching: an oversized single command goes solo.
