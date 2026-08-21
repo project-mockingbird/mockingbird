@@ -10,12 +10,18 @@ vi.mock('../../../src/engine/package/collect.js', () => ({
   collectSources: () => ({ items, warnings: [] }),
 }));
 // Deterministic tiny serialize output so byte-budget math is predictable.
-vi.mock('../../../src/engine/sitecoreai/serialize-command.js', () => ({
-  toSerializeItemData: async (_e: unknown, it: ScsItem) => ({
-    id: it.id, parentId: it.parent, path: it.path, name: it.id, branchId: '0', templateId: it.template,
-    sharedFields: [], unversionedFields: [], versions: [],
-  }),
-}));
+// toUpdateCommandData is left as the real implementation (via importOriginal) so the
+// overwrite test below can assert on its actual wire-format output.
+vi.mock('../../../src/engine/sitecoreai/serialize-command.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/engine/sitecoreai/serialize-command.js')>();
+  return {
+    toSerializeItemData: async (_e: unknown, it: ScsItem) => ({
+      id: it.id, parentId: it.parent, path: it.path, name: it.id, branchId: '0', templateId: it.template,
+      sharedFields: [], unversionedFields: [], versions: [],
+    }),
+    toUpdateCommandData: actual.toUpdateCommandData,
+  };
+});
 
 import { previewInstall, executeInstall } from '../../../src/engine/sitecoreai/install.js';
 import type { InstallProgress } from '../../../src/engine/sitecoreai/types.js';
@@ -27,6 +33,7 @@ function fakeClient(existing = new Set<string>()) {
   return {
     itemExists: async (id: string) => existing.has(id),
     templateExists: async () => true,
+    readItem: async () => null,
     executeSerializationCommands: vi.fn(async () => ({ ok: true, errors: [], messages: [] })),
   };
 }
@@ -71,5 +78,21 @@ describe('executeInstall', () => {
     expect(client.executeSerializationCommands).toHaveBeenCalledTimes(2); // one batch per item
     expect(final.kind).toBe('done');
     expect(final.completed).toBe(2);
+  });
+
+  it('overwrite builds a diff-based UPDATE command (target-only field -> RESET_FIELD)', async () => {
+    const target = { id: 'a', templateId: 'tpl', sharedFields: [{ fieldId: 'title', value: 'OLD' }], unversionedFields: [], versions: [] };
+    const sent: any[] = [];
+    const client = {
+      itemExists: async (id: string) => id === 'a',            // 'a' -> overwrite, 'b' -> create
+      templateExists: async () => true,
+      readItem: async (path: string) => (path === '/x/a' ? target : null),
+      executeSerializationCommands: vi.fn(async (cmds: any[]) => { sent.push(...cmds); return { ok: true, errors: [], messages: [] }; }),
+    };
+    const final = await executeInstall(engine, sources, 'overwrite', client as any, {});
+    expect(final.kind).toBe('done');
+    const updateCmd = sent.find((c) => c.command === 'UPDATE' && c.itemID === 'a');
+    expect(updateCmd).toBeDefined();
+    expect(JSON.parse(updateCmd.data)).toEqual([{ command: 'RESET_FIELD', data: { fieldId: 'title' } }]);
   });
 });

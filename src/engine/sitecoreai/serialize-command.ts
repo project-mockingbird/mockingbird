@@ -2,7 +2,7 @@ import type { Engine } from '../index.js';
 import type { ScsItem, ScsField } from '../types.js';
 import { resolveItemName } from '../package/lookups.js';
 import { collectItemBlobs } from '../package/blobs.js';
-import { ALL_ZERO_GUID, type SerializeFieldData, type SerializeItemData } from './types.js';
+import { ALL_ZERO_GUID, type SerializeFieldData, type SerializeItemData, type ItemUpdateOp } from './types.js';
 
 /**
  * Map an ScsItem to the serialize-command `data` object executeSerializationCommands
@@ -45,4 +45,46 @@ export async function toSerializeItemData(engine: Engine, item: ScsItem): Promis
     unversionedFields: item.languages.map((l) => ({ language: l.language, fields: l.fields.map(mapField) })),
     versions: item.languages.flatMap((l) => l.versions.map((v) => ({ language: l.language, version: v.version, fields: v.fields.map(mapField) }))),
   };
+}
+
+const UPDATE_WIRE = {
+  changeTemplate: 'CHANGE_TEMPLATE',
+  update: 'UPDATE',
+  resetField: 'RESET_FIELD',
+  removeVersion: 'REMOVE_VERSION',
+  addVersion: 'ADD_VERSION',
+} as const;
+
+/**
+ * Serialize UPDATE ops into the `data` string executeSerializationCommands expects for an
+ * UPDATE command: a JSON array of { command: <UPPER_SNAKE>, data: <dict|guid string> }.
+ * Enum values, camelCase, dict key set, and string versions all mirror graphql-dotnet's
+ * MapUpdateCommand + [EnumMember] wire form.
+ */
+export function toUpdateCommandData(ops: ItemUpdateOp[]): string {
+  const wire = ops.map((op) => {
+    switch (op.kind) {
+      case 'changeTemplate':
+        return { command: UPDATE_WIRE.changeTemplate, data: op.templateId };
+      case 'addVersion':
+        return { command: UPDATE_WIRE.addVersion, data: { language: op.language, version: String(op.version) } };
+      case 'removeVersion':
+        return { command: UPDATE_WIRE.removeVersion, data: { language: op.language, version: String(op.version) } };
+      case 'resetField': {
+        const data: Record<string, string> = { fieldId: op.fieldId };
+        if (op.language != null) data.language = op.language;
+        if (op.version != null) data.version = String(op.version);
+        return { command: UPDATE_WIRE.resetField, data };
+      }
+      case 'updateField': {
+        const data: Record<string, string> = { fieldId: op.fieldId, value: op.value };
+        if (op.blobId) data.blobId = op.blobId;
+        if (op.language != null) data.language = op.language;
+        if (op.version != null) data.version = String(op.version);
+        return { command: UPDATE_WIRE.update, data };
+      }
+      default: { const _exhaustive: never = op; throw new Error(`unhandled update op: ${JSON.stringify(_exhaustive)}`); }
+    }
+  });
+  return JSON.stringify(wire);
 }

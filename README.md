@@ -37,7 +37,7 @@ A few worth calling out:
 - **SXA Headless scaffolding.** Right-click `/sitecore/content` -> Insert -> Headless Site Collection to scaffold a tenant with the standard cross-cutting folder structure under each Project root (Templates, Media, Placeholder Settings, Renderings, Settings, Branches). Right-click a tenant -> Insert -> Headless Site to scaffold a site with JSSSettings, Site Definition, and StartItem auto-wired. The mechanism is a faithful TypeScript port of Sitecore's SPE scaffolding scripts (Add-JSSTenant + New-JSSSite + the Invoke-* action pipeline); curated definition items ship in the registry so the dialog is functional on a fresh install, and authors can extend the catalogue by adding Definition Items to their content tree.
 - **Image Media Picker dialog.** Pick an image from the site's media library (site-scoped via `query:$siteMedia`) with a filterable tree picker, thumbnail preview, alt text, dimensions (Keep Aspect Ratio with auto-recompute), and spacing fields. Round-trips to the same XML attribute set Sitecore persists.
 - **Sitecore Package Builder.** Right-click any item in the tree to add a single item, a subtree, or a path-rooted predicate to the package cart. The cart panel summarizes sources and total item count; checkout produces a Sitecore-installable `.zip` in the standard Sitecore-3.x package format (`installer/version` + `metadata` + `items/master/` + `properties`). Drop the zip into the Package Installer on a real CM and the items land.
-- **Deploy to SitecoreAI.** Push content (items and media) from a Mockingbird workspace to a live SitecoreAI (XM Cloud) environment, preserving item GUIDs. Add a target environment via the Header (SitecoreAI Environments icon) with the Environment host name from SitecoreAI Deploy (host only, no https://, e.g. `xmc-acme-dev.sitecorecloud.io`), Client ID, and Client secret; Test validates the connection. Deploy from the content tree (right-click > Packaging > Deploy to SitecoreAI) or from the package cart (Generate Package dialog > Deploy to SitecoreAI button). Choose a conflict strategy (Skip existing / Keep existing / Overwrite - the last is experimental pending live validation) and preview the plan (N create / N update / N skip, plus any blocking errors) before deploying. Progress streams live; cancel at any time. Environment definitions (name and host) are shared in `config.mockingbird`; credentials are stored locally per-developer in `config.mockingbird.environments.local` (gitignored).
+- **Deploy to SitecoreAI.** Push content (items and media) from a Mockingbird workspace to a live SitecoreAI (XM Cloud) environment, preserving item GUIDs. Add a target environment via the Header (SitecoreAI Environments icon) with the Environment host name from SitecoreAI Deploy (host only, no https://, e.g. `xmc-acme-dev.sitecorecloud.io`), Client ID, and Client secret; Test validates the connection. Deploy from the content tree (right-click > Packaging > Deploy to SitecoreAI) or from the package cart (Generate Package dialog > Deploy to SitecoreAI button). Choose a conflict strategy (Skip existing / Keep existing / Overwrite - the last performs a faithful field-level diff - it reads the target item and converges each pushed item's fields, versions, and template to your workspace, and does not delete target items outside your selection) and preview the plan (N create / N update / N skip, plus any blocking errors) before deploying. Progress streams live; cancel at any time. Environment definitions (name and host) are shared in `config.mockingbird`; credentials are stored locally per-developer in `config.mockingbird.environments.local` (gitignored).
 - **REST API.** CRUD over items, validation, schema introspection, template-schema lookups, and descendants by path.
 - **CLI.** `mockingbird init / validate / tree / info / create / move / delete` for scriptable one-shot operations.
 - **PowerShell scripting.** In-browser ISE at `/scripts` with Monaco + xterm. The `Mockingbird` PowerShell module is auto-imported and exposes a familiar set of cmdlets (`Get-Item`, `Set-ItemField`, `New-Item`, `Find-Item -Where { ... }`, `Get-ItemTemplate`, `Get-ItemReference`, etc.) backed by a `master:` PSDrive. Dry-run by default; flip `-Apply` to commit.
@@ -62,7 +62,7 @@ MOCKINGBIRD_WORKSPACE=C:/projects   # Windows
 MOCKINGBIRD_WORKSPACE=~/code         # macOS / Linux
 ```
 
-> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, set `MOCKINGBIRD_IMAGE=projectmockingbird/mockingbird:0.16.2` in `.env` so a Hub republish doesn't move the floor.
+> **Pin the version in shared environments.** `:latest` is fine for a quick local kick of the tires, but in CI or any team-shared compose file, set `MOCKINGBIRD_IMAGE=projectmockingbird/mockingbird:0.16.3` in `.env` so a Hub republish doesn't move the floor.
 
 ## Project registry: `config.mockingbird`
 
@@ -145,7 +145,7 @@ Always-ungated readiness probe. Returns 200 the moment Fastify is listening - ev
 
 ## Best Practices
 
-- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:0.16.2` at the time of writing).
+- **Pin a specific image tag in any shared environment.** `:latest` for a quick local poke is fine; in CI, dev environments, and team-shared compose files, set `MOCKINGBIRD_IMAGE` in `.env` to a specific version (`projectmockingbird/mockingbird:0.16.3` at the time of writing).
 - **Commit serialized YAML alongside the code that depends on it.** Author items in Mockingbird, let the file watcher emit clean YAML, and PR the YAML alongside the React / Next.js changes that consume it. Reviewers see the item changes in the diff.
 - **One `sitecore.json` per layer.** Each layer points at one `sitecore.json` and resolves modules relative to its own dir, matching `dotnet sitecore ser pull` semantics. A project is a stack of layers - common shapes are one layer (single repo) or two (e.g. a tenant template layer + a content layer) - merged at open time via SCS `allowedPushOperations` strength (CreateOnly < CreateAndUpdate < CreateUpdateAndDelete).
 - **Treat the cache as disposable.** `.mockingbird/cache/index-*.json.gz` are derived artifacts; they rebuild from your YAML on the next boot. Safe to delete at any time, gitignored by default, safe to skip backing up.
@@ -280,7 +280,7 @@ The OOTB IARs that ship with the CM images on Docker Hub are baked into the Mock
 | Variable | Purpose | Default |
 |---|---|---|
 | `MOCKINGBIRD_WORKSPACE` | Host path bound to `/workspaces` in the container. The first-run wizard's folder browser navigates this mount so you can pick `sitecore.json` files as project layers. | `./` |
-| `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:0.16.2`) in shared environments. | `projectmockingbird/mockingbird:latest` |
+| `MOCKINGBIRD_IMAGE` | Docker image tag pulled by compose. Pin to a specific version (e.g. `projectmockingbird/mockingbird:0.16.3`) in shared environments. | `projectmockingbird/mockingbird:latest` |
 | `MOCKINGBIRD_PORT` | Host port mockingbird binds (loopback-only). Container always listens on 3333 internally. | `3333` |
 | `MOCKINGBIRD_HOST` | Container's internal listener address. `0.0.0.0` so Docker's port-NAT can forward; almost never needs changing. | `0.0.0.0` |
 | `COMPOSE_PROJECT_NAME` | Override the docker container name. | `mockingbird` |
@@ -334,7 +334,7 @@ These are pinned values inside the compose `environment:` block; not configurabl
 
 **Container starts but `EADDRINUSE` on the port.** Another process is bound to the host-side `MOCKINGBIRD_PORT`. Check `netstat -ano | findstr :3333` (Windows) or `lsof -i :3333` (Linux/Mac) and stop the other process or change `MOCKINGBIRD_PORT` in `.env`.
 
-**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:0.16.2`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
+**The image won't pull (`manifest unknown` or 404).** Confirm the tag exists: `docker pull projectmockingbird/mockingbird:0.16.3`. The Hub repo at <https://hub.docker.com/r/projectmockingbird/mockingbird/tags> lists every published tag.
 
 **Docker build fails on `chown -R node:node /app`.** Almost always a slow bind-mount or a previous `npm install` that ran as root and left files the `node` user can't traverse. Clear the build cache (`docker builder prune`) and retry; if the problem persists, check that no `.dockerignore`-excluded path is being COPYed into stage 2.
 

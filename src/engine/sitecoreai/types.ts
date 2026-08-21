@@ -47,7 +47,7 @@ export interface ItemCommand {
 
 // --- planner ---
 export type PlanAction = 'create' | 'update' | 'skip';
-export interface PlanStep { itemId: string; path: string; name: string; action: PlanAction; reason: string; }
+export interface PlanStep { itemId: string; path: string; name: string; action: PlanAction; reason: string; ops?: ItemUpdateOp[]; }
 export interface PlanIssue { itemId: string; path: string; reason: string; }
 export interface InstallPlan {
   steps: PlanStep[];
@@ -66,3 +66,23 @@ export interface InstallProgress {
 }
 
 export const ALL_ZERO_GUID = '00000000-0000-0000-0000-000000000000';
+
+// --- faithful UPDATE (overwrite) ---
+export type ItemUpdateOp =
+  | { kind: 'changeTemplate'; templateId: string }
+  | { kind: 'addVersion'; language: string; version: number }
+  | { kind: 'removeVersion'; language: string; version: number }
+  | { kind: 'updateField'; fieldId: string; value: string; blobId?: string; language?: string; version?: number }
+  | { kind: 'resetField'; fieldId: string; language?: string; version?: number };
+
+// --- snapshots (diff input) ---
+export interface SnapshotField { fieldId: string; value: string; blobId?: string; }
+export interface SnapshotLanguageFields { language: string; fields: SnapshotField[]; }
+export interface SnapshotVersionFields { language: string; version: number; fields: SnapshotField[]; }
+export interface ItemSnapshot {
+  id?: string;          // present for target reads; used to verify id match
+  templateId: string;
+  sharedFields: SnapshotField[];
+  unversionedFields: SnapshotLanguageFields[];
+  versions: SnapshotVersionFields[];
+}
