@@ -11,12 +11,13 @@ export const DEFAULT_BYTE_BUDGET = 6 * 1024 * 1024;
 
 export interface ExecuteOptions { signal?: AbortSignal; onProgress?: (p: InstallProgress) => void; byteBudget?: number; }
 
+const makeSourceSnapshot = (engine: Engine) => (it: ScsItem) => toSerializeItemData(engine, it);
+
 export async function previewInstall(
   engine: Engine, sources: CartSource[], strategy: ConflictStrategy, client: SitecoreAiClient, onProgress?: PlannerProgress,
 ): Promise<InstallPlan> {
   const { items } = collectSources(engine, sources);
-  const buildSourceSnapshot = (it: ScsItem) => toSerializeItemData(engine, it);
-  return buildInstallPlan(items, strategy, client, buildSourceSnapshot, onProgress);
+  return buildInstallPlan(items, strategy, client, makeSourceSnapshot(engine), onProgress);
 }
 
 export async function executeInstall(
@@ -25,7 +26,7 @@ export async function executeInstall(
   const budget = opts.byteBudget ?? DEFAULT_BYTE_BUDGET;
   const emit = (p: InstallProgress): InstallProgress => { opts.onProgress?.(p); return p; };
   const { items } = collectSources(engine, sources);
-  const buildSourceSnapshot = (it: ScsItem) => toSerializeItemData(engine, it);
+  const buildSourceSnapshot = makeSourceSnapshot(engine);
   // Stream the planning phase (the slow part - one probe per item) so the UI
   // shows an "Evaluating X of N" bar before the write phase, even when the user
   // deployed without running a preview first.

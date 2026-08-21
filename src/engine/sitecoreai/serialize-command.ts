@@ -83,6 +83,7 @@ export function toUpdateCommandData(ops: ItemUpdateOp[]): string {
         if (op.version != null) data.version = String(op.version);
         return { command: UPDATE_WIRE.update, data };
       }
+      default: { const _exhaustive: never = op; throw new Error(`unhandled update op: ${JSON.stringify(_exhaustive)}`); }
     }
   });
   return JSON.stringify(wire);

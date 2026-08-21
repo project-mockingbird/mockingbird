@@ -87,4 +87,10 @@ describe('SitecoreAiClient', () => {
     const c = createSitecoreAiClient(env, { fetch: fetch as unknown as typeof globalThis.fetch, tokenProvider });
     expect(await c.readItem('/nope')).toBeNull();
   });
+
+  it('readItem throws on a top-level GraphQL error even when serialize is a truthy-empty array', async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ errors: [{ message: 'boom' }], data: { serialize: [] } }), { status: 200 }));
+    const c = createSitecoreAiClient(env, { fetch: fetch as unknown as typeof globalThis.fetch, tokenProvider });
+    await expect(c.readItem('/x')).rejects.toThrow('boom');
+  });
 });

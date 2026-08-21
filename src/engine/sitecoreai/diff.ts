@@ -32,7 +32,8 @@ export function isFieldDifferent(left: SnapshotField, right: SnapshotField): boo
   const lv = left.value ?? null;
   const rv = right.value ?? null;
   if (lv === null && rv === null) return false;
-  if (left.blobId && right.blobId && normalizeId(left.blobId) !== normalizeId(right.blobId)) return true;
+  // Media fields: identity is the blobId (source value is base64, target value is a serialized ref - never compare those). Equal blobId => same content.
+  if (left.blobId && right.blobId) return normalizeId(left.blobId) !== normalizeId(right.blobId);
   if (lv === null || rv === null) return true;
   return stripNewlines(lv) !== stripNewlines(rv);
 }

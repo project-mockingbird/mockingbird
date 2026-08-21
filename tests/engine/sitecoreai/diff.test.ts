@@ -13,6 +13,9 @@ describe('isFieldDifferent', () => {
   it('compares blobId for media', () => {
     expect(isFieldDifferent({ fieldId: 'f', value: 'x', blobId: 'b1' }, { fieldId: 'f', value: 'x', blobId: 'b2' })).toBe(true);
   });
+  it('treats two media fields with equal blobId as unchanged even if value representation differs', () => {
+    expect(isFieldDifferent({ fieldId: 'f', value: 'BASE64DATA', blobId: 'b1' }, { fieldId: 'f', value: 'sitecore-blob-ref', blobId: 'b1' })).toBe(false);
+  });
   it('differs on value change', () => {
     expect(isFieldDifferent({ fieldId: 'f', value: 'a' }, { fieldId: 'f', value: 'b' })).toBe(true);
   });

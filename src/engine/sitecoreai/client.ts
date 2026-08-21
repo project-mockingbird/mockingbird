@@ -34,8 +34,8 @@ function formatGqlErrors(errors: GqlError[]): string {
     .map((e) => {
       const parts = [e.message];
       if (e.path?.length) parts.push(`path=${e.path.join('.')}`);
-      const ext = (e.extensions?.message ?? e.extensions?.code) as string | undefined;
-      if (ext) parts.push(`detail=${ext}`);
+      const ext = e.extensions?.message ?? e.extensions?.code;
+      if (typeof ext === 'string' && ext) parts.push(`detail=${ext}`);
       return parts.join(' ');
     })
     .join('; ');
@@ -86,7 +86,7 @@ export function createSitecoreAiClient(env: ResolvedEnvironment, deps: ClientDep
     templateExists: existsByQuery, // a template is just an item; same probe by GUID
     async readItem(itemPath: string): Promise<ItemSnapshot | null> {
       const json = await post(managementUrl(env.cmHost), { query: serializeQuery(itemPath) });
-      if (json.errors?.length && !json.data?.serialize) throw new Error(formatGqlErrors(json.errors));
+      if (json.errors?.length && !(json.data?.serialize?.length)) throw new Error(formatGqlErrors(json.errors));
       const rows = (json.data?.serialize ?? []) as { data?: unknown }[];
       const first = rows[0];
       if (!first) return null;
