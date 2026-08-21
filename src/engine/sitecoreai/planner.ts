@@ -1,16 +1,20 @@
 import type { ScsItem } from '../types.js';
-import { ALL_ZERO_GUID, type ConflictStrategy, type InstallPlan, type PlanStep } from './types.js';
+import { diffItem } from './diff.js';
+import { ALL_ZERO_GUID, type ConflictStrategy, type InstallPlan, type ItemSnapshot, type PlanStep } from './types.js';
 
 export interface PlannerProbes {
   itemExists(itemId: string): Promise<boolean>;
-  templateExists(templateId: string): Promise<boolean>;
+  templateExists(itemId: string): Promise<boolean>;
+  readItem(path: string): Promise<ItemSnapshot | null>;
 }
+export type BuildSourceSnapshot = (item: ScsItem) => Promise<ItemSnapshot>;
 
 /** Called after each item is evaluated, so callers can show preview progress. */
 export type PlannerProgress = (completed: number, total: number) => void;
 
 export async function buildInstallPlan(
-  items: ScsItem[], strategy: ConflictStrategy, probes: PlannerProbes, onProgress?: PlannerProgress,
+  items: ScsItem[], strategy: ConflictStrategy, probes: PlannerProbes,
+  buildSourceSnapshot: BuildSourceSnapshot, onProgress?: PlannerProgress,
 ): Promise<InstallPlan> {
   const payloadIds = new Set(items.map((i) => i.id.toLowerCase()));
   const steps: PlanStep[] = [];
@@ -52,11 +56,26 @@ export async function buildInstallPlan(
     const exists = await probes.itemExists(item.id);
     let action: PlanStep['action'];
     let reason: string;
-    if (!exists) { action = 'create'; reason = 'new on target'; summary.create++; }
-    else if (strategy === 'overwrite') { action = 'update'; reason = 'exists; overwrite'; summary.update++; }
-    else { action = 'skip'; reason = 'exists; kept'; summary.skip++; }
+    let ops: PlanStep['ops'];
 
-    steps.push({ itemId: item.id, path: item.path, name, action, reason });
+    if (!exists) {
+      action = 'create'; reason = 'new on target'; summary.create++;
+    } else if (strategy === 'overwrite') {
+      const target = await probes.readItem(item.path);
+      if (!target || (target.id && target.id.replace(/[{}]/g, '').toLowerCase() !== item.id.replace(/[{}]/g, '').toLowerCase())) {
+        warnings.push({ itemId: item.id, path: item.path, reason: 'exists at a different path or id on target (move/rename not supported); skipped' });
+        action = 'skip'; reason = 'exists elsewhere; skipped'; summary.skip++;
+      } else {
+        const source = await buildSourceSnapshot(item);
+        ops = diffItem(source, target);
+        if (ops.length === 0) { action = 'skip'; reason = 'exists; no changes'; summary.skip++; }
+        else { action = 'update'; reason = 'exists; overwrite'; summary.update++; }
+      }
+    } else {
+      action = 'skip'; reason = 'exists; kept'; summary.skip++;
+    }
+
+    steps.push({ itemId: item.id, path: item.path, name, action, reason, ...(ops && ops.length ? { ops } : {}) });
     completed++;
     onProgress?.(completed, total);
   }

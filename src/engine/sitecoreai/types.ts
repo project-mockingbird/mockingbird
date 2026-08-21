@@ -47,7 +47,7 @@ export interface ItemCommand {
 
 // --- planner ---
 export type PlanAction = 'create' | 'update' | 'skip';
-export interface PlanStep { itemId: string; path: string; name: string; action: PlanAction; reason: string; }
+export interface PlanStep { itemId: string; path: string; name: string; action: PlanAction; reason: string; ops?: ItemUpdateOp[]; }
 export interface PlanIssue { itemId: string; path: string; reason: string; }
 export interface InstallPlan {
   steps: PlanStep[];
